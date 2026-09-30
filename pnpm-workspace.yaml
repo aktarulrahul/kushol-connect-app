@@ -1,0 +1,4 @@
+# pnpm 11 asks before running dependency install scripts. Both ship prebuilt binaries.
+allowBuilds:
+  "@parcel/watcher": false
+  unrs-resolver: false

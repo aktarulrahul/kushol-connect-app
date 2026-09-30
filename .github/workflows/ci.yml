@@ -1,0 +1,44 @@
+name: app
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CI-only public value (not a secret); per-channel URLs live in EAS profiles (module 15).
+  EXPO_PUBLIC_API_URL: http://localhost:8080
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # version from package.json "packageManager"
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format
+        run: pnpm format:check
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+      - name: Client drift (FND-BR-001)
+        run: pnpm contracts:check
+      - name: Expo doctor
+        run: pnpm doctor
+      - name: Android bundle
+        run: pnpm exec expo export --platform android --output-dir dist

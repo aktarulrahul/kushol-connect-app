@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Kushol Connect",
+    "slug": "kushol-connect",
+    "scheme": "kusholconnect",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router", "expo-status-bar"],
+    "experiments": { "typedRoutes": true }
+  }
+}

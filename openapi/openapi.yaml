@@ -1,0 +1,174 @@
+openapi: 3.1.0
+info:
+  title: Kushol Connect API
+  version: 0.1.0
+  description: |
+    Single source of truth for API types (FND-BR-001). Go server types are generated with
+    oapi-codegen and the TS client with openapi-typescript (`make contracts`). Never hand-edit
+    generated code.
+
+    Errors are RFC-7807 `application/problem+json` (`Problem`). `code` is an **open set**:
+    clients must fall back to generic bn/en copy for codes they do not know.
+servers:
+  - url: https://api.kusholconnect.com
+    description: Production (mobile clients)
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: health
+    description: Liveness and readiness (consumed by 15-deployment-operations)
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      tags: [health]
+      summary: Liveness — never touches dependencies
+      responses:
+        '200':
+          description: Process is alive
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        default:
+          $ref: '#/components/responses/Problem'
+  /readyz:
+    get:
+      operationId: getReadyz
+      tags: [health]
+      summary: Readiness — Postgres (Neon) ping and Redis PING, 1 s timeout each
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: All dependencies reachable
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: One or more dependencies unreachable; `dependencies` names them
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  headers:
+    XRequestId:
+      description: Request correlation id (incoming value reused when valid, otherwise a uuid v7)
+      schema:
+        type: string
+        maxLength: 64
+  parameters:
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      description: '`bn` (default) or `en` — selects the language of `Problem.message`'
+      schema:
+        type: string
+  responses:
+    Problem:
+      description: Error (RFC-7807)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    DependencyCheck:
+      type: object
+      required: [name, ok]
+      properties:
+        name:
+          type: string
+          description: Dependency name, e.g. `postgres`, `redis`
+        ok:
+          type: boolean
+        latencyMs:
+          type: integer
+          minimum: 0
+    Readiness:
+      type: object
+      required: [status, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+        dependencies:
+          type: array
+          items:
+            $ref: '#/components/schemas/DependencyCheck'
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: JSON pointer or parameter name of the rejected input
+        message:
+          type: string
+          description: Localized (bn default / en)
+    ProblemErrors:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    Problem:
+      type: object
+      description: RFC-7807 problem details with Kushol extensions.
+      required: [type, title, status, code, message, requestId]
+      properties:
+        type:
+          type: string
+          description: URI reference identifying the problem type
+        title:
+          type: string
+          description: Short English summary (not for display)
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+        code:
+          type: string
+          description: |
+            Stable machine code — open set. Core: UNAUTHENTICATED, FORBIDDEN, VALIDATION_FAILED,
+            TENANT_MISMATCH, NOT_FOUND, NOT_VERIFIED, RATE_LIMITED, QUOTA_EXCEEDED, CONFLICT,
+            INTERNAL. Module-specific codes are registered in
+            docs/modules/01-foundations/technical-document.md §10.
+        message:
+          type: string
+          description: Localized, user-displayable message (bn default, en on request)
+        requestId:
+          type: string
+        detail:
+          type: string
+        errors:
+          $ref: '#/components/schemas/ProblemErrors'
+        dependencies:
+          type: array
+          description: Present on readiness failures — names each dependency and its state
+          items:
+            $ref: '#/components/schemas/DependencyCheck'
