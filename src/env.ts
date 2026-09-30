@@ -6,7 +6,7 @@ import { z } from "zod";
 // inline it; per-channel values are set in EAS profiles (module 15, OPS-AP-004).
 
 const schema = z.object({
-  /** Base URL of the api, e.g. http://<lan-ip>:8080 in development. */
+  /** Base URL of the api, e.g. http://<lan-ip>:5433 in development. */
   EXPO_PUBLIC_API_URL: z.url({ protocol: /^https?$/ }),
 });
 

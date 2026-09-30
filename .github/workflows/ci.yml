@@ -14,7 +14,7 @@ concurrency:
 
 env:
   # CI-only public value (not a secret); per-channel URLs live in EAS profiles (module 15).
-  EXPO_PUBLIC_API_URL: http://localhost:8080
+  EXPO_PUBLIC_API_URL: http://localhost:5433
 
 jobs:
   gate:
