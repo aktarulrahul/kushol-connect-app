@@ -38,6 +38,520 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/auth/register": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Complete registration — user + identity + verification request in one transaction
+     * @description Public, rate-limit class `auth` (10/hour/IP). Requires a previously verified OTP
+     *     (purpose `register`). Hierarchy placement is re-validated server-side against 04 reads.
+     *     Tokens are returned only when the phone OTP completed inside the same flow.
+     */
+    post: operations["postAuthRegister"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/otp/request": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Issue a 6-digit OTP by SMS (or email for verified addresses)
+     * @description Public; class `auth`. Answers 202 identically whether or not the phone/email is
+     *     registered (no enumeration). Caps: 60 s resend cooldown, 5/hour per target,
+     *     200/hour/IP (CGNAT-tolerant), enforced again on resend.
+     */
+    post: operations["postAuthOtpRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/otp/resend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Resend a fresh OTP for the same target and purpose */
+    post: operations["postAuthOtpResend"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/otp/verify": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Verify an OTP — login (tokens), or mark verified for register/link
+     * @description Public; class `auth` (10 verifies/hour per target, 3 attempts per code). Purpose
+     *     `login` returns tokens (unknown phone answers `{status:"unknown_phone"}` and the
+     *     client continues to registration); purposes `register`/`link` return
+     *     `{status:"verified"}` so the follow-up call can prove possession.
+     */
+    post: operations["postAuthOtpVerify"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/login/password": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Staff/vendor login with email and password (argon2id)
+     * @description Public; class `auth` (10/hour/account, 100/hour/IP). Enumeration-safe: unknown
+     *     account and wrong password answer the identical generic UNAUTHENTICATED problem at
+     *     near-identical latency. Web receives the http-only session cookie; the app receives
+     *     tokens. `PENDING` users still get a session (pending screen only).
+     */
+    post: operations["postAuthLoginPassword"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/password/forgot": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request a password-reset code by email
+     * @description Public; class `auth` (5/hour/email, 100/hour/IP). Always 202.
+     */
+    post: operations["postAuthPasswordForgot"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/password/reset": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reset a staff/vendor password with the emailed code
+     * @description Public; class `auth`. On success every session and refresh family of the user is
+     *     revoked. Also serves as the vendor first-password set after 07 approval.
+     */
+    post: operations["postAuthPasswordReset"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/refresh": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rotate a mobile refresh token (single-use, reuse-detecting)
+     * @description Public (token in body); class `auth`. The presented token is revoked (`rotated`) and a
+     *     new one is issued in the same family; claims are re-read from the database. Presenting
+     *     a revoked token revokes the whole family and is audited (`auth.refresh_reuse`).
+     */
+    post: operations["postAuthRefresh"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Log out the current device (session or refresh family) */
+    post: operations["postAuthLogout"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/logout-all": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Log out everywhere — every session and refresh family */
+    post: operations["postAuthLogoutAll"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/google/start": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Begin the Google OIDC round-trip (signed state + PKCE)
+     * @description Public; class `auth` (20/hour/IP per provider). `intent=link` requires an
+     *     authenticated user. Redirects to Google; the callback redirects to the calling
+     *     surface (`/auth/sso/return` on web, deep link on the app) with a one-time result code.
+     */
+    get: operations["getAuthGoogleStart"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/google/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Google OIDC callback — link or create, then redirect with a result code */
+    get: operations["getAuthGoogleCallback"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/github/start": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Begin the GitHub OIDC round-trip (signed state + PKCE) */
+    get: operations["getAuthGithubStart"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/github/callback": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** GitHub OIDC callback — link or create, then redirect with a result code */
+    get: operations["getAuthGithubCallback"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The authenticated user's own account
+     * @description Authenticate (either scheme); class `auth` relaxed (60/min/user).
+     */
+    get: operations["getMe"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Update own display name and/or locale
+     * @description Role and status are immutable here (FORBIDDEN on attempt).
+     */
+    patch: operations["patchMe"];
+    trace?: never;
+  };
+  "/api/v1/verification-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The school's join-request queue
+     * @description school_admin sees own school (all roles); student+`is_ambassador` sees same-school
+     *     student/guardian requests only; super_admin sees everything. Tenant-scoped server-side.
+     */
+    get: operations["listVerificationRequests"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/verification-requests/{id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve a join request → user VERIFIED + provisioning enqueued
+     * @description Guardian requests carry `{studentUserId}` — the same-school VERIFIED student the
+     *     evidence matched; a `guardian_links` row is written in the same transaction.
+     *     Already-decided requests answer CONFLICT. Audited `verification.approved`.
+     */
+    post: operations["approveVerificationRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/verification-requests/{id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reject a join request with a mandatory reason
+     * @description school_admin/super_admin only (ambassadors are approve-only). Audited `verification.rejected`.
+     */
+    post: operations["rejectVerificationRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/users": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The school's user roster
+     * @description school_admin (own school from claim); super_admin may pass `?schoolId=`.
+     */
+    get: operations["listSchoolUsers"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/hierarchy/cities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Launch cities for the registration picker
+     * @description Public; master data owned by 04 (served from 03's in-memory fake until 04 lands).
+     */
+    get: operations["listHierarchyCities"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/hierarchy/cities/{cityId}/schools": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Schools/colleges in a city */
+    get: operations["listHierarchySchools"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/hierarchy/schools/{schoolId}/sections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Sections of a school (class level is a section attribute) */
+    get: operations["listHierarchySections"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request onboarding for a school/college not yet listed
+     * @description Public; class `auth`. Submitted from registration when the school dropdown has no
+     *     match. Carries the institution details plus the point of contact — the application
+     *     admin connects with the POC to onboard the institution. Audited `school.requested`.
+     */
+    post: operations["createSchoolRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/school-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Review queue for institution requests (Super Admin) */
+    get: operations["listSchoolRequests"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/school-requests/{id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve an institution request — POC is contacted for onboarding
+     * @description Super Admin only. Audited `school.request_approved`; the institution itself is created by 04's onboarding.
+     */
+    post: operations["approveSchoolRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/school-requests/{id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reject an institution request with a reason */
+    post: operations["rejectSchoolRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -87,6 +601,294 @@ export interface components {
       errors?: components["schemas"]["ProblemErrors"];
       /** @description Present on readiness failures — names each dependency and its state */
       dependencies?: components["schemas"]["DependencyCheck"][];
+    };
+    /**
+     * @description `vendor` is platform-scoped (`schoolId` null) and never self-registered
+     * @enum {string}
+     */
+    UserRole: "super_admin" | "school_admin" | "teacher" | "student" | "guardian" | "vendor";
+    /** @enum {string} */
+    UserStatus: "PENDING" | "VERIFIED" | "SUSPENDED";
+    /** @enum {string} */
+    Locale: "bn" | "en";
+    /** @enum {string} */
+    Plan: "free" | "pro";
+    /** @enum {string} */
+    OtpChannel: "sms" | "email";
+    /**
+     * @description `reset` OTPs are issued internally by `/auth/password/forgot` only
+     * @enum {string}
+     */
+    OtpPurpose: "login" | "register" | "link";
+    /** @description Public user shape — phone numbers are always masked */
+    User: {
+      id: string;
+      role: components["schemas"]["UserRole"];
+      status: components["schemas"]["UserStatus"];
+      locale: components["schemas"]["Locale"];
+      fullName: string;
+      /** @description e.g. `+8801XXXXXX789` — present when the account has a phone */
+      maskedPhone?: string;
+      /** @description present when the account has an email */
+      email?: string;
+      schoolId?: string | null;
+      isAmbassador: boolean;
+      plan: components["schemas"]["Plan"];
+    };
+    /**
+     * @description `phone`+`otpCode` are required for student/guardian (OTP purpose `register` proven).
+     *     Staff may register with `email`+`password` instead (phone optional). `studentCode`
+     *     and `relation` are required when role is `guardian`. No class field — the class
+     *     level is derived from the section.
+     */
+    RegisterInput: {
+      locale: components["schemas"]["Locale"];
+      role: components["schemas"]["UserRole"];
+      fullName: string;
+      /** @description BD mobile, normalized server-side to E.164 `+880…` */
+      phone?: string;
+      /** @description The code verified via `/auth/otp/verify` (purpose `register`) */
+      otpCode?: string;
+      /** Format: email */
+      email?: string;
+      /** @description Staff registration only (argon2id server-side) */
+      password?: string;
+      schoolId: string;
+      sectionId: string;
+      /** @description Guardian only — the child's student ID */
+      studentCode?: string;
+      /**
+       * @description Guardian only
+       * @enum {string}
+       */
+      relation?: "father" | "mother" | "other";
+    };
+    RegisterResult: {
+      data: {
+        user: components["schemas"]["User"];
+        /** @description Present only when the phone OTP completed in this flow */
+        accessToken?: string;
+        refreshToken?: string;
+        verificationRequest: components["schemas"]["VerificationRequestItem"];
+      };
+    };
+    /** @description Exactly one of `phone` / `email`. */
+    OtpRequestInput: {
+      phone?: string;
+      /** Format: email */
+      email?: string;
+      purpose?: components["schemas"]["OtpPurpose"];
+    };
+    OtpSendResult: {
+      data: {
+        /** Format: date-time */
+        sentAt: string;
+        cooldownSeconds: number;
+        channel: components["schemas"]["OtpChannel"];
+      };
+    };
+    /** @description Exactly one of `phone` / `email` (matching the request channel). */
+    OtpVerifyInput: {
+      phone?: string;
+      /** Format: email */
+      email?: string;
+      otpCode: string;
+      purpose: components["schemas"]["OtpPurpose"];
+    };
+    OtpVerifyResult: {
+      /**
+       * @description `login` on a known phone returns tokens + user; an unknown phone answers
+       *     `{status:"unknown_phone"}` (deliberate — OTP proves possession and registration
+       *     shares the code path). `register`/`link` return `{status:"verified"}`.
+       */
+      data: {
+        /** @enum {string} */
+        status: "ok" | "unknown_phone" | "verified";
+        accessToken?: string;
+        refreshToken?: string;
+        user?: components["schemas"]["User"];
+      };
+    };
+    PasswordLoginInput: {
+      /** Format: email */
+      email: string;
+      password: string;
+      deviceLabel?: string;
+    };
+    PasswordLoginResult: {
+      data: {
+        user: components["schemas"]["User"];
+        /** @description App clients only */
+        accessToken?: string;
+        /** @description App clients only */
+        refreshToken?: string;
+        /** @description Web clients — the http-only cookie was set */
+        sessionSet?: boolean;
+      };
+    };
+    ForgotPasswordInput: {
+      /** Format: email */
+      email: string;
+    };
+    ResetPasswordInput: {
+      /** Format: email */
+      email: string;
+      otpCode: string;
+      newPassword: string;
+    };
+    RefreshInput: {
+      refreshToken: string;
+    };
+    RefreshResult: {
+      data: {
+        accessToken: string;
+        refreshToken: string;
+      };
+    };
+    /** @description App clients pass the current refresh token; web relies on the cookie. */
+    LogoutInput: {
+      refreshToken?: string;
+    };
+    MeResult: {
+      data: components["schemas"]["User"];
+    };
+    MeUpdateInput: {
+      locale?: components["schemas"]["Locale"];
+      fullName?: string;
+      /** Format: uri */
+      avatarUrl?: string;
+    };
+    /** @enum {string} */
+    VerificationRequestStatus: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+    VerificationRequestItem: {
+      id: string;
+      user: {
+        fullName: string;
+        role: components["schemas"]["UserRole"];
+        phoneMasked?: string;
+      };
+      status: components["schemas"]["VerificationRequestStatus"];
+      /** @description `{studentCode, relation}` for guardians; free-form, proof only */
+      evidence?: {
+        [key: string]: unknown;
+      };
+      /** @description Present on REJECTED — the bn/en key + params are resolved client-side */
+      decisionReason?: string;
+      /** Format: date-time */
+      createdAt: string;
+      reminderCount: number;
+    };
+    VerificationRequestPage: {
+      data: components["schemas"]["VerificationRequestItem"][];
+      nextCursor?: string;
+    };
+    /** @description Guardian requests require `studentUserId` (the matched same-school VERIFIED student). */
+    ApproveInput: {
+      studentUserId?: string;
+    };
+    RejectInput: {
+      reason: string;
+    };
+    DecisionResult: {
+      data: {
+        id: string;
+        status: components["schemas"]["VerificationRequestStatus"];
+        userStatus?: components["schemas"]["UserStatus"];
+      };
+    };
+    SchoolUser: {
+      id: string;
+      fullName: string;
+      role: components["schemas"]["UserRole"];
+      status: components["schemas"]["UserStatus"];
+      maskedPhone?: string;
+      isAmbassador?: boolean;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    HierarchyCity: {
+      id: string;
+      nameBn: string;
+      nameEn: string;
+      isLaunchCity: boolean;
+    };
+    HierarchyCityPage: {
+      data: components["schemas"]["HierarchyCity"][];
+    };
+    HierarchySchool: {
+      id: string;
+      nameBn: string;
+      nameEn: string;
+    };
+    HierarchySchoolPage: {
+      data: components["schemas"]["HierarchySchool"][];
+    };
+    HierarchySection: {
+      id: string;
+      /** @description e.g. `6`..`10` — the class dropdown derives its options from these */
+      classLevel: string;
+      /** @description Section name, e.g. `A`, `B` (bn/en resolved client-side) */
+      name: string;
+      sessionYear: number;
+    };
+    HierarchySectionPage: {
+      data: components["schemas"]["HierarchySection"][];
+    };
+    /** @enum {string} */
+    SchoolRequestType: "school" | "college";
+    /** @enum {string} */
+    SchoolRequestStatus: "PENDING" | "APPROVED" | "REJECTED";
+    /** @description Submitted from registration when the school dropdown has no match. The POC is whom the application admin connects to onboard the institution. */
+    SchoolRequestInput: {
+      name: string;
+      type: components["schemas"]["SchoolRequestType"];
+      cityId: string;
+      address?: string;
+      pocName: string;
+      /** @description BD mobile, normalized server-side to E.164 */
+      pocPhone: string;
+      /** Format: email */
+      pocEmail?: string;
+    };
+    SchoolRequestCreated: {
+      data: {
+        id: string;
+        status: components["schemas"]["SchoolRequestStatus"];
+      };
+    };
+    SchoolRequest: {
+      id: string;
+      name: string;
+      type: components["schemas"]["SchoolRequestType"];
+      cityId?: string;
+      address?: string;
+      status: components["schemas"]["SchoolRequestStatus"];
+      pocName: string;
+      /** @description masked for display, e.g. `+8801XXXXXX789` */
+      pocPhone: string;
+      pocEmail?: string;
+      decisionReason?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      decidedAt?: string;
+    };
+    SchoolRequestPage: {
+      data: components["schemas"]["SchoolRequest"][];
+      nextCursor?: string;
+    };
+    SchoolRequestRejectInput: {
+      reason: string;
+    };
+    SchoolRequestDecision: {
+      data: {
+        id: string;
+        status: components["schemas"]["SchoolRequestStatus"];
+      };
+    };
+    SchoolUserPage: {
+      data: components["schemas"]["SchoolUser"][];
+      nextCursor?: string;
     };
   };
   responses: {
@@ -166,6 +968,758 @@ export interface operations {
         };
         content: {
           "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthRegister: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RegisterInput"];
+      };
+    };
+    responses: {
+      /** @description Account created `PENDING` with an open verification request */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RegisterResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthOtpRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OtpRequestInput"];
+      };
+    };
+    responses: {
+      /** @description OTP queued for delivery */
+      202: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OtpSendResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthOtpResend: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OtpRequestInput"];
+      };
+    };
+    responses: {
+      /** @description OTP queued (identical body to request) */
+      202: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OtpSendResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthOtpVerify: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OtpVerifyInput"];
+      };
+    };
+    responses: {
+      /** @description Verification outcome */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OtpVerifyResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthLoginPassword: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PasswordLoginInput"];
+      };
+    };
+    responses: {
+      /** @description Login result (tokens for the app, cookie for web) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PasswordLoginResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthPasswordForgot: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ForgotPasswordInput"];
+      };
+    };
+    responses: {
+      /** @description Accepted — a code is sent when the email belongs to a staff/vendor account */
+      202: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthPasswordReset: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ResetPasswordInput"];
+      };
+    };
+    responses: {
+      /** @description Password updated; all sessions revoked */
+      204: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthRefresh: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RefreshInput"];
+      };
+    };
+    responses: {
+      /** @description Fresh token pair */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RefreshResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthLogout: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["LogoutInput"];
+      };
+    };
+    responses: {
+      /** @description Current session/refresh family revoked */
+      204: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  postAuthLogoutAll: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description All sessions and refresh families revoked (audited) */
+      204: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAuthGoogleStart: {
+    parameters: {
+      query?: {
+        intent?: "login" | "link";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to the provider */
+      302: {
+        headers: {
+          /** @description Provider authorization endpoint */
+          Location?: string;
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAuthGoogleCallback: {
+    parameters: {
+      query?: {
+        code?: string;
+        state?: string;
+        error?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to the calling surface with `sso_result` (or `sso_error`) */
+      302: {
+        headers: {
+          /** @description Calling surface URL carrying the one-time result or error */
+          Location?: string;
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAuthGithubStart: {
+    parameters: {
+      query?: {
+        intent?: "login" | "link";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to the provider */
+      302: {
+        headers: {
+          /** @description Provider authorization endpoint */
+          Location?: string;
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAuthGithubCallback: {
+    parameters: {
+      query?: {
+        code?: string;
+        state?: string;
+        error?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redirect to the calling surface with `sso_result` (or `sso_error`) */
+      302: {
+        headers: {
+          /** @description Calling surface URL carrying the one-time result or error */
+          Location?: string;
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getMe: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current user */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MeResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  patchMe: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MeUpdateInput"];
+      };
+    };
+    responses: {
+      /** @description Updated user */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MeResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVerificationRequests: {
+    parameters: {
+      query?: {
+        status?: components["schemas"]["VerificationRequestStatus"];
+        role?: components["schemas"]["UserRole"];
+        cursor?: string;
+        limit?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Queue page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VerificationRequestPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approveVerificationRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ApproveInput"];
+      };
+    };
+    responses: {
+      /** @description Approved */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DecisionResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rejectVerificationRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RejectInput"];
+      };
+    };
+    responses: {
+      /** @description Rejected (reason stored; user notified via 06) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DecisionResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listSchoolUsers: {
+    parameters: {
+      query?: {
+        /** @description Super Admin only — selects the school (tenant check still applies) */
+        schoolId?: string;
+        role?: components["schemas"]["UserRole"];
+        status?: components["schemas"]["UserStatus"];
+        q?: string;
+        cursor?: string;
+        limit?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Roster page (names, roles, statuses, masked phones only) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SchoolUserPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listHierarchyCities: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description City list (launch cities first) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HierarchyCityPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listHierarchySchools: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        cityId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description School list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HierarchySchoolPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listHierarchySections: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        schoolId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Section list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HierarchySectionPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createSchoolRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SchoolRequestInput"];
+      };
+    };
+    responses: {
+      /** @description Request queued for admin review */
+      202: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SchoolRequestCreated"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listSchoolRequests: {
+    parameters: {
+      query?: {
+        status?: components["schemas"]["SchoolRequestStatus"];
+        cursor?: string;
+        limit?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Request queue page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SchoolRequestPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approveSchoolRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Approved */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SchoolRequestDecision"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rejectSchoolRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SchoolRequestRejectInput"];
+      };
+    };
+    responses: {
+      /** @description Rejected */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SchoolRequestDecision"];
         };
       };
       default: components["responses"]["Problem"];

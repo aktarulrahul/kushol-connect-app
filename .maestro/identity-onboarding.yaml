@@ -1,0 +1,55 @@
+# IDT-AP-014 — identity golden path (bn default): language → role → hierarchy → phone → OTP →
+# verification pending. Fixture mode is ON by design (Stage 2 has no api): src/fixtures/auth.ts
+# boots in `success`, so the golden path needs no flag switcher UI.
+# Run against a development or preview build:
+#   maestro test .maestro/identity-onboarding.yaml
+# NOT yet run — Maestro CLI is not installed in this environment (same gate as DSN-E2E-001, G-4).
+# Reduced motion + 360px checks remain manual (05 §5/§7): Reduce Motion on → step changes swap
+# instantly, the invalid-OTP shake is a static border; layout verified on a 360pt device.
+appId: com.kusholconnect.app
+---
+- launchApp:
+    clearState: true
+# Entry — the holding screen grew Start/Sign-in buttons with module 03.
+- assertVisible: "কুশল কানেক্ট"
+- tapOn: "শুরু করুন"
+
+# Step 1 — language: Bengali preselected regardless of device locale (BR-008), one-tap switch.
+- assertVisible: "আপনার ভাষা বাছুন"
+- assertVisible: "বাংলা"
+- tapOn: "English"
+- tapOn: "বাংলা"
+- tapOn: "পরবর্তী"
+
+# Step 2 — role: student preselected; admin hint points at the web portal.
+- assertVisible: "আপনি কে?"
+- assertVisible: "অ্যাডমিন? অ্যাডমিন পোর্টাল ওয়েবে — এই অ্যাপে নয়।"
+- tapOn: "ছাত্র/ছাত্রী"
+- tapOn: "পরবর্তী"
+
+# Step 3 — hierarchy: one search, city → school → section cascade (fictional demo data).
+- assertVisible: "আপনার স্কুল"
+- tapOn: "ঢাকা"
+- tapOn: "ডেমো উচ্চ বিদ্যালয়"
+- tapOn: "দশম শ্রেণি · ক"
+- tapOn: "পরবর্তী"
+
+# Step 4 — contact: name + BD mobile; OTP goes out to the (mock) SMS gateway.
+- assertVisible: "আপনার পরিচয়"
+- tapOn: "পুরো নাম"
+- inputText: "ডেমো শিক্ষার্থী"
+- tapOn: "মোবাইল নম্বর"
+- inputText: "01712345678"
+- tapOn: "OTP পাঠান"
+
+# Step 5 — OTP: 6 boxes; the mock code is any 6 digits (fixture mode `success`).
+- assertVisible: "আপনার মোবাইলে পাঠানো ৬ সংখ্যার কোডটি লিখুন"
+- tapOn: "৬ সংখ্যার ওটিপি কোড"
+- inputText: "123456"
+- tapOn: "যাচাই করুন"
+
+# Pending gate — registration complete, account PENDING, explainer + settings/logout.
+- assertVisible: "অ্যাকাউন্ট যাচাই চলছে"
+- assertVisible: "এখন কী হবে?"
+- assertVisible: "সাধারণত ৪৮ ঘণ্টার মধ্যে"
+- assertVisible: "সেটিংস"
