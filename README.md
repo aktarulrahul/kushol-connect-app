@@ -63,18 +63,40 @@ Play Console. Store credentials stay in EAS (never in this repo).
 
 ## Layout
 
-| Path                                     | What                                                                                                           |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `src/env.ts`                             | The only reader of `process.env` (zod). `EXPO_PUBLIC_*` ships in the bundle — never a secret                   |
-| `src/api/`                               | `schema.gen.ts` (generated) + `client.ts` (`createApiClient`, `isProblem`). The only way to call the api       |
-| `openapi/openapi.yaml`                   | Synced copy of `applications/api/openapi/openapi.yaml` — do not edit                                           |
-| `src/app/`                               | expo-router routes (only route files here; tests live in `src/__tests__`). Holding screen `/` until 03         |
-| `src/dev/`                               | Development-only UI (`__DEV__`): the api status card on the holding screen                                     |
-| `plugins/with-ios-scene-lifecycle.js`    | Config plugin: UIScene life cycle on iOS (iOS 27 won't launch the app without it; Expo 57's template lacks it) |
-| `src/theme` · `src/i18n` · `src/schemas` | Arrive with 02-design-system (tokens, bn/en catalogs) and 03 (form schemas)                                    |
+| Path                                  | What                                                                                                                                                     |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/env.ts`                          | The only reader of `process.env` (zod). `EXPO_PUBLIC_*` ships in the bundle — never a secret                                                             |
+| `src/api/`                            | `schema.gen.ts` (generated) + `client.ts` (`createApiClient`, `isProblem`). The only way to call the api                                                 |
+| `openapi/openapi.yaml`                | Synced copy of `applications/api/openapi/openapi.yaml` — do not edit                                                                                     |
+| `src/app/`                            | expo-router routes (only route files here; tests live next to code or in `src/__tests__`). Holding screen `/` until 03; `/dev/ui` is the dev-only UI kit |
+| `src/theme/`                          | `tokens.ts` (the only raw design values; feeds `tailwind.config.ts`), `fonts.ts` (script + weight → bundled face)                                        |
+| `src/i18n/`                           | `bn.json` / `en.json` catalogs, `t()`, `LocaleProvider` / `useT()`                                                                                       |
+| `src/components/ui/`                  | Primitives: React Native Reusables (shadcn for RN on `@rn-primitives`, NativeWind) vendored and tuned, plus the CircleUp set                             |
+| `src/dev/`                            | Development-only UI (`__DEV__`): api status card, UI kit                                                                                                 |
+| `plugins/with-ios-scene-lifecycle.js` | Config plugin: UIScene life cycle on iOS (iOS 27 won't launch the app without it; Expo 57's template lacks it)                                           |
+| `assets/brand/`                       | Logo lockup, app/adaptive/notification icons — interim PNGs until the owner's vectors (see its README)                                                   |
 
 Lint enforces the boundaries: `process.env` only in `src/env.ts`; `fetch` and `openapi-fetch` only
-in `src/api/`.
+in `src/api/`; no raw hex/px/font values outside `src/theme` and `src/components/ui`
+(`eslint-rules/design-tokens.mjs`, DSN-INT-002 — tested by `pnpm test:rules`).
+
+## Design system (module 02)
+
+Styling is NativeWind (Tailwind 3 classes) on a theme built only from `src/theme/tokens.ts`; the
+same token values as the web repo. Build screens from these:
+
+| Need         | Use                                                                                                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Text         | `Text` (`display` `h1`–`h4` `lead` `muted` `caption` `label` `error`; `tabular`) — picks Hind Siliguri for Bengali and Inter for Latin per weight, sets the speech language                      |
+| Actions      | `Button` (≥ 44pt, `loading`), `Toggle`, `ToggleGroup`, `Fab`                                                                                                                                     |
+| Forms        | `TextField`, `TextareaField`, `ToggleField` (checkbox/switch row), `OtpInput`, `Select`, `RadioGroup`, `Checkbox`, `Switch`, `Input`, `Textarea`                                                 |
+| Popups       | `Sheet` (bottom sheet; dialog from 600pt), `Dialog`, `ConfirmModal`, `AlertDialog`, `Popover`, `Tooltip`, `DropdownMenu`, `ContextMenu`, `HoverCard`, `Menubar`, toasts via `useToast()`         |
+| Lists & data | `ListRow`, `UnreadBadge`, `PresenceDot`, `AvatarStack`, `UserAvatar`, `Badge` / `VerifiedBadge`, `Table` (small read-only tables), `Progress`, `Skeleton`, `Spinner`, `EmptyState`, `ErrorState` |
+| Shell        | `Screen`, `ScreenHeader` (header wash), `FloatingTabBar`, `SegmentedPill`, `LanguageToggle`, `Tabs`, `Accordion`, `Collapsible`, `Card`, `Alert`, `Logo`                                         |
+
+Every user-facing string is a catalog key in **both** `bn.json` and `en.json` (CI parity test).
+Server data uses TanStack Query (`QueryClientProvider` is in the root layout). Open the dev build,
+then the holding screen's **Open UI kit** button, to see every component in both languages.
 
 ## API contract
 

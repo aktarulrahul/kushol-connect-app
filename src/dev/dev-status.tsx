@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
+import { View } from "react-native";
 
 import { createApiClient, type Schemas } from "@/api/client";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Text } from "@/components/ui/text";
 import { env } from "@/env";
 
 // Development-only card on the holding screen: shows whether this build reaches the api (on a
@@ -33,81 +38,81 @@ export async function checkApi(options: Options = {}): Promise<ApiStatus> {
 }
 
 export function DevStatus(props: Options) {
-  const [status, setStatus] = useState<ApiStatus | undefined>();
-  useEffect(() => {
-    let live = true;
-    void checkApi(props).then((s) => {
-      if (live) setStatus(s);
-    });
-    return () => {
-      live = false;
-    };
-    // Checked once per mount; Metro's reload (r) checks again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // TanStack Query owns the request: cached per mount, refetched on pull/reload.
+  const {
+    data: status,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ["dev", "readyz"],
+    queryFn: () => checkApi(props),
+    staleTime: 0,
+  });
+  const router = useRouter();
   const state = status?.state ?? "checking";
+
   return (
-    <View style={styles.card} accessibilityLanguage="en">
-      <Text style={styles.title} accessibilityRole="header">
-        LOCAL DEVELOPMENT
-      </Text>
-      <View style={styles.row}>
-        <Text style={styles.label}>API</Text>
-        <Text style={styles.value}>{env.EXPO_PUBLIC_API_URL}</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Status</Text>
-        <Text style={[styles.badge, badge[state]]}>{state}</Text>
-      </View>
-      {status && status.state !== "unreachable" && (
-        <View style={styles.row}>
-          <Text style={styles.label}>Dependencies</Text>
-          <Text style={styles.value}>
-            {status.dependencies.map((d) => `${d.name} ${d.ok ? "ok" : "down"}`).join(" · ") ||
-              "none reported"}
-          </Text>
-        </View>
-      )}
-      {state === "unreachable" && (
-        <Text style={styles.hint}>
-          Start the stack with ./dev-start.sh. On a phone, EXPO_PUBLIC_API_URL must use this
-          Mac&apos;s LAN IP.
+    <Card className="w-full gap-4 py-5">
+      <CardHeader>
+        <Text variant="caption" className="font-semibold uppercase tracking-wider">
+          Local development
         </Text>
-      )}
+      </CardHeader>
+      <CardContent className="gap-3">
+        <Row label="API">
+          <Text className="flex-1 text-sm">{env.EXPO_PUBLIC_API_URL}</Text>
+        </Row>
+        <Row label="Status">
+          <Badge variant={badge[state]}>
+            <Text>{state}</Text>
+          </Badge>
+        </Row>
+        {status && status.state !== "unreachable" ? (
+          <Row label="Dependencies">
+            <Text className="flex-1 text-sm">
+              {status.dependencies.map((d) => `${d.name} ${d.ok ? "ok" : "down"}`).join(" · ") ||
+                "none reported"}
+            </Text>
+          </Row>
+        ) : null}
+        {state === "unreachable" ? (
+          <Text variant="muted">
+            Start the stack with ./dev-start.sh. On a phone, EXPO_PUBLIC_API_URL must use this
+            Mac&apos;s LAN IP.
+          </Text>
+        ) : null}
+        <View className="flex-row flex-wrap gap-2 pt-1">
+          <Button variant="outline" size="sm" loading={isFetching} onPress={() => void refetch()}>
+            <Text>Check again</Text>
+          </Button>
+          <Button
+            size="sm"
+            onPress={() => {
+              router.push("/dev/ui");
+            }}
+          >
+            <Text>Open UI kit</Text>
+          </Button>
+        </View>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View className="flex-row items-center gap-3">
+      <Text variant="muted" className="w-28">
+        {label}
+      </Text>
+      {children}
     </View>
   );
 }
 
-const badge = StyleSheet.create({
-  checking: { backgroundColor: "#f1f5f9", color: "#334155" },
-  ready: { backgroundColor: "#ecfdf5", color: "#065f46" },
-  degraded: { backgroundColor: "#fffbeb", color: "#92400e" },
-  unreachable: { backgroundColor: "#fef2f2", color: "#991b1b" },
-});
-
-const styles = StyleSheet.create({
-  card: {
-    width: "100%",
-    maxWidth: 360,
-    gap: 12,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-  },
-  title: { fontSize: 12, fontWeight: "600", letterSpacing: 1, color: "#64748b" },
-  row: { flexDirection: "row", alignItems: "center", gap: 12 },
-  label: { width: 104, fontSize: 14, color: "#64748b" },
-  value: { flex: 1, fontSize: 14, color: "#0f172a" },
-  badge: {
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  hint: { fontSize: 13, lineHeight: 18, color: "#475569" },
-});
+const badge = {
+  checking: "secondary",
+  ready: "success",
+  degraded: "warning",
+  unreachable: "destructive",
+} as const;

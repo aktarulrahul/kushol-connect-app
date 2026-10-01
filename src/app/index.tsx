@@ -1,33 +1,29 @@
-import { StyleSheet, Text, View } from "react-native";
+import { View } from "react-native";
 
+import { Logo } from "@/components/ui/logo";
+import { Screen } from "@/components/ui/screen";
+import { LanguageToggle } from "@/components/ui/segmented-pill";
+import { Text } from "@/components/ui/text";
 import { DevStatus } from "@/dev/dev-status";
+import { useT } from "@/i18n/locale-provider";
 
-// Holding screen until 03-identity-access builds onboarding. It shows only the brand name, which is
-// not translated and so needs no catalog entry. Deep teal (#095777) and paper (#fafbfc) come from
-// docs/design-reference §2 until 02-design-system ships the tokens and Hind Siliguri.
+// Holding screen until 03-identity-access builds onboarding — built only from 02 parts: the logo
+// through <Logo/>, copy through the catalogs, colours and type from the tokens.
 export default function Index() {
+  const t = useT();
   return (
-    <View style={styles.root}>
-      <Text accessibilityRole="header" style={styles.brand}>
-        <Text style={styles.wordmark}>কুশল</Text>
-        {"\n"}
-        <Text style={styles.connect}>CONNECT</Text>
-      </Text>
+    <Screen className="min-h-full justify-center gap-8 py-16">
+      <View className="items-center gap-4">
+        <Logo size="hero" decorative />
+        <Text variant="h1" className="sr-only">
+          {t("common.app_name")}
+        </Text>
+        <Text variant="lead" className="text-center">
+          {t("common.coming_soon")}
+        </Text>
+        <LanguageToggle className="self-center" />
+      </View>
       {__DEV__ && <DevStatus />}
-    </View>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 48,
-    paddingHorizontal: 24,
-    backgroundColor: "#fafbfc",
-  },
-  brand: { textAlign: "center", color: "#095777" },
-  wordmark: { fontSize: 64, fontWeight: "700" },
-  connect: { fontSize: 20, fontWeight: "600", letterSpacing: 8 },
-});
