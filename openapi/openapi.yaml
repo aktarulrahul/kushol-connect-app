@@ -17,6 +17,16 @@ servers:
 tags:
   - name: health
     description: Liveness and readiness (consumed by 15-deployment-operations)
+  - name: auth
+    description: Registration, login (OTP / password / SSO), tokens and sessions (03-identity-access)
+  - name: users
+    description: The authenticated user's own account (03-identity-access)
+  - name: verification
+    description: Join-request queue and school roster (03-identity-access; queue UI built by 07)
+  - name: hierarchy
+    description: Master-data reads for registration pickers (owned by 04; served by 03's fake until 04 lands)
+  - name: school-requests
+    description: New school/college requests from registration (03 until 04 absorbs onboarding)
 paths:
   /healthz:
     get:
@@ -61,6 +71,810 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/register:
+    post:
+      operationId: postAuthRegister
+      tags: [auth]
+      summary: Complete registration — user + identity + verification request in one transaction
+      description: |
+        Public, rate-limit class `auth` (10/hour/IP). Requires a previously verified OTP
+        (purpose `register`). Hierarchy placement is re-validated server-side against 04 reads.
+        Tokens are returned only when the phone OTP completed inside the same flow.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+      responses:
+        '201':
+          description: Account created `PENDING` with an open verification request
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/otp/request:
+    post:
+      operationId: postAuthOtpRequest
+      tags: [auth]
+      summary: Issue a 6-digit OTP by SMS (or email for verified addresses)
+      description: |
+        Public; class `auth`. Answers 202 identically whether or not the phone/email is
+        registered (no enumeration). Caps: 60 s resend cooldown, 5/hour per target,
+        200/hour/IP (CGNAT-tolerant), enforced again on resend.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequestInput'
+      responses:
+        '202':
+          description: OTP queued for delivery
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpSendResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/otp/resend:
+    post:
+      operationId: postAuthOtpResend
+      tags: [auth]
+      summary: Resend a fresh OTP for the same target and purpose
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequestInput'
+      responses:
+        '202':
+          description: OTP queued (identical body to request)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpSendResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/otp/verify:
+    post:
+      operationId: postAuthOtpVerify
+      tags: [auth]
+      summary: Verify an OTP — login (tokens), or mark verified for register/link
+      description: |
+        Public; class `auth` (10 verifies/hour per target, 3 attempts per code). Purpose
+        `login` returns tokens (unknown phone answers `{status:"unknown_phone"}` and the
+        client continues to registration); purposes `register`/`link` return
+        `{status:"verified"}` so the follow-up call can prove possession.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerifyInput'
+      responses:
+        '200':
+          description: Verification outcome
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpVerifyResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/login/password:
+    post:
+      operationId: postAuthLoginPassword
+      tags: [auth]
+      summary: Staff/vendor login with email and password (argon2id)
+      description: |
+        Public; class `auth` (10/hour/account, 100/hour/IP). Enumeration-safe: unknown
+        account and wrong password answer the identical generic UNAUTHENTICATED problem at
+        near-identical latency. Web receives the http-only session cookie; the app receives
+        tokens. `PENDING` users still get a session (pending screen only).
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordLoginInput'
+      responses:
+        '200':
+          description: Login result (tokens for the app, cookie for web)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordLoginResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/password/forgot:
+    post:
+      operationId: postAuthPasswordForgot
+      tags: [auth]
+      summary: Request a password-reset code by email
+      description: Public; class `auth` (5/hour/email, 100/hour/IP). Always 202.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordInput'
+      responses:
+        '202':
+          description: Accepted — a code is sent when the email belongs to a staff/vendor account
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/password/reset:
+    post:
+      operationId: postAuthPasswordReset
+      tags: [auth]
+      summary: Reset a staff/vendor password with the emailed code
+      description: |
+        Public; class `auth`. On success every session and refresh family of the user is
+        revoked. Also serves as the vendor first-password set after 07 approval.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordInput'
+      responses:
+        '204':
+          description: Password updated; all sessions revoked
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/refresh:
+    post:
+      operationId: postAuthRefresh
+      tags: [auth]
+      summary: Rotate a mobile refresh token (single-use, reuse-detecting)
+      description: |
+        Public (token in body); class `auth`. The presented token is revoked (`rotated`) and a
+        new one is issued in the same family; claims are re-read from the database. Presenting
+        a revoked token revokes the whole family and is audited (`auth.refresh_reuse`).
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshInput'
+      responses:
+        '200':
+          description: Fresh token pair
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags: [auth]
+      summary: Log out the current device (session or refresh family)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutInput'
+      responses:
+        '204':
+          description: Current session/refresh family revoked
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/logout-all:
+    post:
+      operationId: postAuthLogoutAll
+      tags: [auth]
+      summary: Log out everywhere — every session and refresh family
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '204':
+          description: All sessions and refresh families revoked (audited)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/google/start:
+    get:
+      operationId: getAuthGoogleStart
+      tags: [auth]
+      summary: Begin the Google OIDC round-trip (signed state + PKCE)
+      description: |
+        Public; class `auth` (20/hour/IP per provider). `intent=link` requires an
+        authenticated user. Redirects to Google; the callback redirects to the calling
+        surface (`/auth/sso/return` on web, deep link on the app) with a one-time result code.
+      parameters:
+        - name: intent
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [login, link]
+      responses:
+        '302':
+          description: Redirect to the provider
+          headers:
+            Location:
+              description: Provider authorization endpoint
+              schema:
+                type: string
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/google/callback:
+    get:
+      operationId: getAuthGoogleCallback
+      tags: [auth]
+      summary: Google OIDC callback — link or create, then redirect with a result code
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to the calling surface with `sso_result` (or `sso_error`)
+          headers:
+            Location:
+              description: Calling surface URL carrying the one-time result or error
+              schema:
+                type: string
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/github/start:
+    get:
+      operationId: getAuthGithubStart
+      tags: [auth]
+      summary: Begin the GitHub OIDC round-trip (signed state + PKCE)
+      parameters:
+        - name: intent
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [login, link]
+      responses:
+        '302':
+          description: Redirect to the provider
+          headers:
+            Location:
+              description: Provider authorization endpoint
+              schema:
+                type: string
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/auth/github/callback:
+    get:
+      operationId: getAuthGithubCallback
+      tags: [auth]
+      summary: GitHub OIDC callback — link or create, then redirect with a result code
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to the calling surface with `sso_result` (or `sso_error`)
+          headers:
+            Location:
+              description: Calling surface URL carrying the one-time result or error
+              schema:
+                type: string
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: The authenticated user's own account
+      description: Authenticate (either scheme); class `auth` relaxed (60/min/user).
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Current user
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: patchMe
+      tags: [users]
+      summary: Update own display name and/or locale
+      description: Role and status are immutable here (FORBIDDEN on attempt).
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeUpdateInput'
+      responses:
+        '200':
+          description: Updated user
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/verification-requests:
+    get:
+      operationId: listVerificationRequests
+      tags: [verification]
+      summary: The school's join-request queue
+      description: |
+        school_admin sees own school (all roles); student+`is_ambassador` sees same-school
+        student/guardian requests only; super_admin sees everything. Tenant-scoped server-side.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/VerificationRequestStatus'
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UserRole'
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Queue page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationRequestPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/verification-requests/{id}/approve:
+    post:
+      operationId: approveVerificationRequest
+      tags: [verification]
+      summary: Approve a join request → user VERIFIED + provisioning enqueued
+      description: |
+        Guardian requests carry `{studentUserId}` — the same-school VERIFIED student the
+        evidence matched; a `guardian_links` row is written in the same transaction.
+        Already-decided requests answer CONFLICT. Audited `verification.approved`.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveInput'
+      responses:
+        '200':
+          description: Approved
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/verification-requests/{id}/reject:
+    post:
+      operationId: rejectVerificationRequest
+      tags: [verification]
+      summary: Reject a join request with a mandatory reason
+      description: school_admin/super_admin only (ambassadors are approve-only). Audited `verification.rejected`.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectInput'
+      responses:
+        '200':
+          description: Rejected (reason stored; user notified via 06)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/users:
+    get:
+      operationId: listSchoolUsers
+      tags: [verification]
+      summary: The school's user roster
+      description: school_admin (own school from claim); super_admin may pass `?schoolId=`.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: schoolId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Super Admin only — selects the school (tenant check still applies)
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UserRole'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UserStatus'
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 80
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Roster page (names, roles, statuses, masked phones only)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolUserPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/hierarchy/cities:
+    get:
+      operationId: listHierarchyCities
+      tags: [hierarchy]
+      summary: Launch cities for the registration picker
+      description: Public; master data owned by 04 (served from 03's in-memory fake until 04 lands).
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: City list (launch cities first)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HierarchyCityPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/hierarchy/cities/{cityId}/schools:
+    get:
+      operationId: listHierarchySchools
+      tags: [hierarchy]
+      summary: Schools/colleges in a city
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: cityId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: School list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HierarchySchoolPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/hierarchy/schools/{schoolId}/sections:
+    get:
+      operationId: listHierarchySections
+      tags: [hierarchy]
+      summary: Sections of a school (class level is a section attribute)
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Section list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HierarchySectionPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school-requests:
+    post:
+      operationId: createSchoolRequest
+      tags: [school-requests]
+      summary: Request onboarding for a school/college not yet listed
+      description: |
+        Public; class `auth`. Submitted from registration when the school dropdown has no
+        match. Carries the institution details plus the point of contact — the application
+        admin connects with the POC to onboard the institution. Audited `school.requested`.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchoolRequestInput'
+      responses:
+        '202':
+          description: Request queued for admin review
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolRequestCreated'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/school-requests:
+    get:
+      operationId: listSchoolRequests
+      tags: [school-requests]
+      summary: Review queue for institution requests (Super Admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SchoolRequestStatus'
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Request queue page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolRequestPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/school-requests/{id}/approve:
+    post:
+      operationId: approveSchoolRequest
+      tags: [school-requests]
+      summary: Approve an institution request — POC is contacted for onboarding
+      description: Super Admin only. Audited `school.request_approved`; the institution itself is created by 04's onboarding.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Approved
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolRequestDecision'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/school-requests/{id}/reject:
+    post:
+      operationId: rejectSchoolRequest
+      tags: [school-requests]
+      summary: Reject an institution request with a reason
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchoolRequestRejectInput'
+      responses:
+        '200':
+          description: Rejected
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolRequestDecision'
         default:
           $ref: '#/components/responses/Problem'
 components:
@@ -172,3 +986,549 @@ components:
           description: Present on readiness failures — names each dependency and its state
           items:
             $ref: '#/components/schemas/DependencyCheck'
+    UserRole:
+      type: string
+      enum: [super_admin, school_admin, teacher, student, guardian, vendor]
+      description: '`vendor` is platform-scoped (`schoolId` null) and never self-registered'
+    UserStatus:
+      type: string
+      enum: [PENDING, VERIFIED, SUSPENDED]
+    Locale:
+      type: string
+      enum: [bn, en]
+    Plan:
+      type: string
+      enum: [free, pro]
+    OtpChannel:
+      type: string
+      enum: [sms, email]
+    OtpPurpose:
+      type: string
+      enum: [login, register, link]
+      description: '`reset` OTPs are issued internally by `/auth/password/forgot` only'
+    User:
+      type: object
+      description: Public user shape — phone numbers are always masked
+      required: [id, role, status, locale, fullName, isAmbassador, plan]
+      properties:
+        id:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        locale:
+          $ref: '#/components/schemas/Locale'
+        fullName:
+          type: string
+        maskedPhone:
+          type: string
+          description: e.g. `+8801XXXXXX789` — present when the account has a phone
+        email:
+          type: string
+          description: present when the account has an email
+        schoolId:
+          type: string
+          nullable: true
+        isAmbassador:
+          type: boolean
+        plan:
+          $ref: '#/components/schemas/Plan'
+    RegisterInput:
+      type: object
+      required: [locale, role, fullName, schoolId, sectionId]
+      description: |
+        `phone`+`otpCode` are required for student/guardian (OTP purpose `register` proven).
+        Staff may register with `email`+`password` instead (phone optional). `studentCode`
+        and `relation` are required when role is `guardian`. No class field — the class
+        level is derived from the section.
+      properties:
+        locale:
+          $ref: '#/components/schemas/Locale'
+        role:
+          $ref: '#/components/schemas/UserRole'
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        phone:
+          type: string
+          description: BD mobile, normalized server-side to E.164 `+880…`
+        otpCode:
+          type: string
+          description: The code verified via `/auth/otp/verify` (purpose `register`)
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+          description: Staff registration only (argon2id server-side)
+        schoolId:
+          type: string
+        sectionId:
+          type: string
+        studentCode:
+          type: string
+          minLength: 3
+          maxLength: 20
+          description: Guardian only — the child's student ID
+        relation:
+          type: string
+          enum: [father, mother, other]
+          description: Guardian only
+    RegisterResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user, verificationRequest]
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            accessToken:
+              type: string
+              description: Present only when the phone OTP completed in this flow
+            refreshToken:
+              type: string
+            verificationRequest:
+              $ref: '#/components/schemas/VerificationRequestItem'
+    OtpRequestInput:
+      type: object
+      description: Exactly one of `phone` / `email`.
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        purpose:
+          $ref: '#/components/schemas/OtpPurpose'
+    OtpSendResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [sentAt, cooldownSeconds, channel]
+          properties:
+            sentAt:
+              type: string
+              format: date-time
+            cooldownSeconds:
+              type: integer
+              minimum: 0
+            channel:
+              $ref: '#/components/schemas/OtpChannel'
+    OtpVerifyInput:
+      type: object
+      required: [otpCode, purpose]
+      description: Exactly one of `phone` / `email` (matching the request channel).
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        otpCode:
+          type: string
+          minLength: 6
+          maxLength: 6
+        purpose:
+          $ref: '#/components/schemas/OtpPurpose'
+    OtpVerifyResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          description: |
+            `login` on a known phone returns tokens + user; an unknown phone answers
+            `{status:"unknown_phone"}` (deliberate — OTP proves possession and registration
+            shares the code path). `register`/`link` return `{status:"verified"}`.
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [ok, unknown_phone, verified]
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            user:
+              $ref: '#/components/schemas/User'
+    PasswordLoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        deviceLabel:
+          type: string
+          maxLength: 120
+    PasswordLoginResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user]
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            accessToken:
+              type: string
+              description: App clients only
+            refreshToken:
+              type: string
+              description: App clients only
+            sessionSet:
+              type: boolean
+              description: Web clients — the http-only cookie was set
+    ForgotPasswordInput:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+    ResetPasswordInput:
+      type: object
+      required: [email, otpCode, newPassword]
+      properties:
+        email:
+          type: string
+          format: email
+        otpCode:
+          type: string
+          minLength: 6
+          maxLength: 6
+        newPassword:
+          type: string
+          minLength: 10
+          maxLength: 128
+    RefreshInput:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    RefreshResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [accessToken, refreshToken]
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+    LogoutInput:
+      type: object
+      description: App clients pass the current refresh token; web relies on the cookie.
+      properties:
+        refreshToken:
+          type: string
+    MeResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+    MeUpdateInput:
+      type: object
+      minProperties: 1
+      properties:
+        locale:
+          $ref: '#/components/schemas/Locale'
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        avatarUrl:
+          type: string
+          format: uri
+    VerificationRequestStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, CANCELLED]
+    VerificationRequestItem:
+      type: object
+      required: [id, user, status, createdAt, reminderCount]
+      properties:
+        id:
+          type: string
+        user:
+          type: object
+          required: [fullName, role]
+          properties:
+            fullName:
+              type: string
+            role:
+              $ref: '#/components/schemas/UserRole'
+            phoneMasked:
+              type: string
+        status:
+          $ref: '#/components/schemas/VerificationRequestStatus'
+        evidence:
+          type: object
+          description: '`{studentCode, relation}` for guardians; free-form, proof only'
+          additionalProperties: true
+        decisionReason:
+          type: string
+          description: Present on REJECTED — the bn/en key + params are resolved client-side
+        createdAt:
+          type: string
+          format: date-time
+        reminderCount:
+          type: integer
+          minimum: 0
+    VerificationRequestPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationRequestItem'
+        nextCursor:
+          type: string
+    ApproveInput:
+      type: object
+      description: Guardian requests require `studentUserId` (the matched same-school VERIFIED student).
+      properties:
+        studentUserId:
+          type: string
+    RejectInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+    DecisionResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status]
+          properties:
+            id:
+              type: string
+            status:
+              $ref: '#/components/schemas/VerificationRequestStatus'
+            userStatus:
+              $ref: '#/components/schemas/UserStatus'
+    SchoolUser:
+      type: object
+      required: [id, fullName, role, status, createdAt]
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        status:
+          $ref: '#/components/schemas/UserStatus'
+        maskedPhone:
+          type: string
+        isAmbassador:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    HierarchyCity:
+      type: object
+      required: [id, nameBn, nameEn, isLaunchCity]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        isLaunchCity:
+          type: boolean
+    HierarchyCityPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HierarchyCity'
+    HierarchySchool:
+      type: object
+      required: [id, nameBn, nameEn]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+    HierarchySchoolPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HierarchySchool'
+    HierarchySection:
+      type: object
+      required: [id, classLevel, name, sessionYear]
+      properties:
+        id:
+          type: string
+        classLevel:
+          type: string
+          description: e.g. `6`..`10` — the class dropdown derives its options from these
+        name:
+          type: string
+          description: Section name, e.g. `A`, `B` (bn/en resolved client-side)
+        sessionYear:
+          type: integer
+    HierarchySectionPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HierarchySection'
+    SchoolRequestType:
+      type: string
+      enum: [school, college]
+    SchoolRequestStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED]
+    SchoolRequestInput:
+      type: object
+      required: [name, type, cityId, pocName, pocPhone]
+      description: Submitted from registration when the school dropdown has no match. The POC is whom the application admin connects to onboard the institution.
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        type:
+          $ref: '#/components/schemas/SchoolRequestType'
+        cityId:
+          type: string
+        address:
+          type: string
+          maxLength: 240
+        pocName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        pocPhone:
+          type: string
+          description: BD mobile, normalized server-side to E.164
+        pocEmail:
+          type: string
+          format: email
+    SchoolRequestCreated:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status]
+          properties:
+            id:
+              type: string
+            status:
+              $ref: '#/components/schemas/SchoolRequestStatus'
+    SchoolRequest:
+      type: object
+      required: [id, name, type, status, pocName, pocPhone, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/SchoolRequestType'
+        cityId:
+          type: string
+        address:
+          type: string
+        status:
+          $ref: '#/components/schemas/SchoolRequestStatus'
+        pocName:
+          type: string
+        pocPhone:
+          type: string
+          description: masked for display, e.g. `+8801XXXXXX789`
+        pocEmail:
+          type: string
+        decisionReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+    SchoolRequestPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchoolRequest'
+        nextCursor:
+          type: string
+    SchoolRequestRejectInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+    SchoolRequestDecision:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status]
+          properties:
+            id:
+              type: string
+            status:
+              $ref: '#/components/schemas/SchoolRequestStatus'
+    SchoolUserPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchoolUser'
+        nextCursor:
+          type: string
+  securitySchemes:
+    bearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Mobile access token — 15 min, HS256, claims `sub, role, schoolId, status, locale`
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-kushol_session
+      description: Web http-only session cookie (opaque 256-bit token, server-side SHA-256)

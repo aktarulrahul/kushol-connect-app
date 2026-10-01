@@ -31,7 +31,16 @@ function Input({
       )}
       placeholderTextColor={color["muted-foreground"]}
       selectionColor={color.primary}
-      style={[{ fontFamily: fontFamily(script, "normal") }, style]}
+      textAlignVertical="center"
+      style={[
+        {
+          fontFamily: fontFamily(script, "normal"),
+          // Hind Siliguri's tall ascent adds Android's font-metric top padding — text reads
+          // low/off-centre inside the 44pt field without this (single-line inputs only).
+          ...(Platform.OS === "android" && !props.multiline ? { includeFontPadding: false } : {}),
+        },
+        style,
+      ]}
       {...props}
     />
   );
