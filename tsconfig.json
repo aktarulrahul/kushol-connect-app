@@ -9,5 +9,12 @@
     "types": ["node", "jest", "expo/types"],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts",
+    "eslint-rules/*.d.mts"
+  ]
 }

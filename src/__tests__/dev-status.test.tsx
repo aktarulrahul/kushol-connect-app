@@ -1,6 +1,9 @@
-import { render, screen } from "@testing-library/react-native";
+import { screen } from "@testing-library/react-native";
 
 import { checkApi, DevStatus } from "@/dev/dev-status";
+import { renderUi } from "@/test/render";
+
+jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
 function fakeFetch(status: number, body: unknown) {
   return jest.fn<Promise<Response>, [Request]>(() =>
@@ -57,7 +60,7 @@ describe("dev status card", () => {
   });
 
   it("shows the api URL, then the result", async () => {
-    await render(<DevStatus fetch={fakeFetch(200, ready)} />);
+    await renderUi(<DevStatus fetch={fakeFetch(200, ready)} />);
     expect(screen.getByText("http://api.test")).toBeOnTheScreen();
     expect(await screen.findByText("ready")).toBeOnTheScreen();
     expect(screen.getByText("postgres ok · redis ok")).toBeOnTheScreen();

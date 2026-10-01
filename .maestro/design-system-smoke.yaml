@@ -1,0 +1,14 @@
+# DSN-E2E-001 (app): bn renders by default, the en toggle switches copy and back.
+# Run against a development or preview build: maestro test .maestro/design-system-smoke.yaml
+# Reduced motion (static splash) is checked by hand: iOS Settings › Accessibility › Motion ›
+# Reduce Motion, then cold-start the app — the lockup appears static and the app shows at once.
+appId: com.kusholconnect.app
+---
+- launchApp:
+    clearState: true
+- assertVisible: "শীঘ্রই আসছে"
+- assertVisible: "বাংলা"
+- tapOn: "English"
+- assertVisible: "Coming soon"
+- tapOn: "বাংলা"
+- assertVisible: "শীঘ্রই আসছে"

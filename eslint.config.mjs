@@ -5,6 +5,8 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+import designTokens from "./eslint-rules/design-tokens.mjs";
+
 export default tseslint.config(
   {
     ignores: [
@@ -45,13 +47,35 @@ export default tseslint.config(
       ],
     },
   },
+  // DSN-BR-002 / DSN-INT-002: feature code uses tokens only. Raw values are allowed where tokens
+  // are defined (src/theme) and in the vendored primitives (src/components/ui).
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/theme/**", "src/components/ui/**", "**/*.test.ts", "**/*.test.tsx"],
+    plugins: { "design-tokens": designTokens },
+    rules: { "design-tokens/no-raw-design-values": "error" },
+  },
   { files: ["src/env.ts"], rules: { "no-restricted-properties": "off" } },
+  // React Native Reusables components are vendored (`npx @react-native-reusables/cli add`); keep
+  // them close to upstream — only these stylistic strict rules are relaxed there.
+  {
+    files: ["src/components/ui/**"],
+    rules: {
+      "@typescript-eslint/no-confusing-void-expression": "off",
+      "@typescript-eslint/restrict-template-expressions": "off",
+      "@typescript-eslint/no-unnecessary-condition": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { ignoreRestSiblings: true, argsIgnorePattern: "^_" },
+      ],
+    },
+  },
   {
     files: ["src/api/**"],
     rules: { "no-restricted-imports": "off", "no-restricted-globals": "off" },
   },
   {
-    files: ["**/*.test.ts", "**/*.test.tsx"],
+    files: ["**/*.test.ts", "**/*.test.tsx", "jest.setup.js"],
     languageOptions: { globals: { ...globals.jest } },
     rules: { "no-restricted-globals": "off" },
   },

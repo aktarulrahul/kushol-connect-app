@@ -36,6 +36,8 @@ jobs:
         run: pnpm typecheck
       - name: Unit tests
         run: pnpm test
+      - name: Token lint rule tests (DSN-IT-001)
+        run: pnpm test:rules
       - name: Client drift (FND-BR-001)
         run: pnpm contracts:check
       - name: Expo doctor
