@@ -24,6 +24,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SplashReveal } from "@/components/ui/splash-reveal";
 import { ToastProvider } from "@/components/ui/toast";
 import { LocaleProvider } from "@/i18n/locale-provider";
+import { AuthProvider } from "@/lib/auth/auth-provider";
+import { useAuthStore } from "@/lib/auth/auth-store";
 import { color } from "@/theme/tokens";
 
 // Root providers (DSN-AP-001…003): fonts → theme → locale. The native splash (lockup on paper)
@@ -46,7 +48,14 @@ export default function RootLayout() {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } }),
   );
-  const ready = fontsLoaded || fontError !== null;
+  const authStatus = useAuthStore((s) => s.status);
+  // Restore starts with font loading so the splash covers the session read. Guards mount only
+  // after it finishes — a reload must not paint /login and then jump back.
+  useEffect(() => {
+    void useAuthStore.getState().hydrate();
+  }, []);
+  const authReady = authStatus === "anon" || authStatus === "authed";
+  const ready = (fontsLoaded || fontError !== null) && authReady;
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
@@ -59,15 +68,17 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <LocaleProvider>
           <ToastProvider>
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: color.background },
-              }}
-            />
-            <PortalHost />
-            <SplashReveal />
+            <AuthProvider>
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: color.background },
+                }}
+              />
+              <PortalHost />
+              <SplashReveal />
+            </AuthProvider>
           </ToastProvider>
         </LocaleProvider>
       </QueryClientProvider>

@@ -73,9 +73,10 @@ export default function TabsLayout() {
   }, [me?.status, signOut, queryClient, router]);
 
   // Signed-out visitors never see the tabs skeleton — straight to /login (owner gate, 2026-10-01).
+  // Checking, or authed with no profile yet (offline restore), keeps the skeleton so /login
+  // does not flash before the session is known.
   if (status === "anon") return <Redirect href="/login" />;
-  if (status !== "authed") return <GateSkeleton />;
-  if (!me) return <Redirect href="/login" />;
+  if (status !== "authed" || !me) return <GateSkeleton />;
   if (me.status === "PENDING") return <PendingScreen />;
   // Sessions and refresh families are revoked server-side (IDT-US-010); the local session is
   // cleared and the bilingual suspension message is shown before the redirect to login.

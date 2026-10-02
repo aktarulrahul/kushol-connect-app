@@ -67,26 +67,12 @@ function PendingScreen() {
   });
   const rejected = request.data?.status === "REJECTED" ? request.data : null;
 
-  if (status !== "authed") {
+  if (status !== "authed" || !me) {
     return (
       <Screen className="justify-center gap-3">
         <Skeleton className="h-8 w-2/3" />
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
-      </Screen>
-    );
-  }
-  if (!me) {
-    return (
-      <Screen className="justify-center gap-4">
-        <Button
-          size="lg"
-          onPress={() => {
-            router.replace("/login");
-          }}
-        >
-          <Text>{t("auth.login.title")}</Text>
-        </Button>
       </Screen>
     );
   }

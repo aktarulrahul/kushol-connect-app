@@ -37,7 +37,10 @@ function Input({
           fontFamily: fontFamily(script, "normal"),
           // Hind Siliguri's tall ascent adds Android's font-metric top padding — text reads
           // low/off-centre inside the 44pt field without this (single-line inputs only).
+          // iOS twin: text-base's 24px line box bottoms-out the glyphs (cursor tall, text low,
+          // as in Inter too); a 20px line box re-centres the run. 16pt font ⇒ 20pt line.
           ...(Platform.OS === "android" && !props.multiline ? { includeFontPadding: false } : {}),
+          ...(Platform.OS === "ios" && !props.multiline ? { lineHeight: 20 } : {}),
         },
         style,
       ]}

@@ -47,17 +47,22 @@ function SettingsScreen() {
   });
 
   // Signed-out visitors are redirected (owner gate, 2026-10-01); PENDING users keep access —
-  // the pending screen links here.
+  // the pending screen links here. A restore still in flight, or offline with no profile yet,
+  // stays on the skeleton instead of /login.
   if (status === "anon") {
     return <Redirect href="/login" />;
   }
-  if (status === "authed" && !me) {
-    return <Redirect href="/login" />;
+  if (status !== "authed" || !me) {
+    return (
+      <Screen className="justify-center gap-3">
+        <Skeleton className="h-8 w-2/3" />
+        <Skeleton className="h-24 w-full" />
+      </Screen>
+    );
   }
 
   const pickLocale = async (next: "bn" | "en") => {
     setLocale(next);
-    if (!me) return;
     try {
       await changeLocale(next); // PATCH /me — the next access token carries the claim
       toast({ title: t("settings.language_saved"), variant: "success" });
@@ -90,12 +95,10 @@ function SettingsScreen() {
     <Screen>
       <View className="gap-1">
         <Text variant="h1">{t("settings.title")}</Text>
-        {me ? (
-          <Text variant="muted">
-            {me.fullName}
-            {me.maskedPhone ? ` · ${me.maskedPhone}` : ""}
-          </Text>
-        ) : null}
+        <Text variant="muted">
+          {me.fullName}
+          {me.maskedPhone ? ` · ${me.maskedPhone}` : ""}
+        </Text>
       </View>
 
       <View className="gap-2">

@@ -70,7 +70,7 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Issue a 6-digit OTP by SMS (or email for verified addresses)
+     * Issue a 6-digit OTP by SMS or email (passwordless login, owner decision 2026-10-02)
      * @description Public; class `auth`. Answers 202 identically whether or not the phone/email is
      *     registered (no enumeration). Caps: 60 s resend cooldown, 5/hour per target,
      *     200/hour/IP (CGNAT-tolerant), enforced again on resend.
@@ -111,34 +111,13 @@ export interface paths {
     /**
      * Verify an OTP — login (tokens), or mark verified for register/link
      * @description Public; class `auth` (10 verifies/hour per target, 3 attempts per code). Purpose
-     *     `login` returns tokens (unknown phone answers `{status:"unknown_phone"}` and the
-     *     client continues to registration); purposes `register`/`link` return
-     *     `{status:"verified"}` so the follow-up call can prove possession.
+     *     `login` returns tokens (an unknown target answers `{status:"unknown_phone"}` or
+     *     `{status:"unknown_email"}` and the client continues to registration); purposes
+     *     `register`/`link` return `{status:"verified"}` so the follow-up call can prove
+     *     possession. Login is passwordless (owner decision 2026-10-02): both phone and email
+     *     targets authenticate.
      */
     post: operations["postAuthOtpVerify"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/v1/auth/login/password": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Staff/vendor login with email and password (argon2id)
-     * @description Public; class `auth` (10/hour/account, 100/hour/IP). Enumeration-safe: unknown
-     *     account and wrong password answer the identical generic UNAUTHENTICATED problem at
-     *     near-identical latency. Web receives the http-only session cookie; the app receives
-     *     tokens. `PENDING` users still get a session (pending screen only).
-     */
-    post: operations["postAuthLoginPassword"];
     delete?: never;
     options?: never;
     head?: never;
@@ -697,33 +676,17 @@ export interface components {
     };
     OtpVerifyResult: {
       /**
-       * @description `login` on a known phone returns tokens + user; an unknown phone answers
-       *     `{status:"unknown_phone"}` (deliberate — OTP proves possession and registration
-       *     shares the code path). `register`/`link` return `{status:"verified"}`.
+       * @description `login` on a known phone/email returns tokens + user; an unknown target answers
+       *     `{status:"unknown_phone"}` or `{status:"unknown_email"}` (deliberate — OTP proves
+       *     possession and registration shares the code path). `register`/`link` return
+       *     `{status:"verified"}`.
        */
       data: {
         /** @enum {string} */
-        status: "ok" | "unknown_phone" | "verified";
+        status: "ok" | "unknown_phone" | "unknown_email" | "verified";
         accessToken?: string;
         refreshToken?: string;
         user?: components["schemas"]["User"];
-      };
-    };
-    PasswordLoginInput: {
-      /** Format: email */
-      email: string;
-      password: string;
-      deviceLabel?: string;
-    };
-    PasswordLoginResult: {
-      data: {
-        user: components["schemas"]["User"];
-        /** @description App clients only */
-        accessToken?: string;
-        /** @description App clients only */
-        refreshToken?: string;
-        /** @description Web clients — the http-only cookie was set */
-        sessionSet?: boolean;
       };
     };
     ForgotPasswordInput: {
@@ -1084,35 +1047,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["OtpVerifyResult"];
-        };
-      };
-      default: components["responses"]["Problem"];
-    };
-  };
-  postAuthLoginPassword: {
-    parameters: {
-      query?: never;
-      header?: {
-        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
-        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
-      };
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["PasswordLoginInput"];
-      };
-    };
-    responses: {
-      /** @description Login result (tokens for the app, cookie for web) */
-      200: {
-        headers: {
-          "X-Request-Id": components["headers"]["XRequestId"];
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PasswordLoginResult"];
         };
       };
       default: components["responses"]["Problem"];

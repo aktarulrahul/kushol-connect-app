@@ -106,7 +106,7 @@ paths:
     post:
       operationId: postAuthOtpRequest
       tags: [auth]
-      summary: Issue a 6-digit OTP by SMS (or email for verified addresses)
+      summary: Issue a 6-digit OTP by SMS or email (passwordless login, owner decision 2026-10-02)
       description: |
         Public; class `auth`. Answers 202 identically whether or not the phone/email is
         registered (no enumeration). Caps: 60 s resend cooldown, 5/hour per target,
@@ -163,9 +163,11 @@ paths:
       summary: Verify an OTP — login (tokens), or mark verified for register/link
       description: |
         Public; class `auth` (10 verifies/hour per target, 3 attempts per code). Purpose
-        `login` returns tokens (unknown phone answers `{status:"unknown_phone"}` and the
-        client continues to registration); purposes `register`/`link` return
-        `{status:"verified"}` so the follow-up call can prove possession.
+        `login` returns tokens (an unknown target answers `{status:"unknown_phone"}` or
+        `{status:"unknown_email"}` and the client continues to registration); purposes
+        `register`/`link` return `{status:"verified"}` so the follow-up call can prove
+        possession. Login is passwordless (owner decision 2026-10-02): both phone and email
+        targets authenticate.
       parameters:
         - $ref: '#/components/parameters/AcceptLanguage'
       requestBody:
@@ -184,36 +186,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OtpVerifyResult'
-        default:
-          $ref: '#/components/responses/Problem'
-  /api/v1/auth/login/password:
-    post:
-      operationId: postAuthLoginPassword
-      tags: [auth]
-      summary: Staff/vendor login with email and password (argon2id)
-      description: |
-        Public; class `auth` (10/hour/account, 100/hour/IP). Enumeration-safe: unknown
-        account and wrong password answer the identical generic UNAUTHENTICATED problem at
-        near-identical latency. Web receives the http-only session cookie; the app receives
-        tokens. `PENDING` users still get a session (pending screen only).
-      parameters:
-        - $ref: '#/components/parameters/AcceptLanguage'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PasswordLoginInput'
-      responses:
-        '200':
-          description: Login result (tokens for the app, cookie for web)
-          headers:
-            X-Request-Id:
-              $ref: '#/components/headers/XRequestId'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PasswordLoginResult'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/auth/password/forgot:
@@ -1145,51 +1117,21 @@ components:
         data:
           type: object
           description: |
-            `login` on a known phone returns tokens + user; an unknown phone answers
-            `{status:"unknown_phone"}` (deliberate — OTP proves possession and registration
-            shares the code path). `register`/`link` return `{status:"verified"}`.
+            `login` on a known phone/email returns tokens + user; an unknown target answers
+            `{status:"unknown_phone"}` or `{status:"unknown_email"}` (deliberate — OTP proves
+            possession and registration shares the code path). `register`/`link` return
+            `{status:"verified"}`.
           required: [status]
           properties:
             status:
               type: string
-              enum: [ok, unknown_phone, verified]
+              enum: [ok, unknown_phone, unknown_email, verified]
             accessToken:
               type: string
             refreshToken:
               type: string
             user:
               $ref: '#/components/schemas/User'
-    PasswordLoginInput:
-      type: object
-      required: [email, password]
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-        deviceLabel:
-          type: string
-          maxLength: 120
-    PasswordLoginResult:
-      type: object
-      required: [data]
-      properties:
-        data:
-          type: object
-          required: [user]
-          properties:
-            user:
-              $ref: '#/components/schemas/User'
-            accessToken:
-              type: string
-              description: App clients only
-            refreshToken:
-              type: string
-              description: App clients only
-            sessionSet:
-              type: boolean
-              description: Web clients — the http-only cookie was set
     ForgotPasswordInput:
       type: object
       required: [email]
