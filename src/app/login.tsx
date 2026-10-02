@@ -15,7 +15,7 @@ import { useLocale, useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import { requestOtpLive } from "@/lib/auth/live-otp";
 import { color } from "@/theme/tokens";
-import { FixtureError, requestOtp, type OtpVerifyResult, type User } from "@/fixtures/auth";
+import { FixtureError, type OtpVerifyResult, type User } from "@/fixtures/auth";
 import { isBdPhone, normalizePhone } from "@/schemas/register";
 import { z } from "zod";
 
@@ -65,7 +65,7 @@ function LoginScreen() {
     setEmailError(false);
     try {
       if (tab === "phone") {
-        await requestOtp({ phone: normalizePhone(phone), purpose: "login" });
+        await requestOtpLive({ phone: normalizePhone(phone), purpose: "login" }, locale);
       } else {
         await requestOtpLive({ email: normalizedEmail(), purpose: "login" }, locale);
       }
@@ -108,9 +108,11 @@ function LoginScreen() {
     router.push(`/auth/sso/return?provider=${provider}&intent=login`);
   };
 
-  // A restored session must not sit on the login form. Phone OTP below is unchanged.
-  if (status === "authed" && me) {
-    return <Redirect href={me.status === "PENDING" ? "/verification-pending" : "/chat"} />;
+  // Restore still running: stay blank (root splash already covers cold start). A finished
+  // restore with a session must not sit on the login form — even when `me` is briefly null.
+  if (status === "idle" || status === "checking") return null;
+  if (status === "authed") {
+    return <Redirect href={me?.status === "PENDING" ? "/verification-pending" : "/chat"} />;
   }
 
   return (
@@ -135,7 +137,6 @@ function LoginScreen() {
           {...(tab === "phone" ? { phone: normalizePhone(phone) } : { email: normalizedEmail() })}
           purpose="login"
           autoSend={false}
-          live={tab === "email"}
           onVerified={onVerified}
         />
       ) : (

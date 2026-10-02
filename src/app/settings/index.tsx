@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { CircleAlert, LogOut, MonitorSmartphone } from "lucide-react-native";
+import { ChevronLeft, CircleAlert, LogOut, MonitorSmartphone } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 
@@ -10,19 +10,22 @@ import { EmptyState, ErrorState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { ListRow } from "@/components/ui/list-row";
 import { Screen } from "@/components/ui/screen";
+import { CircleAction, ScreenHeader } from "@/components/ui/screen-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { LOCALES } from "@/i18n";
 import { useLocale, useT } from "@/i18n/locale-provider";
-import { useAuthStore } from "@/lib/auth/auth-store";
 import { getDevices, logoutAll, revokeDevice } from "@/fixtures/auth";
+import { useAuthStore } from "@/lib/auth/auth-store";
+import { isFixtureAccessToken } from "@/lib/auth/session-restore";
+import { logoutAllLive } from "@/lib/auth/live-session";
+import { tokenStore } from "@/lib/auth/token-store";
 
-// Settings (IDT-AP-010/011/012): language switch (PATCH /me → instant re-render, saved to the
-// account), logout / logout-everywhere behind a destructive confirm, SSO linking stub, and the
-// P1 device list with single-device revoke per row. Reachable for PENDING users too (the pending
-// screen links here), so it lives outside the guarded (tabs) group.
+// Account settings (IDT-AP-010/011/012): language, SSO link stub, devices, logout. Opened from
+// the You-tab Account row (and verification-pending). Other WhatsApp-style sections live as
+// sibling routes under /settings/*.
 function SettingsScreen() {
   const router = useRouter();
   const t = useT();
@@ -42,7 +45,13 @@ function SettingsScreen() {
 
   const devices = useQuery({
     queryKey: ["auth", "devices"],
-    queryFn: getDevices,
+    queryFn: async () => {
+      const tokens = await tokenStore.get();
+      // No per-user session list in the OpenAPI spec (P1). A live session must not show the
+      // demo device rows.
+      if (tokens && !isFixtureAccessToken(tokens.accessToken)) return [];
+      return getDevices();
+    },
     enabled: me !== null,
   });
 
@@ -74,7 +83,16 @@ function SettingsScreen() {
   const logout = async (everywhere: boolean) => {
     setConfirm(null);
     if (everywhere) {
-      await logoutAll();
+      const tokens = await tokenStore.get();
+      if (tokens && !isFixtureAccessToken(tokens.accessToken)) {
+        try {
+          await logoutAllLive();
+        } catch {
+          // signOut still clears this device locally.
+        }
+      } else {
+        await logoutAll();
+      }
     }
     await signOut();
     router.replace("/login");
@@ -92,16 +110,31 @@ function SettingsScreen() {
   };
 
   return (
-    <Screen>
-      <View className="gap-1">
-        <Text variant="h1">{t("settings.title")}</Text>
+    <Screen
+      className="gap-3 px-4 py-3"
+      header={
+        <ScreenHeader
+          title={t("settings.menu.account")}
+          leading={
+            <CircleAction
+              icon={ChevronLeft}
+              accessibilityLabel={t("common.actions.back")}
+              onPress={() => {
+                router.back();
+              }}
+            />
+          }
+        />
+      }
+    >
+      <View className="gap-0.5">
         <Text variant="muted">
           {me.fullName}
           {me.maskedPhone ? ` · ${me.maskedPhone}` : ""}
         </Text>
       </View>
 
-      <View className="gap-2">
+      <View className="gap-1.5">
         <Text variant="label">{t("common.language.label")}</Text>
         <SegmentedPill
           accessibilityLabel={t("common.language.label")}
@@ -115,10 +148,10 @@ function SettingsScreen() {
         <Text variant="caption">{t("settings.language_hint")}</Text>
       </View>
 
-      <View className="gap-2">
+      <View className="gap-1.5">
         <Text variant="label">{t("auth.link.title")}</Text>
         <Text variant="caption">{t("auth.link.hint")}</Text>
-        <View className="flex-row gap-3">
+        <View className="flex-row gap-2">
           <Button
             variant="outline"
             className="flex-1"
@@ -140,18 +173,18 @@ function SettingsScreen() {
         </View>
       </View>
 
-      <View className="gap-2">
+      <View className="gap-1.5">
         <Text variant="label">{t("settings.section_devices")}</Text>
         <Text variant="caption">{t("settings.devices_hint")}</Text>
         {devices.isPending ? (
-          <View className="gap-2">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
+          <View className="gap-1.5">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
           </View>
         ) : devices.isError ? (
           <ErrorState onRetry={() => void devices.refetch()} />
         ) : devices.data.length === 0 ? (
-          <EmptyState />
+          <EmptyState className="py-4" />
         ) : (
           <View className="gap-0.5 rounded-lg border border-border bg-card">
             {devices.data.map((device) => (
@@ -184,7 +217,7 @@ function SettingsScreen() {
         )}
       </View>
 
-      <View className="gap-2">
+      <View className="gap-1.5">
         <Text variant="label">{t("settings.section_account")}</Text>
         <Button
           variant="outline"

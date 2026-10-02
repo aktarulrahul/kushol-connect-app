@@ -15,6 +15,7 @@ const transpile = [
   "react-native-svg",
   "react-native-reanimated",
   "react-native-worklets",
+  "react-native-webview",
   "standard-navigation",
 ].join("|");
 

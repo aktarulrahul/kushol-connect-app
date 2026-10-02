@@ -1,26 +1,18 @@
-import { BadgeCheck } from "lucide-react-native";
+import { BadgeCheck, UserRound, UsersRound } from "lucide-react-native";
 import { View } from "react-native";
 
 import { useT } from "@/i18n/locale-provider";
 import { cn } from "@/lib/utils";
+import { avatarTintFor } from "@/theme/tokens";
 
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { Icon } from "./icon";
 import { PresenceDot } from "./indicators";
 import { Text } from "./text";
 
-// Avatar with initials fallback (Hind Siliguri for Bengali names), verified badge and presence dot
-// (DSN-AP-014, design-reference §6.2: 48pt chat-list avatars, tinted initials). Initials keep whole
-// grapheme clusters: "কুশল" → "কু".
-
-const TINTS = [
-  { bg: "bg-teal-100", fg: "text-teal-900" },
-  { bg: "bg-neutral-200", fg: "text-neutral-800" },
-  { bg: "bg-info-soft", fg: "text-info" },
-  { bg: "bg-success-soft", fg: "text-success" },
-  { bg: "bg-warning-soft", fg: "text-warning" },
-  { bg: "bg-teal-200", fg: "text-teal-950" },
-] as const;
+// Avatar with image, WhatsApp-style silhouette placeholders, or initials fallback
+// (DSN-AP-014, design-reference §6.2: 48pt chat-list avatars). Initials keep whole grapheme
+// clusters: "কুশল" → "কু". Dynamic soft bg from `avatarPalette` (hash of id/name).
 
 // Hermes does not provide Intl.Segmenter on every React Native runtime — guard construction and
 // fall back to code-point splitting.
@@ -46,23 +38,29 @@ export function initials(name: string): string {
     .toLocaleUpperCase();
 }
 
-export function tintFor(name: string): (typeof TINTS)[number] {
-  let hash = 0;
-  for (const ch of name) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
-  return TINTS[hash % TINTS.length] ?? TINTS[0];
+/** @deprecated Prefer `avatarTintFor` from `@/theme/tokens` — kept for call sites / tests. */
+export function tintFor(seed: string) {
+  return avatarTintFor(seed);
 }
 
 const SIZES = {
-  sm: { box: "size-8", text: "text-xs", badge: 12 },
-  md: { box: "size-10", text: "text-sm", badge: 14 },
-  lg: { box: "size-12", text: "text-base", badge: 16 },
-  xl: { box: "size-16", text: "text-xl", badge: 18 },
+  xs: { box: "size-7", text: "text-[10px]", badge: 10, icon: 14 },
+  sm: { box: "size-8", text: "text-xs", badge: 12, icon: 16 },
+  md: { box: "size-10", text: "text-sm", badge: 14, icon: 20 },
+  lg: { box: "size-12", text: "text-base", badge: 16, icon: 24 },
+  xl: { box: "size-16", text: "text-xl", badge: 18, icon: 32 },
 } as const;
+
+export type AvatarPlaceholder = "initials" | "person" | "group";
 
 type UserAvatarProps = {
   name: string;
+  /** Stable seed for palette hash; falls back to `name`. Prefer chat/user id when known. */
+  id?: string;
   uri?: string | null;
   size?: keyof typeof SIZES;
+  /** No-photo fallback: silhouette icons (WhatsApp) or initials. Default initials. */
+  placeholder?: AvatarPlaceholder;
   verified?: boolean;
   online?: boolean;
   className?: string;
@@ -70,16 +68,20 @@ type UserAvatarProps = {
 
 function UserAvatar({
   name,
+  id,
   uri,
   size = "md",
+  placeholder = "initials",
   verified = false,
   online,
   className,
 }: UserAvatarProps) {
   const t = useT();
   const s = SIZES[size];
-  const tint = tintFor(name);
+  const tint = avatarTintFor(id ?? name);
   const label = [name, verified ? t("common.verified") : ""].filter(Boolean).join(" — ");
+  const IconGlyph = placeholder === "group" ? UsersRound : UserRound;
+
   return (
     <View
       className={cn("relative", className)}
@@ -89,8 +91,15 @@ function UserAvatar({
     >
       <Avatar alt={name} className={s.box}>
         {uri ? <AvatarImage source={{ uri }} /> : null}
-        <AvatarFallback className={tint.bg}>
-          <Text className={cn(s.text, "font-semibold", tint.fg)}>{initials(name)}</Text>
+        <AvatarFallback style={{ backgroundColor: tint.bg }}>
+          {placeholder !== "initials" ? (
+            // Direct Lucide — avoid Icon's `text-foreground` fighting the hashed tint.fg.
+            <IconGlyph size={s.icon} color={tint.fg} />
+          ) : (
+            <Text className={cn(s.text, "font-semibold")} style={{ color: tint.fg }}>
+              {initials(name)}
+            </Text>
+          )}
         </AvatarFallback>
       </Avatar>
       {verified ? (

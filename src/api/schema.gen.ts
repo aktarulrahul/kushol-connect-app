@@ -531,6 +531,354 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/ws": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * WebSocket gateway (gorilla upgrade — documented contract, not a REST route)
+     * @description JWT in the `Authorization` header at upgrade; unauthenticated → HTTP 401, unverified →
+     *     close 4401 (`NOT_VERIFIED`). The server resolves the subscribable room set from
+     *     hierarchy + memberships — client `subscribe` requests are intersected with that set and
+     *     non-member rooms are ignored + logged. Heartbeat ping ≤ 30 s (2 missed → close);
+     *     presence keys TTL 60 s.
+     *     x-ws-events (client→server): subscribe {rooms[]} · unsubscribe {rooms[]} ·
+     *     message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?} ·
+     *     message.read {groupId, lastReadMessageId} · typing {groupId, state start|stop} · ping.
+     *     x-ws-events (server→client): message.new (full ChatMessage) · message.ack
+     *     {clientMsgId, id, createdAt} · message.read {groupId, userId, lastReadMessageId} ·
+     *     message.deleted {groupId, id, deletedAt} · presence.update {groupId, userId, online} ·
+     *     typing {groupId, userId, state} · notice.new (Notice summary) · error (RFC-7807-shaped
+     *     {type, title, status}). Reconnect: backoff 1 s → 30 s cap with jitter → re-auth →
+     *     re-subscribe → REST catch-up from the latest local cursor → offline queue replay
+     *     (dedupe by clientMsgId).
+     */
+    get: operations["getWs"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/groups": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** My groups (official/custom/dm) with unread counts */
+    get: operations["listChatGroups"];
+    put?: never;
+    /**
+     * Request a custom club group (pending School Admin approval)
+     * @description Verified users only; the group lands as `pending_approval` and its creator becomes `owner` on activation (BR-010).
+     */
+    post: operations["createChatGroup"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Group history, 50/page, cursor `before`
+     * @description Member guard (`FORBIDDEN` otherwise); tombstones are included and marked so renderers can swap them.
+     */
+    get: operations["listChatMessages"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}/members": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Add a member (owner/moderator/School Admin) */
+    post: operations["addChatGroupMember"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}/members/{userId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Remove a member (moderator+) */
+    delete: operations["removeChatGroupMember"];
+    options?: never;
+    head?: never;
+    /** Change a member's role (moderator+/School Admin) */
+    patch: operations["updateChatGroupMemberRole"];
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}/read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Set the caller's last_read_message_id (drives seen counts) */
+    patch: operations["markChatRead"];
+    trace?: never;
+  };
+  "/api/v1/chat/dm/{peerId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Open or create a DM room
+     * @description Same-school verified peer → instant room (`dm:{minUserId}:{maxUserId}`). Cross-school peer without an accepted request → 404 with the request hint.
+     */
+    get: operations["openDm"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/message-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** My Message Request inbox (received) and sent list */
+    get: operations["listMessageRequests"];
+    put?: never;
+    /** Request an out-of-network DM (anti-spam rate limit) */
+    post: operations["createMessageRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/message-requests/{id}/accept": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Accept a pending request (recipient only) — creates the DM room */
+    post: operations["acceptMessageRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/message-requests/{id}/decline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Decline a pending request (recipient only) */
+    post: operations["declineMessageRequest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Send a message (REST fallback + media sync path; same service as WS message.send) */
+    post: operations["sendChatMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/messages/{messageId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Tombstone a message (author ≤ 15 min; moderator/owner/School Admin anytime) */
+    delete: operations["deleteChatMessage"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The notice board for my school (+ my sections)
+     * @description Pinned first, then reverse-chronological; section notices limited to the caller's sections. Cached 60 s under `notices:school:{id}` / `notices:section:{id}`.
+     */
+    get: operations["listNotices"];
+    put?: never;
+    /** Publish a one-way notice (School Admin = school scope; Teacher = own section) */
+    post: operations["publishNotice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notices/{noticeId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Soft-delete a notice (author or School Admin) */
+    delete: operations["deleteNotice"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notices/{noticeId}/pin": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Toggle the pin (author or School Admin; the only edit path — BR-006) */
+    patch: operations["toggleNoticePin"];
+    trace?: never;
+  };
+  "/api/v1/media/upload-url": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Presigned R2 PUT for one asset (TTL 15 min)
+     * @description Kind/size validated against the caps (image 10 MB, PDF 20 MB, voice 5 min); the sniff at confirm is authoritative over the declared mime.
+     */
+    post: operations["createMediaUploadUrl"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/media/{assetId}/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Confirm an upload — magic-byte sniff decides (INV-6)
+     * @description Owner only; TTL ≤ 15 min; sniffed mime must match the kind allowlist (JPEG/PNG/HEIC → image, %PDF → pdf, AAC/m4a → voice). A mismatch is `VALIDATION_FAILED` and no message may reference the asset.
+     */
+    post: operations["confirmMediaUpload"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/media/{assetId}/download-url": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Short-lived R2 GET URL for an asset the caller may view
+     * @description Authorized by ownership or by membership of a group/notice referencing the asset; archived assets rehydrate first (the response flags it).
+     */
+    post: operations["createMediaDownloadUrl"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -852,6 +1200,272 @@ export interface components {
     SchoolUserPage: {
       data: components["schemas"]["SchoolUser"][];
       nextCursor?: string;
+    };
+    /** @enum {string} */
+    ChatGroupKind: "official" | "custom" | "dm";
+    /** @enum {string} */
+    ChatGroupStatus: "active" | "pending_approval" | "archived";
+    /** @enum {string} */
+    ChatMemberRole: "owner" | "moderator" | "member";
+    /** @description The other side of a DM room */
+    ChatPeer: {
+      userId: string;
+      name: string;
+    };
+    ChatGroup: {
+      id: string;
+      kind: components["schemas"]["ChatGroupKind"];
+      /** @description Tenant school — null only for dm */
+      schoolId?: string;
+      /** @description Official groups bind 1:1 to a section (BR-003) */
+      sectionId?: string;
+      /** @description Custom group name; official groups are named from the section */
+      name?: string;
+      status: components["schemas"]["ChatGroupStatus"];
+      myRole: components["schemas"]["ChatMemberRole"];
+      memberCount: number;
+      unreadCount: number;
+      peer?: components["schemas"]["ChatPeer"];
+      lastMessagePreview?: string;
+      /** Format: date-time */
+      lastMessageAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    ChatGroupPage: {
+      data: components["schemas"]["ChatGroup"][];
+    };
+    ChatGroupCreateInput: {
+      name: string;
+    };
+    ChatGroupMember: {
+      userId: string;
+      name: string;
+      role: components["schemas"]["ChatMemberRole"];
+      lastReadMessageId?: string;
+      /** Format: date-time */
+      joinedAt: string;
+    };
+    ChatGroupMemberInput: {
+      userId: string;
+      role?: components["schemas"]["ChatMemberRole"];
+    };
+    ChatGroupRoleInput: {
+      role: components["schemas"]["ChatMemberRole"];
+    };
+    ChatMemberMutationResult: {
+      data: {
+        groupId: string;
+        userId: string;
+        removed: boolean;
+      };
+    };
+    /** @enum {string} */
+    ChatMessageKind: "text" | "image" | "pdf" | "voice" | "system";
+    /** @description The referenced confirmed asset (message render data) */
+    ChatMediaRef: {
+      assetId: string;
+      kind: components["schemas"]["MediaKind"];
+      mime: string;
+      /** Format: int64 */
+      sizeBytes: number;
+      width?: number;
+      height?: number;
+      durationMs?: number;
+      fileName?: string;
+      status: components["schemas"]["MediaStatus"];
+    };
+    ChatMessage: {
+      id: string;
+      groupId: string;
+      senderId: string;
+      senderName: string;
+      kind: components["schemas"]["ChatMessageKind"];
+      body?: string;
+      media?: components["schemas"]["ChatMediaRef"];
+      /** Format: uuid */
+      clientMsgId: string;
+      /** @description id of the quoted same-group message */
+      replyTo?: string;
+      /** @description Server-rendered one-line preview of the quoted message */
+      replyPreview?: string;
+      /**
+       * Format: date-time
+       * @description Set ⇒ tombstone ("Message deleted")
+       */
+      deletedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    ChatMessagePage: {
+      data: components["schemas"]["ChatMessage"][];
+      /** @description Opaque cursor for the next (older) page; absent when exhausted */
+      nextBefore?: string;
+    };
+    ChatMessageSendInput: {
+      groupId: string;
+      /** @enum {string} */
+      kind: "text" | "image" | "pdf" | "voice";
+      body?: string;
+      /** @description Required for image|pdf|voice; asset must be `confirmed` + owned */
+      mediaAssetId?: string;
+      /** Format: uuid */
+      clientMsgId: string;
+      replyTo?: string;
+    };
+    ChatReadInput: {
+      lastReadMessageId: string;
+    };
+    ChatReadResult: {
+      data: {
+        groupId: string;
+        lastReadMessageId: string;
+      };
+    };
+    ChatDeleteResult: {
+      data: {
+        id: string;
+        /** Format: date-time */
+        deletedAt: string;
+      };
+    };
+    /** @enum {string} */
+    MessageRequestStatus: "pending" | "accepted" | "declined" | "expired";
+    MessageRequestUser: {
+      userId: string;
+      name: string;
+      schoolName?: string;
+    };
+    MessageRequest: {
+      id: string;
+      fromUser: components["schemas"]["MessageRequestUser"];
+      toUser: components["schemas"]["MessageRequestUser"];
+      status: components["schemas"]["MessageRequestStatus"];
+      /** @description Set on accept — the room both sides open */
+      dmGroupId?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      decidedAt?: string;
+      /** Format: date-time */
+      expiresAt?: string;
+    };
+    MessageRequestPage: {
+      received: components["schemas"]["MessageRequest"][];
+      sent: components["schemas"]["MessageRequest"][];
+    };
+    MessageRequestInput: {
+      toUserId: string;
+    };
+    MessageRequestDecision: {
+      data: {
+        id: string;
+        status: components["schemas"]["MessageRequestStatus"];
+        dmGroupId?: string;
+      };
+    };
+    /** @enum {string} */
+    NoticeScope: "school" | "section";
+    NoticeAuthor: {
+      userId: string;
+      name: string;
+      /** @enum {string} */
+      role: "school_admin" | "teacher";
+    };
+    /** @enum {string} */
+    MediaStatus: "pending" | "confirmed" | "archived";
+    /** @enum {string} */
+    MediaKind: "image" | "pdf" | "voice";
+    /** @description Attachment summary embedded in notices/messages */
+    MediaAssetSummary: {
+      assetId: string;
+      kind: components["schemas"]["MediaKind"];
+      mime: string;
+      /** Format: int64 */
+      sizeBytes: number;
+      fileName?: string;
+      status: components["schemas"]["MediaStatus"];
+    };
+    Notice: {
+      id: string;
+      schoolId: string;
+      scope: components["schemas"]["NoticeScope"];
+      sectionId?: string;
+      title: string;
+      body: string;
+      pinned: boolean;
+      attachment?: components["schemas"]["MediaAssetSummary"];
+      author: components["schemas"]["NoticeAuthor"];
+      /** Format: date-time */
+      publishedAt: string;
+    };
+    NoticePage: {
+      data: components["schemas"]["Notice"][];
+    };
+    NoticeInput: {
+      scope: components["schemas"]["NoticeScope"];
+      /** @description Required iff scope=section; must be in the caller's school */
+      sectionId?: string;
+      title: string;
+      body: string;
+      /** @default false */
+      pinned: boolean;
+      /** @description A `confirmed` media asset */
+      attachmentId?: string;
+    };
+    NoticeDeleteResult: {
+      data: {
+        id: string;
+        /** Format: date-time */
+        deletedAt: string;
+      };
+    };
+    MediaUploadUrlInput: {
+      kind: components["schemas"]["MediaKind"];
+      /** Format: int64 */
+      sizeBytes: number;
+      /** @description Client-declared; the sniff at confirm is authoritative */
+      mime?: string;
+    };
+    MediaPresignResult: {
+      data: {
+        assetId: string;
+        /** Format: uri */
+        uploadUrl: string;
+        /** Format: date-time */
+        expiresAt: string;
+      };
+    };
+    MediaConfirmInput: {
+      width?: number;
+      height?: number;
+      durationMs?: number;
+    };
+    MediaAsset: {
+      id: string;
+      kind: components["schemas"]["MediaKind"];
+      /** @description Sniffed server-side — never trusted from the client */
+      mime: string;
+      /** Format: int64 */
+      sizeBytes: number;
+      width?: number;
+      height?: number;
+      durationMs?: number;
+      status: components["schemas"]["MediaStatus"];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      confirmedAt?: string;
+    };
+    MediaDownloadUrl: {
+      data: {
+        /** Format: uri */
+        downloadUrl: string;
+        /** Format: date-time */
+        expiresAt: string;
+        /** @description True when an archived asset was restored to the hot prefix first */
+        rehydrated?: boolean;
+      };
     };
   };
   responses: {
@@ -1654,6 +2268,620 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SchoolRequestDecision"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getWs: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Upgrade accepted (socket handed to the gateway hub) */
+      101: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listChatGroups: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Groups the caller belongs to, last activity first */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroupPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createChatGroup: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatGroupCreateInput"];
+      };
+    };
+    responses: {
+      /** @description Request stored (pending_approval) */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroup"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listChatMessages: {
+    parameters: {
+      query?: {
+        /** @description Opaque cursor (created_at+id of the oldest already-loaded message) */
+        before?: string;
+        limit?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Newest page first */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatMessagePage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  addChatGroupMember: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatGroupMemberInput"];
+      };
+    };
+    responses: {
+      /** @description Member added */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroupMember"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  removeChatGroupMember: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+        userId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Removed (audited) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatMemberMutationResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateChatGroupMemberRole: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+        userId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatGroupRoleInput"];
+      };
+    };
+    responses: {
+      /** @description Role changed (audited) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroupMember"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  markChatRead: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatReadInput"];
+      };
+    };
+    responses: {
+      /** @description Read pointer stored; WS `message.read` fans out */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatReadResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  openDm: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        peerId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The (idempotent) DM room */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroup"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMessageRequests: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Row-level authorized (from/to only) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MessageRequestPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createMessageRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MessageRequestInput"];
+      };
+    };
+    responses: {
+      /** @description Request pending; no room exists yet */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MessageRequest"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  acceptMessageRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Accepted; `dmGroupId` carries the room to open */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MessageRequestDecision"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  declineMessageRequest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Declined; the sender is politely blocked (BR-004) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MessageRequestDecision"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  sendChatMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatMessageSendInput"];
+      };
+    };
+    responses: {
+      /** @description The canonical message (replay with the same clientMsgId returns the original row — BR-008) */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatMessage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deleteChatMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Soft-deleted; WS `message.deleted` fans out */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatDeleteResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listNotices: {
+    parameters: {
+      query?: {
+        scope?: components["schemas"]["NoticeScope"];
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The visible board */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NoticePage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  publishNotice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NoticeInput"];
+      };
+    };
+    responses: {
+      /** @description Published; tags busted; `BroadcastTopic` queued for `school-{id}` / `section-{id}` */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Notice"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deleteNotice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        noticeId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Removed from the board (audited) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NoticeDeleteResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  toggleNoticePin: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        noticeId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The notice with its new pin state */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Notice"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createMediaUploadUrl: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MediaUploadUrlInput"];
+      };
+    };
+    responses: {
+      /** @description Asset created (`pending`) with the presigned PUT */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaPresignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  confirmMediaUpload: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MediaConfirmInput"];
+      };
+    };
+    responses: {
+      /** @description Asset confirmed with the sniffed mime */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaAsset"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createMediaDownloadUrl: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Presigned GET (15-min TTL) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaDownloadUrl"];
         };
       };
       default: components["responses"]["Problem"];

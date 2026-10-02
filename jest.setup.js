@@ -24,3 +24,13 @@ jest.mock("react-native-reanimated", () => ({
   ...require("react-native-reanimated/mock"),
   useReducedMotion: () => globalThis.__REDUCE_MOTION__ === true,
 }));
+
+jest.mock("react-native-webview", () => ({
+  __esModule: true,
+  WebView: function MockWebView() {
+    return null;
+  },
+  default: function MockWebView() {
+    return null;
+  },
+}));

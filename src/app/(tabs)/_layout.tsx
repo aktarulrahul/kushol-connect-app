@@ -1,7 +1,13 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, Slot, usePathname, useRouter } from "expo-router";
-import { MessageCircle, Megaphone } from "lucide-react-native";
-import { useEffect, useRef } from "react";
+import {
+  Bell,
+  MessageCircle,
+  Newspaper,
+  ShoppingBag,
+  UserRound,
+} from "lucide-react-native";
+import { useEffect, useMemo, useRef } from "react";
 import { AppState, View } from "react-native";
 import { FadeIn, ReduceMotion } from "react-native-reanimated";
 
@@ -11,16 +17,23 @@ import { NativeOnlyAnimatedView } from "@/components/ui/native-only-animated-vie
 import { Skeleton } from "@/components/ui/skeleton";
 import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
+import { listNotices } from "@/fixtures/notices";
 import { useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
+import { useChatGroups, useMessageRequests } from "@/lib/chat/use-chat";
 
 // Verified-only gate around all tabs (IDT-AP-008, 05 §2.4): PENDING renders the friendly pending
 // screen instead of tab content; SUSPENDED clears the session; the gate polls status on a ≤ 30 s
 // interval and on foreground so a mid-session verify opens the tabs without re-login (fade of
-// gate → tabs, opacity only under reduced motion — 05 §5). Phase-1 tabs only: Chat + Notices.
+// gate → tabs, opacity only under reduced motion — 05 §5). Owner shell 2026-10-02: Feeds · Shop ·
+// Chat · Notifications · You/Users (floating pill). Settings reachable from You only — no Chat
+// avatar / gear FAB.
 const TABS = [
+  { key: "feeds", labelKey: "notifications.tab", icon: Newspaper, href: "/feeds" },
+  { key: "shop", labelKey: "marketplace.tab", icon: ShoppingBag, href: "/shop" },
   { key: "chat", labelKey: "chat.tab", icon: MessageCircle, href: "/chat" },
-  { key: "notices", labelKey: "notices.tab", icon: Megaphone, href: "/notices" },
+  { key: "notifications", labelKey: "notices.tab", icon: Bell, href: "/notifications" },
+  { key: "you", labelKey: "settings.you_tab", icon: UserRound, href: "/you" },
 ] as const;
 
 function GateSkeleton() {
@@ -30,6 +43,22 @@ function GateSkeleton() {
       <Skeleton className="h-24 w-full" />
     </Screen>
   );
+}
+
+function useTabBadges(): { chat: number; feeds: number; notifications: number } {
+  const groups = useChatGroups();
+  const requests = useMessageRequests();
+  const notices = useQuery({ queryKey: ["notices", "board"], queryFn: () => listNotices() });
+  return useMemo(() => {
+    const chat =
+      groups.data
+        ?.filter((g) => g.status !== "archived")
+        .reduce((sum, g) => sum + (g.unreadCount || 0), 0) ?? 0;
+    const feeds =
+      requests.data?.received.filter((r) => r.status === "pending").length ?? 0;
+    const notifications = notices.data?.length ?? 0;
+    return { chat, feeds, notifications };
+  }, [groups.data, requests.data, notices.data]);
 }
 
 export default function TabsLayout() {
@@ -43,6 +72,7 @@ export default function TabsLayout() {
   const refreshMe = useAuthStore((s) => s.refreshMe);
   const signOut = useAuthStore((s) => s.signOut);
   const suspendedHandled = useRef(false);
+  const badges = useTabBadges();
 
   useEffect(() => {
     if (status === "idle") void hydrate();
@@ -90,7 +120,11 @@ export default function TabsLayout() {
     );
   }
 
-  const active = TABS.find((tab) => pathname.endsWith(tab.key))?.key ?? "chat";
+  const active = pathname.startsWith("/notices")
+    ? "notifications"
+    : (TABS.find((tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`))?.key ??
+      "chat");
+
   return (
     <View className="flex-1 bg-background">
       <NativeOnlyAnimatedView
@@ -101,7 +135,20 @@ export default function TabsLayout() {
       </NativeOnlyAnimatedView>
       <FloatingTabBar
         accessibilityLabel={t("common.nav.main")}
-        tabs={TABS.map((tab) => ({ key: tab.key, label: t(tab.labelKey), icon: tab.icon }))}
+        tabs={TABS.map((tab) => ({
+          key: tab.key,
+          label: t(tab.labelKey),
+          icon: tab.icon,
+          badge:
+            tab.key === "chat"
+              ? badges.chat
+              : tab.key === "feeds"
+                ? badges.feeds
+                : tab.key === "notifications"
+                  ? badges.notifications
+                  : undefined,
+          avatar: tab.key === "you" ? { name: me.fullName } : undefined,
+        }))}
         active={active}
         onChange={(key) => {
           const tab = TABS.find((candidate) => candidate.key === key);

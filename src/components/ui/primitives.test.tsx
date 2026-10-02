@@ -4,7 +4,7 @@ import { AccessibilityInfo } from "react-native";
 
 import { renderUi } from "@/test/render";
 
-import { VerifiedBadge } from "./badge";
+import { VerifiedBadge, Badge } from "./badge";
 import { Button } from "./button";
 import { EmptyState, ErrorState } from "./empty-state";
 import { UnreadBadge } from "./indicators";
@@ -159,6 +159,20 @@ describe("identity & lists", () => {
     expect(screen.getByRole("image", { name: "Demo Teacher — Verified" })).toBeOnTheScreen();
   });
 
+  it("person/group placeholders stay named images without photo initials", async () => {
+    await renderUi(
+      <>
+        <UserAvatar name="Demo Peer" id="user_demo_peer" placeholder="person" />
+        <UserAvatar name="Demo Club" id="grp_club" placeholder="group" />
+      </>,
+      { locale: "en" },
+    );
+    expect(screen.getByRole("image", { name: "Demo Peer" })).toBeOnTheScreen();
+    expect(screen.getByRole("image", { name: "Demo Club" })).toBeOnTheScreen();
+    expect(screen.queryByText("DP")).toBeNull();
+    expect(screen.queryByText("DC")).toBeNull();
+  });
+
   it("unread counts use the locale's digits and cap at 99+", async () => {
     await renderUi(
       <>
@@ -189,6 +203,17 @@ describe("identity & lists", () => {
   it("VerifiedBadge speaks the current language", async () => {
     await renderUi(<VerifiedBadge />, { locale: "en" });
     expect(screen.getByText("Verified")).toBeOnTheScreen();
+  });
+
+  it("Badge wraps string and number children so native Views never host raw text", async () => {
+    await renderUi(
+      <>
+        <Badge>pending</Badge>
+        <Badge>{3}</Badge>
+      </>,
+    );
+    expect(screen.getByText("pending")).toBeOnTheScreen();
+    expect(screen.getByText("3")).toBeOnTheScreen();
   });
 });
 

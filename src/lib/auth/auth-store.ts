@@ -13,7 +13,7 @@ import {
   type User,
 } from "@/fixtures/auth";
 import { RefreshRejectedError } from "@/lib/auth/auth-client";
-import { loadCurrentUser, liveAuth, revokeLiveSession } from "@/lib/auth/live-session";
+import { loadCurrentUser, liveAuth, patchMeLive, revokeLiveSession } from "@/lib/auth/live-session";
 import {
   accessTokenNeedsRefresh,
   isFixtureAccessToken,
@@ -147,11 +147,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       } catch {
         // Local clear still wins when the network is down (05 §8).
       }
-    }
-    try {
-      await logout();
-    } catch {
-      // Fixture revoke is best-effort offline.
+    } else {
+      try {
+        await logout();
+      } catch {
+        // Fixture revoke is best-effort offline.
+      }
     }
     await tokenStore.clear();
     set({ me: null, status: "anon", stale: false });
@@ -182,6 +183,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
   changeLocale: async (locale) => {
+    const tokens = await tokenStore.get();
+    if (tokens && !isFixtureAccessToken(tokens.accessToken)) {
+      const me = await patchMeLive({ locale });
+      await tokenStore.setAccount(me);
+      set({ me, stale: false });
+      return;
+    }
     const me = await patchMe({ locale });
     set({ me });
   },

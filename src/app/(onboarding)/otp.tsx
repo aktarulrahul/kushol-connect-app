@@ -9,7 +9,8 @@ import type { CatalogKey } from "@/i18n";
 import { useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import { useOnboardingStore } from "@/lib/onboarding/onboarding-store";
-import { FixtureError, register } from "@/fixtures/auth";
+import { FixtureError } from "@/fixtures/auth";
+import { registerLive } from "@/lib/auth/live-otp";
 import { normalizePhone } from "@/schemas/register";
 
 // Step 5 — OTP + register (IDT-AP-006): verifies the phone (purpose `register`) and completes
@@ -30,22 +31,27 @@ export default function OtpScreen() {
   const signIn = useAuthStore((s) => s.signIn);
   const phone = normalizePhone(draft.phone);
 
-  const onVerified = async () => {
+  const onVerified = async (otpCode: string) => {
     try {
-      const result = await register({
+      const result = await registerLive({
         locale: draft.locale,
         role: draft.role,
         fullName: draft.fullName.trim(),
         phone,
+        otpCode,
         schoolId: draft.schoolId as string,
         sectionId: draft.sectionId as string,
         ...(draft.role === "guardian"
           ? { studentCode: draft.studentCode.trim(), relation: draft.relation ?? undefined }
           : {}),
       });
+      if (!result.accessToken || !result.refreshToken) {
+        toast({ title: t("errors.generic"), variant: "error" });
+        return;
+      }
       signIn(result.user, {
-        accessToken: result.accessToken ?? "",
-        refreshToken: result.refreshToken ?? "",
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       });
       router.replace("/verification-pending");
     } catch (error) {
@@ -57,7 +63,12 @@ export default function OtpScreen() {
   return (
     <Screen className="pt-1">
       <OnboardingHeader title={t("auth.otp.title")} />
-      <OtpVerify phone={phone} purpose="register" autoSend onVerified={() => void onVerified()} />
+      <OtpVerify
+        phone={phone}
+        purpose="register"
+        autoSend
+        onVerified={(_result, otpCode) => void onVerified(otpCode)}
+      />
     </Screen>
   );
 }

@@ -9,8 +9,8 @@ import { OtpInput } from "@/components/ui/otp-input";
 import { Text } from "@/components/ui/text";
 import type { TFunction } from "@/i18n";
 import { useLocale, useT } from "@/i18n/locale-provider";
-import { FixtureError, requestOtp, type OtpVerifyResult, verifyOtp } from "@/fixtures/auth";
-import { requestOtpLive, verifyOtpLive } from "@/lib/auth/live-otp";
+import { FixtureError, type OtpVerifyResult } from "@/fixtures/auth";
+import { requestOtpLive, resendOtpLive, verifyOtpLive } from "@/lib/auth/live-otp";
 import {
   canResend,
   cooldownSecondsLeft,
@@ -57,7 +57,6 @@ function OtpVerify({
   email,
   purpose,
   autoSend = false,
-  live = false,
   onVerified,
 }: {
   /** Normalized E.164 phone — exactly one of phone/email. */
@@ -68,11 +67,9 @@ function OtpVerify({
   purpose: "login" | "register";
   /** Send the first code on mount (onboarding flow). Login sends from its own button. */
   autoSend?: boolean;
-  /** Email login talks to the api so the worker can deliver the message. Phone stays on the fixture. */
-  live?: boolean;
-  /** Called after `verifyOtp` succeeds — `unknown_phone`/`unknown_email` arrive here for login
-   * routing. */
-  onVerified: (result: OtpVerifyResult) => void;
+  /** Called after verify succeeds — `unknown_phone`/`unknown_email` arrive here for login routing.
+   * The second argument is the code, so registration can prove it on POST /auth/register. */
+  onVerified: (result: OtpVerifyResult, otpCode: string) => void;
 }) {
   const t = useT();
   const { locale } = useLocale();
@@ -81,13 +78,17 @@ function OtpVerify({
   const [code, setCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const sentOnce = useRef(false);
+  const delivered = useRef(false);
 
   const send = useCallback(async () => {
     dispatch({ type: "send_started" });
     setNotice(null);
     try {
       const body = phone ? { phone, purpose } : { email: email ?? "", purpose };
-      const result = live ? await requestOtpLive(body, locale) : await requestOtp(body);
+      const result = delivered.current
+        ? await resendOtpLive(body, locale)
+        : await requestOtpLive(body, locale);
+      delivered.current = true;
       sentOnce.current = true;
       dispatch({
         type: "send_succeeded",
@@ -107,7 +108,7 @@ function OtpVerify({
       }
       setNotice(errorNotice(error, t));
     }
-  }, [phone, email, purpose, t, live, locale]);
+  }, [phone, email, purpose, t, locale]);
 
   useEffect(() => {
     if (autoSend && !sentOnce.current) {
@@ -130,16 +131,12 @@ function OtpVerify({
     setNotice(null);
     dispatch({ type: "verify_started" });
     try {
-      const result = live
-        ? await verifyOtpLive(
-            phone
-              ? { phone, otpCode: code, purpose }
-              : { email: email ?? "", otpCode: code, purpose },
-            locale,
-          )
-        : await verifyOtp({ phone, email, otpCode: code, purpose });
+      const result = await verifyOtpLive(
+        phone ? { phone, otpCode: code, purpose } : { email: email ?? "", otpCode: code, purpose },
+        locale,
+      );
       dispatch({ type: "verify_succeeded" });
-      onVerified(result);
+      onVerified(result, code);
     } catch (error) {
       const nextAttempts = state.attempts + 1;
       dispatch({ type: "verify_failed" });

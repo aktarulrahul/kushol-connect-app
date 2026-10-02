@@ -243,6 +243,48 @@ export const color = {
 
 export type ColorToken = keyof typeof color;
 
+/**
+ * Soft avatar placeholder palette (WhatsApp-style). Hash `id`/`name` into a stable index so
+ * chat rows without photos get varied backgrounds instead of a single teal initials circle.
+ * Icon/initials foreground is white for contrast on these mid-tones.
+ */
+export const avatarPalette = [
+  { bg: "#5B8A7A", fg: "#FFFFFF" }, // sage teal
+  { bg: "#6A8499", fg: "#FFFFFF" }, // slate blue
+  { bg: "#7A6B8F", fg: "#FFFFFF" }, // soft plum
+  { bg: "#9A7A5C", fg: "#FFFFFF" }, // warm sand
+  { bg: "#5E8F9A", fg: "#FFFFFF" }, // muted cyan (near brand secondary)
+  { bg: "#8F6B6B", fg: "#FFFFFF" }, // dusty rose
+  { bg: "#6F8A5C", fg: "#FFFFFF" }, // olive
+  { bg: "#5C6F8F", fg: "#FFFFFF" }, // periwinkle
+] as const;
+
+export type AvatarTint = (typeof avatarPalette)[number];
+
+/** Stable palette pick from a chat/user id or display name. */
+export function avatarTintFor(seed: string): AvatarTint {
+  let hash = 0;
+  for (const ch of seed) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) >>> 0;
+  return avatarPalette[hash % avatarPalette.length] ?? avatarPalette[0];
+}
+
+function rgbaFromHex(hex: string, alpha: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** iOS expo-blur companion overlays (teal shell unchanged on Android/web). */
+export const glass = {
+  tabbarOverlay: rgbaFromHex(color.tabbar, 0.58),
+  headerOverlay: rgbaFromHex(color.background, 0.74),
+  chromeOverlay: rgbaFromHex(color.background, 0.82),
+  tabbarIntensity: 72,
+  headerIntensity: 88,
+} as const;
+
 // ─── Typography ────────────────────────────────────────────────────────────────────────────
 
 /**

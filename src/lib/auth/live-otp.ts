@@ -5,11 +5,13 @@ import {
   type OtpSendResult,
   type OtpVerifyInput,
   type OtpVerifyResult,
+  type RegisterInput,
+  type RegisterResult,
 } from "@/fixtures/auth";
 
-// Live OTP transport for passwordless email login. The Stage-2 fixture seam never leaves
-// the device, so an address entered on the login screen produced no message. Phone
-// registration stays on the fixture until the rest of the seam is swapped.
+// Live OTP and registration transport. Phone and email share POST /auth/otp/request|resend|verify.
+// Registration completes with POST /auth/register. FixtureError is the screen-facing error so
+// the existing OTP copy (offline, rate limit, invalid code) stays in one place.
 
 type OtpClient = Pick<ApiClient, "POST">;
 
@@ -29,15 +31,53 @@ function mapProblem(error: unknown, response: Response, verify: boolean): Error 
   return new Error(error.code);
 }
 
-/** POST /auth/otp/request — the api queues auth.otp_email and the worker sends it. */
+/** POST /auth/otp/resend — a fresh code for the same target and purpose. */
+export async function resendOtpLive(
+  input: OtpRequestInput,
+  locale?: Locale,
+  client?: OtpClient,
+): Promise<OtpSendResult> {
+  return postOtp("/api/v1/auth/otp/resend", input, locale, client);
+}
+
+/** POST /auth/otp/request — the api queues the SMS or the email and the worker sends it. */
 export async function requestOtpLive(
+  input: OtpRequestInput,
+  locale?: Locale,
+  client?: OtpClient,
+): Promise<OtpSendResult> {
+  return postOtp("/api/v1/auth/otp/request", input, locale, client);
+}
+
+async function postOtp(
+  path: "/api/v1/auth/otp/request" | "/api/v1/auth/otp/resend",
   input: OtpRequestInput,
   locale?: Locale,
   client?: OtpClient,
 ): Promise<OtpSendResult> {
   const api = clientFor(locale, client);
   try {
-    const { data, error, response } = await api.POST("/api/v1/auth/otp/request", { body: input });
+    const { data, error, response } = await api.POST(path, { body: input });
+    if (!data) throw mapProblem(error, response, false);
+    return data.data;
+  } catch (error) {
+    if (error instanceof FixtureError) throw error;
+    if (error instanceof Error && error.message !== "Failed to fetch" && error.message !== "Network request failed") {
+      throw error;
+    }
+    throw new FixtureError("OFFLINE");
+  }
+}
+
+/** POST /auth/register — PENDING account plus tokens when the phone OTP was proved. */
+export async function registerLive(
+  input: RegisterInput,
+  locale?: Locale,
+  client?: OtpClient,
+): Promise<RegisterResult> {
+  const api = clientFor(locale, client);
+  try {
+    const { data, error, response } = await api.POST("/api/v1/auth/register", { body: input });
     if (!data) throw mapProblem(error, response, false);
     return data.data;
   } catch (error) {

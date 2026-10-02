@@ -1,7 +1,7 @@
 import { createApiClient } from "@/api/client";
 import { FixtureError } from "@/fixtures/auth";
 
-import { requestOtpLive, verifyOtpLive } from "./live-otp";
+import { registerLive, requestOtpLive, resendOtpLive, verifyOtpLive } from "./live-otp";
 
 function jsonFetch(status: number, body: unknown, extra?: Record<string, string>) {
   const headers = new Headers({
@@ -85,5 +85,57 @@ describe("live email otp", () => {
     await expect(
       requestOtpLive({ email: "person@school.test", purpose: "login" }, "bn", api),
     ).rejects.toMatchObject({ code: "OFFLINE" });
+  });
+
+  it("posts a phone resend to /auth/otp/resend", async () => {
+    const fetch = jsonFetch(202, { ...sent, data: { ...sent.data, channel: "sms" as const } });
+    const api = createApiClient({ baseUrl: "http://api.test", fetch });
+    await resendOtpLive({ phone: "+8801712345678", purpose: "login" }, "bn", api);
+    const req = fetch.mock.calls[0]?.[0];
+    expect(req?.url).toBe("http://api.test/api/v1/auth/otp/resend");
+    expect(await req?.json()).toEqual({ phone: "+8801712345678", purpose: "login" });
+  });
+
+  it("posts registration and returns the pending account", async () => {
+    const created = {
+      data: {
+        user: {
+          id: "u1",
+          role: "student" as const,
+          status: "PENDING" as const,
+          locale: "bn" as const,
+          fullName: "ডেমো",
+          isAmbassador: false,
+          plan: "free" as const,
+        },
+        accessToken: "access.jwt",
+        refreshToken: "refresh.jwt",
+        verificationRequest: {
+          id: "vr1",
+          user: { fullName: "ডেমো", role: "student" as const },
+          status: "PENDING" as const,
+          createdAt: "2026-10-02T00:00:00.000Z",
+          reminderCount: 0,
+        },
+      },
+    };
+    const fetch = jsonFetch(201, created);
+    const api = createApiClient({ baseUrl: "http://api.test", fetch });
+    const result = await registerLive(
+      {
+        locale: "bn",
+        role: "student",
+        fullName: "ডেমো",
+        phone: "+8801712345678",
+        otpCode: "123456",
+        schoolId: "school",
+        sectionId: "section",
+      },
+      "bn",
+      api,
+    );
+    expect(result.user.status).toBe("PENDING");
+    expect(result.accessToken).toBe("access.jwt");
+    expect(fetch.mock.calls[0]?.[0]?.url).toBe("http://api.test/api/v1/auth/register");
   });
 });

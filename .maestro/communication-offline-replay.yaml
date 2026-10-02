@@ -1,0 +1,41 @@
+# COM-E2E-002 — offline send reconcile: airplane/offline fixture mode → send enters the queue
+# (clock bubble + offline banner) → back online → replayed exactly once, no duplicate.
+# Fixture flag switch: /dev/chat-fixtures (dev builds only) flips chatFixtureFlags between
+# `offline` and `success` mid-flow — the same switch the test below drives.
+#   maestro test .maestro/communication-offline-replay.yaml
+# NOT yet run — Maestro CLI/device not available in the build environment (G-6, pending owner).
+appId: com.kusholconnect.app
+---
+- launchApp:
+    clearState: true
+- tapOn: "সাইন-ইন"
+- tapOn: "মোবাইল নম্বর"
+- inputText: "01712345678"
+- tapOn: "কোড পাঠান"
+- tapOn: "৬ সংখ্যার ওটিপি কোড"
+- inputText: "123456"
+- tapOn: "যাচাই করুন"
+
+# Flip the seam to offline (dev-only switcher).
+- tapOn: "সেটিংস"
+- tapOn: "Chat fixture modes (dev)"
+- tapOn: "Offline (queue + banner)"
+
+# Back to chat: sending while offline queues the message with the banner + clock state.
+- tapOn: "চ্যাট"
+- tapOn: "দশম শ্রেণি · বিজ্ঞান (ডেমো)"
+- assertVisible: "অফলাইন — ইন্টারনেট চালু হলে পাঠানো হবে"
+- tapOn: "মেসেজ লিখুন…"
+- inputText: "অফলাইন বার্তা — একবারই যাবে।"
+- tapOn:
+    id: "chat-send-button"
+- assertVisible: "অপেক্ষমাণ"
+
+# Reconnect: the queue replays in order; server dedupes by clientMsgId (BR-008).
+- tapOn: "সেটিংস"
+- tapOn: "Chat fixture modes (dev)"
+- tapOn: "Success (golden path)"
+- tapOn: "চ্যাট"
+- tapOn: "দশম শ্রেণি · বিজ্ঞান (ডেমো)"
+- assertVisible: "অফলাইন বার্তা — একবারই যাবে।"
+- assertNotVisible: "অপেক্ষমাণ"

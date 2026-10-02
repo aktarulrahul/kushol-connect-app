@@ -27,6 +27,21 @@ tags:
     description: Master-data reads for registration pickers (owned by 04; served by 03's fake until 04 lands)
   - name: school-requests
     description: New school/college requests from registration (03 until 04 absorbs onboarding)
+  - name: chat
+    description: >
+      Group chat (official/custom/dm), DMs and Message Requests (05-communication-engine).
+      Realtime lives on GET /api/v1/ws (gorilla upgrade); REST here is lists, fallback send and
+      membership/admin actions. Auth chain + verified gate on every route.
+  - name: notices
+    description: >
+      One-way notice boards, school and section scope (05-communication-engine). Read for all
+      verified tenant members; publish per the role→scope matrix (School Admin = school,
+      Teacher = own section). Immutable after publish except pin + soft delete.
+  - name: media
+    description: >
+      Cloudflare R2 media service (05-communication-engine; reused by 08/11/12): presigned PUT
+      (15-min TTL), server-side magic-byte confirm, short-lived download URLs, 90-day archival.
+      The api never proxies object bytes.
 paths:
   /healthz:
     get:
@@ -849,6 +864,655 @@ paths:
                 $ref: '#/components/schemas/SchoolRequestDecision'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/ws:
+    get:
+      operationId: getWs
+      tags: [chat]
+      summary: WebSocket gateway (gorilla upgrade — documented contract, not a REST route)
+      description: |
+        JWT in the `Authorization` header at upgrade; unauthenticated → HTTP 401, unverified →
+        close 4401 (`NOT_VERIFIED`). The server resolves the subscribable room set from
+        hierarchy + memberships — client `subscribe` requests are intersected with that set and
+        non-member rooms are ignored + logged. Heartbeat ping ≤ 30 s (2 missed → close);
+        presence keys TTL 60 s.
+        x-ws-events (client→server): subscribe {rooms[]} · unsubscribe {rooms[]} ·
+        message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?} ·
+        message.read {groupId, lastReadMessageId} · typing {groupId, state start|stop} · ping.
+        x-ws-events (server→client): message.new (full ChatMessage) · message.ack
+        {clientMsgId, id, createdAt} · message.read {groupId, userId, lastReadMessageId} ·
+        message.deleted {groupId, id, deletedAt} · presence.update {groupId, userId, online} ·
+        typing {groupId, userId, state} · notice.new (Notice summary) · error (RFC-7807-shaped
+        {type, title, status}). Reconnect: backoff 1 s → 30 s cap with jitter → re-auth →
+        re-subscribe → REST catch-up from the latest local cursor → offline queue replay
+        (dedupe by clientMsgId).
+      responses:
+        '101':
+          description: Upgrade accepted (socket handed to the gateway hub)
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups:
+    get:
+      operationId: listChatGroups
+      tags: [chat]
+      summary: My groups (official/custom/dm) with unread counts
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Groups the caller belongs to, last activity first
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroupPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createChatGroup
+      tags: [chat]
+      summary: Request a custom club group (pending School Admin approval)
+      description: Verified users only; the group lands as `pending_approval` and its creator
+        becomes `owner` on activation (BR-010).
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatGroupCreateInput'
+      responses:
+        '201':
+          description: Request stored (pending_approval)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/messages:
+    get:
+      operationId: listChatMessages
+      tags: [chat]
+      summary: Group history, 50/page, cursor `before`
+      description: Member guard (`FORBIDDEN` otherwise); tombstones are included and marked so
+        renderers can swap them.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: before
+          in: query
+          required: false
+          description: Opaque cursor (created_at+id of the oldest already-loaded message)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Newest page first
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessagePage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/members:
+    post:
+      operationId: addChatGroupMember
+      tags: [chat]
+      summary: Add a member (owner/moderator/School Admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatGroupMemberInput'
+      responses:
+        '201':
+          description: Member added
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroupMember'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/members/{userId}:
+    delete:
+      operationId: removeChatGroupMember
+      tags: [chat]
+      summary: Remove a member (moderator+)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Removed (audited)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMemberMutationResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: updateChatGroupMemberRole
+      tags: [chat]
+      summary: Change a member's role (moderator+/School Admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatGroupRoleInput'
+      responses:
+        '200':
+          description: Role changed (audited)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroupMember'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/read:
+    patch:
+      operationId: markChatRead
+      tags: [chat]
+      summary: Set the caller's last_read_message_id (drives seen counts)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatReadInput'
+      responses:
+        '200':
+          description: Read pointer stored; WS `message.read` fans out
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatReadResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/dm/{peerId}:
+    get:
+      operationId: openDm
+      tags: [chat]
+      summary: Open or create a DM room
+      description: Same-school verified peer → instant room (`dm:{minUserId}:{maxUserId}`).
+        Cross-school peer without an accepted request → 404 with the request hint.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: peerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The (idempotent) DM room
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/message-requests:
+    get:
+      operationId: listMessageRequests
+      tags: [chat]
+      summary: My Message Request inbox (received) and sent list
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Row-level authorized (from/to only)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageRequestPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createMessageRequest
+      tags: [chat]
+      summary: Request an out-of-network DM (anti-spam rate limit)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageRequestInput'
+      responses:
+        '201':
+          description: Request pending; no room exists yet
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageRequest'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/message-requests/{id}/accept:
+    post:
+      operationId: acceptMessageRequest
+      tags: [chat]
+      summary: Accept a pending request (recipient only) — creates the DM room
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Accepted; `dmGroupId` carries the room to open
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageRequestDecision'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/message-requests/{id}/decline:
+    post:
+      operationId: declineMessageRequest
+      tags: [chat]
+      summary: Decline a pending request (recipient only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Declined; the sender is politely blocked (BR-004)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageRequestDecision'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages:
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send a message (REST fallback + media sync path; same service as WS message.send)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageSendInput'
+      responses:
+        '201':
+          description: The canonical message (replay with the same clientMsgId returns the
+            original row — BR-008)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages/{messageId}:
+    delete:
+      operationId: deleteChatMessage
+      tags: [chat]
+      summary: Tombstone a message (author ≤ 15 min; moderator/owner/School Admin anytime)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Soft-deleted; WS `message.deleted` fans out
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatDeleteResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notices:
+    get:
+      operationId: listNotices
+      tags: [notices]
+      summary: The notice board for my school (+ my sections)
+      description: Pinned first, then reverse-chronological; section notices limited to the
+        caller's sections. Cached 60 s under `notices:school:{id}` / `notices:section:{id}`.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: scope
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/NoticeScope'
+      responses:
+        '200':
+          description: The visible board
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoticePage'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: publishNotice
+      tags: [notices]
+      summary: Publish a one-way notice (School Admin = school scope; Teacher = own section)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeInput'
+      responses:
+        '201':
+          description: Published; tags busted; `BroadcastTopic` queued for `school-{id}` /
+            `section-{id}`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notice'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notices/{noticeId}:
+    delete:
+      operationId: deleteNotice
+      tags: [notices]
+      summary: Soft-delete a notice (author or School Admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: noticeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Removed from the board (audited)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoticeDeleteResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notices/{noticeId}/pin:
+    patch:
+      operationId: toggleNoticePin
+      tags: [notices]
+      summary: Toggle the pin (author or School Admin; the only edit path — BR-006)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: noticeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The notice with its new pin state
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notice'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/media/upload-url:
+    post:
+      operationId: createMediaUploadUrl
+      tags: [media]
+      summary: Presigned R2 PUT for one asset (TTL 15 min)
+      description: Kind/size validated against the caps (image 10 MB, PDF 20 MB, voice 5 min);
+        the sniff at confirm is authoritative over the declared mime.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaUploadUrlInput'
+      responses:
+        '201':
+          description: Asset created (`pending`) with the presigned PUT
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaPresignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/media/{assetId}/confirm:
+    post:
+      operationId: confirmMediaUpload
+      tags: [media]
+      summary: Confirm an upload — magic-byte sniff decides (INV-6)
+      description: Owner only; TTL ≤ 15 min; sniffed mime must match the kind allowlist
+        (JPEG/PNG/HEIC → image, %PDF → pdf, AAC/m4a → voice). A mismatch is
+        `VALIDATION_FAILED` and no message may reference the asset.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaConfirmInput'
+      responses:
+        '200':
+          description: Asset confirmed with the sniffed mime
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/media/{assetId}/download-url:
+    post:
+      operationId: createMediaDownloadUrl
+      tags: [media]
+      summary: Short-lived R2 GET URL for an asset the caller may view
+      description: Authorized by ownership or by membership of a group/notice referencing the
+        asset; archived assets rehydrate first (the response flags it).
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: assetId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Presigned GET (15-min TTL)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaDownloadUrl'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   headers:
     XRequestId:
@@ -1463,6 +2127,510 @@ components:
             $ref: '#/components/schemas/SchoolUser'
         nextCursor:
           type: string
+    ChatGroupKind:
+      type: string
+      enum: [official, custom, dm]
+    ChatGroupStatus:
+      type: string
+      enum: [active, pending_approval, archived]
+    ChatMemberRole:
+      type: string
+      enum: [owner, moderator, member]
+    ChatPeer:
+      type: object
+      description: The other side of a DM room
+      required: [userId, name]
+      properties:
+        userId:
+          type: string
+        name:
+          type: string
+    ChatGroup:
+      type: object
+      required: [id, kind, status, myRole, memberCount, unreadCount, createdAt]
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ChatGroupKind'
+        schoolId:
+          type: string
+          description: Tenant school — null only for dm
+        sectionId:
+          type: string
+          description: Official groups bind 1:1 to a section (BR-003)
+        name:
+          type: string
+          description: Custom group name; official groups are named from the section
+        status:
+          $ref: '#/components/schemas/ChatGroupStatus'
+        myRole:
+          $ref: '#/components/schemas/ChatMemberRole'
+        memberCount:
+          type: integer
+          minimum: 0
+        unreadCount:
+          type: integer
+          minimum: 0
+        peer:
+          $ref: '#/components/schemas/ChatPeer'
+        lastMessagePreview:
+          type: string
+        lastMessageAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    ChatGroupPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatGroup'
+    ChatGroupCreateInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 60
+    ChatGroupMember:
+      type: object
+      required: [userId, name, role, joinedAt]
+      properties:
+        userId:
+          type: string
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/ChatMemberRole'
+        lastReadMessageId:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+    ChatGroupMemberInput:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+        role:
+          $ref: '#/components/schemas/ChatMemberRole'
+    ChatGroupRoleInput:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/ChatMemberRole'
+    ChatMemberMutationResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [groupId, userId, removed]
+          properties:
+            groupId:
+              type: string
+            userId:
+              type: string
+            removed:
+              type: boolean
+    ChatMessageKind:
+      type: string
+      enum: [text, image, pdf, voice, system]
+    ChatMediaRef:
+      type: object
+      description: The referenced confirmed asset (message render data)
+      required: [assetId, kind, mime, sizeBytes, status]
+      properties:
+        assetId:
+          type: string
+        kind:
+          $ref: '#/components/schemas/MediaKind'
+        mime:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        width:
+          type: integer
+        height:
+          type: integer
+        durationMs:
+          type: integer
+        fileName:
+          type: string
+          maxLength: 120
+        status:
+          $ref: '#/components/schemas/MediaStatus'
+    ChatMessage:
+      type: object
+      required: [id, groupId, senderId, senderName, kind, clientMsgId, createdAt]
+      properties:
+        id:
+          type: string
+        groupId:
+          type: string
+        senderId:
+          type: string
+        senderName:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ChatMessageKind'
+        body:
+          type: string
+          maxLength: 4000
+        media:
+          $ref: '#/components/schemas/ChatMediaRef'
+        clientMsgId:
+          type: string
+          format: uuid
+        replyTo:
+          type: string
+          description: id of the quoted same-group message
+        replyPreview:
+          type: string
+          description: Server-rendered one-line preview of the quoted message
+        deletedAt:
+          type: string
+          format: date-time
+          description: Set ⇒ tombstone ("Message deleted")
+        createdAt:
+          type: string
+          format: date-time
+    ChatMessagePage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        nextBefore:
+          type: string
+          description: Opaque cursor for the next (older) page; absent when exhausted
+    ChatMessageSendInput:
+      type: object
+      required: [groupId, kind, clientMsgId]
+      properties:
+        groupId:
+          type: string
+        kind:
+          type: string
+          enum: [text, image, pdf, voice]
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        mediaAssetId:
+          type: string
+          description: Required for image|pdf|voice; asset must be `confirmed` + owned
+        clientMsgId:
+          type: string
+          format: uuid
+        replyTo:
+          type: string
+    ChatReadInput:
+      type: object
+      required: [lastReadMessageId]
+      properties:
+        lastReadMessageId:
+          type: string
+    ChatReadResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [groupId, lastReadMessageId]
+          properties:
+            groupId:
+              type: string
+            lastReadMessageId:
+              type: string
+    ChatDeleteResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, deletedAt]
+          properties:
+            id:
+              type: string
+            deletedAt:
+              type: string
+              format: date-time
+    MessageRequestStatus:
+      type: string
+      enum: [pending, accepted, declined, expired]
+    MessageRequestUser:
+      type: object
+      required: [userId, name]
+      properties:
+        userId:
+          type: string
+        name:
+          type: string
+        schoolName:
+          type: string
+    MessageRequest:
+      type: object
+      required: [id, fromUser, toUser, status, createdAt]
+      properties:
+        id:
+          type: string
+        fromUser:
+          $ref: '#/components/schemas/MessageRequestUser'
+        toUser:
+          $ref: '#/components/schemas/MessageRequestUser'
+        status:
+          $ref: '#/components/schemas/MessageRequestStatus'
+        dmGroupId:
+          type: string
+          description: Set on accept — the room both sides open
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    MessageRequestPage:
+      type: object
+      required: [received, sent]
+      properties:
+        received:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageRequest'
+        sent:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageRequest'
+    MessageRequestInput:
+      type: object
+      required: [toUserId]
+      properties:
+        toUserId:
+          type: string
+    MessageRequestDecision:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status]
+          properties:
+            id:
+              type: string
+            status:
+              $ref: '#/components/schemas/MessageRequestStatus'
+            dmGroupId:
+              type: string
+    NoticeScope:
+      type: string
+      enum: [school, section]
+    NoticeAuthor:
+      type: object
+      required: [userId, name, role]
+      properties:
+        userId:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [school_admin, teacher]
+    MediaStatus:
+      type: string
+      enum: [pending, confirmed, archived]
+    MediaKind:
+      type: string
+      enum: [image, pdf, voice]
+    MediaAssetSummary:
+      type: object
+      description: Attachment summary embedded in notices/messages
+      required: [assetId, kind, mime, sizeBytes, status]
+      properties:
+        assetId:
+          type: string
+        kind:
+          $ref: '#/components/schemas/MediaKind'
+        mime:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        fileName:
+          type: string
+          maxLength: 120
+        status:
+          $ref: '#/components/schemas/MediaStatus'
+    Notice:
+      type: object
+      required: [id, schoolId, scope, title, body, pinned, author, publishedAt]
+      properties:
+        id:
+          type: string
+        schoolId:
+          type: string
+        scope:
+          $ref: '#/components/schemas/NoticeScope'
+        sectionId:
+          type: string
+        title:
+          type: string
+          maxLength: 120
+        body:
+          type: string
+          maxLength: 5000
+        pinned:
+          type: boolean
+        attachment:
+          $ref: '#/components/schemas/MediaAssetSummary'
+        author:
+          $ref: '#/components/schemas/NoticeAuthor'
+        publishedAt:
+          type: string
+          format: date-time
+    NoticePage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notice'
+    NoticeInput:
+      type: object
+      required: [scope, title, body]
+      properties:
+        scope:
+          $ref: '#/components/schemas/NoticeScope'
+        sectionId:
+          type: string
+          description: Required iff scope=section; must be in the caller's school
+        title:
+          type: string
+          minLength: 3
+          maxLength: 120
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        pinned:
+          type: boolean
+          default: false
+        attachmentId:
+          type: string
+          description: A `confirmed` media asset
+    NoticeDeleteResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, deletedAt]
+          properties:
+            id:
+              type: string
+            deletedAt:
+              type: string
+              format: date-time
+    MediaUploadUrlInput:
+      type: object
+      required: [kind, sizeBytes]
+      properties:
+        kind:
+          $ref: '#/components/schemas/MediaKind'
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1
+        mime:
+          type: string
+          description: Client-declared; the sniff at confirm is authoritative
+    MediaPresignResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [assetId, uploadUrl, expiresAt]
+          properties:
+            assetId:
+              type: string
+            uploadUrl:
+              type: string
+              format: uri
+            expiresAt:
+              type: string
+              format: date-time
+    MediaConfirmInput:
+      type: object
+      properties:
+        width:
+          type: integer
+        height:
+          type: integer
+        durationMs:
+          type: integer
+          minimum: 0
+          maximum: 300000
+    MediaAsset:
+      type: object
+      required: [id, kind, mime, sizeBytes, status, createdAt]
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: '#/components/schemas/MediaKind'
+        mime:
+          type: string
+          description: Sniffed server-side — never trusted from the client
+        sizeBytes:
+          type: integer
+          format: int64
+        width:
+          type: integer
+        height:
+          type: integer
+        durationMs:
+          type: integer
+        status:
+          $ref: '#/components/schemas/MediaStatus'
+        createdAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: string
+          format: date-time
+    MediaDownloadUrl:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [downloadUrl, expiresAt]
+          properties:
+            downloadUrl:
+              type: string
+              format: uri
+            expiresAt:
+              type: string
+              format: date-time
+            rehydrated:
+              type: boolean
+              description: True when an archived asset was restored to the hot prefix first
   securitySchemes:
     bearerJWT:
       type: http

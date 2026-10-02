@@ -42,14 +42,18 @@ cssInterop(IconImpl, {
  * @param {number} size - Icon size (defaults to 14).
  * @param {...LucideProps} ...props - Additional Lucide icon props passed to the "as" icon.
  */
-function Icon({ as: IconComponent, className, size = 14, ...props }: IconProps) {
+function Icon({ as: IconComponent, className, size = 14, children, ...props }: IconProps) {
   const textClass = React.useContext(TextClassContext);
+  // Lucide's Svg host is View-like — omit empty children so Hermes never creates RCTRawText
+  // outside <Text> (LogBox then shows a blank ERROR pointing at a parent View).
+  const hasChildren = children != null && children !== false && children !== true;
   return (
     <IconImpl
       as={IconComponent}
       className={cn("text-foreground", textClass, className)}
       size={size}
       {...props}
+      {...(hasChildren ? { children } : {})}
     />
   );
 }

@@ -11,8 +11,10 @@ import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useT } from "@/i18n/locale-provider";
-import { useAuthStore } from "@/lib/auth/auth-store";
 import { getMyVerificationRequest } from "@/fixtures/auth";
+import { useAuthStore } from "@/lib/auth/auth-store";
+import { isFixtureAccessToken } from "@/lib/auth/session-restore";
+import { tokenStore } from "@/lib/auth/token-store";
 
 // The friendly pending screen (IDT-AP-008, 05 §2.4): a plain heading + numbered steps in reading
 // order — no motion carries meaning. Shown by /verification-pending and rendered in place of tab
@@ -61,7 +63,13 @@ function PendingScreen() {
 
   const request = useQuery({
     queryKey: ["auth", "my_request"],
-    queryFn: getMyVerificationRequest,
+    queryFn: async () => {
+      const tokens = await tokenStore.get();
+      // The contract has no caller-scoped verification read. Live sessions poll GET /me for
+      // status; the rejection reason stays unavailable until that endpoint exists.
+      if (tokens && !isFixtureAccessToken(tokens.accessToken)) return null;
+      return getMyVerificationRequest();
+    },
     enabled: me?.status === "PENDING",
     refetchInterval: GATE_POLL_MS,
   });

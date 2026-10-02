@@ -1,20 +1,9 @@
-import { Inbox } from "lucide-react-native";
+// Legacy /notices list route — redirects to the Notifications tab (owner 2026-10-02).
+// Detail stays at /notices/[id]. NoticeRow re-exported for any remaining imports.
+import { Redirect } from "expo-router";
 
-import { EmptyState } from "@/components/ui/empty-state";
-import { Screen } from "@/components/ui/screen";
-import { ScreenHeader } from "@/components/ui/screen-header";
-import { useT } from "@/i18n/locale-provider";
+export { NoticeRow } from "./notifications";
 
-// Notices tab placeholder — the surface arrives with 05 (Phase 1 tabs: Chat + Notices, 05 §6.1).
-export default function NoticesScreen() {
-  const t = useT();
-  return (
-    <Screen header={<ScreenHeader title={t("notices.tab")} />}>
-      <EmptyState
-        icon={Inbox}
-        title={t("common.coming_soon")}
-        description={t("common.state.empty_body")}
-      />
-    </Screen>
-  );
+export default function NoticesRedirect() {
+  return <Redirect href="/notifications" />;
 }

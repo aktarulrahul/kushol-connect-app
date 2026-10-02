@@ -17,18 +17,26 @@ function SegmentedPill<T extends string>({
   onChange,
   accessibilityLabel,
   className,
+  size = "default",
 }: {
   segments: readonly Segment<T>[];
   value: T;
   onChange: (value: T) => void;
   accessibilityLabel: string;
   className?: string;
+  /** Compact = WhatsApp-dense header chrome (All · Official · Community · DMs inline). */
+  size?: "default" | "compact";
 }) {
+  const compact = size === "compact";
   return (
     <View
       role="tablist"
       accessibilityLabel={accessibilityLabel}
-      className={cn("flex-row self-start rounded-full bg-muted p-1", className)}
+      className={cn(
+        "flex-row self-start rounded-full bg-muted",
+        compact ? "p-0.5" : "p-1",
+        className,
+      )}
     >
       {segments.map((s) => {
         const active = s.value === value;
@@ -41,16 +49,19 @@ function SegmentedPill<T extends string>({
               onChange(s.value);
             }}
             className={cn(
-              "min-h-10 items-center justify-center rounded-full px-4",
+              "items-center justify-center rounded-full",
+              compact ? "min-h-8 px-2" : "min-h-10 px-4",
               active ? "bg-primary" : "active:bg-neutral-200",
             )}
             hitSlop={2}
           >
             <Text
               className={cn(
-                "text-sm font-medium",
+                "font-medium",
+                compact ? "text-[11px]" : "text-sm",
                 active ? "text-primary-foreground" : "text-muted-foreground",
               )}
+              numberOfLines={1}
             >
               {s.label}
             </Text>
