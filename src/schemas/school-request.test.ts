@@ -1,7 +1,4 @@
-import {
-  emptySchoolRequestForm,
-  validateSchoolRequest,
-} from "./school-request";
+import { emptySchoolRequestForm, validateSchoolRequest } from "./school-request";
 
 // School-request form validation (owner requirement 2026-10-01): institution name 2–120,
 // optional address ≤ 240, POC name 2–80, POC phone is a BD mobile (shared validation), POC

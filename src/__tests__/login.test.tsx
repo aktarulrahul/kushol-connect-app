@@ -24,7 +24,10 @@ beforeEach(() => {
 describe("login ↔ register cross-navigation", () => {
   it("shows the animated verification illustration (owner request 2026-10-01)", async () => {
     await renderUi(<LoginScreen />);
-    expect(screen.getByTestId("auth-illustration-hero")).toBeOnTheScreen();
+    // Decorative — hidden from assistive tech, hence includeHiddenElements:
+    expect(
+      screen.getByTestId("auth-illustration-hero", { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
   });
 
   it("routes the register hint to /register", async () => {

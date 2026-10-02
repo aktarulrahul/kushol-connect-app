@@ -148,6 +148,7 @@ export function fixtureRejectCurrentUser(
 export function resetFixtureAuth(): void {
   sessionSeq = 0;
   schoolRequestSeq = 0;
+  schoolRequests.length = 0;
   currentUser = null;
   currentTokens = null;
   openRequest = null;
@@ -390,17 +391,83 @@ const SCHOOLS: SchoolRow[] = [
 type SectionRow = HierarchySection & { schoolId: string };
 
 const SECTIONS: SectionRow[] = [
-  { id: "sec_6_a_demo_high", schoolId: "school_demo_high", classLevel: "6", name: "A", sessionYear: 2026 },
-  { id: "sec_6_b_demo_high", schoolId: "school_demo_high", classLevel: "6", name: "B", sessionYear: 2026 },
-  { id: "sec_9_a_demo_high", schoolId: "school_demo_high", classLevel: "9", name: "A", sessionYear: 2026 },
-  { id: "sec_9_b_demo_high", schoolId: "school_demo_high", classLevel: "9", name: "B", sessionYear: 2026 },
-  { id: "sec_10_a_demo_high", schoolId: "school_demo_high", classLevel: "10", name: "A", sessionYear: 2026 },
-  { id: "sec_7_a_demo_model", schoolId: "school_demo_model", classLevel: "7", name: "A", sessionYear: 2026 },
-  { id: "sec_8_b_demo_model", schoolId: "school_demo_model", classLevel: "8", name: "B", sessionYear: 2026 },
-  { id: "sec_9_a_demo_college", schoolId: "school_demo_college", classLevel: "9", name: "A", sessionYear: 2026 },
-  { id: "sec_6_a_demo_public", schoolId: "school_demo_public", classLevel: "6", name: "A", sessionYear: 2026 },
-  { id: "sec_10_a_demo_public", schoolId: "school_demo_public", classLevel: "10", name: "A", sessionYear: 2026 },
-  { id: "sec_10_b_demo_public", schoolId: "school_demo_public", classLevel: "10", name: "B", sessionYear: 2026 },
+  {
+    id: "sec_6_a_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "6",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_6_b_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "6",
+    name: "B",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_9_a_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "9",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_9_b_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "9",
+    name: "B",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_10_a_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "10",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_7_a_demo_model",
+    schoolId: "school_demo_model",
+    classLevel: "7",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_8_b_demo_model",
+    schoolId: "school_demo_model",
+    classLevel: "8",
+    name: "B",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_9_a_demo_college",
+    schoolId: "school_demo_college",
+    classLevel: "9",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_6_a_demo_public",
+    schoolId: "school_demo_public",
+    classLevel: "6",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_10_a_demo_public",
+    schoolId: "school_demo_public",
+    classLevel: "10",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_10_b_demo_public",
+    schoolId: "school_demo_public",
+    classLevel: "10",
+    name: "B",
+    sessionYear: 2026,
+  },
 ];
 
 /** GET /hierarchy/cities — launch cities first (Dhaka opens the rollout). */
@@ -436,6 +503,8 @@ export async function listSections(schoolId: string): FixtureResult<HierarchySec
 // ─── School requests (owner requirement 2026-10-01 — signup when the school is missing) ──────
 
 let schoolRequestSeq = 0;
+/** The submitted requests — the queue the application admin approves/rejects (07). */
+const schoolRequests: SchoolRequestInput[] = [];
 
 /**
  * POST /hierarchy/school-requests — queues the institution for the application admin, who
@@ -449,6 +518,7 @@ export async function createSchoolRequest(
   requireOnline();
   if (fixtureFlags.schoolRequest === "conflict") throw new FixtureError("CONFLICT");
   schoolRequestSeq += 1;
+  schoolRequests.push(input);
   return { id: `sr_demo_${String(schoolRequestSeq)}`, status: "PENDING" };
 }
 

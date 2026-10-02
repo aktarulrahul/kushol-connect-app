@@ -50,10 +50,18 @@ function Help({ id, description, error }: { id: string; description?: string; er
 
 function FieldLabel({ id, label, required }: { id: string; label: string; required?: boolean }) {
   return (
-    <Label nativeID={id}>
-      {label}
-      {required ? <Text className="text-destructive"> *</Text> : null}
-    </Label>
+    // The required marker sits OUTSIDE the labelled Text: the element `aria-labelledby`
+    // points at must carry the field name only, so screen readers (and label queries)
+    // resolve the clean name — requirement is its own visual + a11y concern.
+    <View className="flex-row items-center gap-0.5">
+      <Label nativeID={id}>{label}</Label>
+      {required ? (
+        <Text aria-hidden className="text-destructive">
+          {" "}
+          *
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

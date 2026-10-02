@@ -15,7 +15,9 @@ export type SchoolRequestType = (typeof SCHOOL_REQUEST_TYPES)[number];
 export const institutionNameSchema = z
   .string()
   .transform((value) => value.trim())
-  .pipe(z.string().min(2, "validation.school_name.length").max(120, "validation.school_name.length"));
+  .pipe(
+    z.string().min(2, "validation.school_name.length").max(120, "validation.school_name.length"),
+  );
 
 export const institutionAddressSchema = z
   .string()
@@ -32,7 +34,7 @@ export const pocPhoneSchema = z.string().regex(BD_PHONE_PATTERN, "validation.pho
 const pocEmailSchema = z
   .string()
   .transform((value) => value.trim())
-  .pipe(z.string().email("validation.email.invalid"));
+  .pipe(z.email("validation.email.invalid"));
 
 /** What the form edits (cityId is prefilled from the chosen city, never typed). */
 export type SchoolRequestForm = {
@@ -58,12 +60,7 @@ export function emptySchoolRequestForm(cityId: string): SchoolRequestForm {
 }
 
 export type SchoolRequestField =
-  | "name"
-  | "city_id"
-  | "address"
-  | "poc_name"
-  | "poc_phone"
-  | "poc_email";
+  "name" | "city_id" | "address" | "poc_name" | "poc_phone" | "poc_email";
 
 /** Field → i18n key map; an empty object means the form is submittable. */
 export type SchoolRequestErrors = Partial<Record<SchoolRequestField, CatalogKey>>;
