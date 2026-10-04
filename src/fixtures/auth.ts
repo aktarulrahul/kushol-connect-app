@@ -20,8 +20,6 @@ export type OtpRequestInput = Schemas["OtpRequestInput"];
 export type OtpSendResult = Schemas["OtpSendResult"]["data"];
 export type OtpVerifyInput = Schemas["OtpVerifyInput"];
 export type OtpVerifyResult = Schemas["OtpVerifyResult"]["data"];
-export type PasswordLoginInput = Schemas["PasswordLoginInput"];
-export type PasswordLoginResult = Schemas["PasswordLoginResult"]["data"];
 export type RegisterInput = Schemas["RegisterInput"];
 export type RegisterResult = Schemas["RegisterResult"]["data"];
 export type MeUpdateInput = Schemas["MeUpdateInput"];
@@ -129,6 +127,12 @@ export function fixtureSession(): { user: User | null; tokens: RefreshResult | n
   return { user: currentUser, tokens: currentTokens };
 }
 
+/** Rebuilds the in-memory fixture session from a persisted demo pair (phone login survives reload). */
+export function adoptFixtureSession(user: User, tokens: RefreshResult): void {
+  currentUser = user;
+  currentTokens = { ...tokens };
+}
+
 /** Demo-only: simulates the School Admin approving the request in 07 (mid-session gate open). */
 export function fixtureApproveCurrentUser(): void {
   if (!currentUser || currentUser.status !== "PENDING") return;
@@ -148,6 +152,7 @@ export function fixtureRejectCurrentUser(
 export function resetFixtureAuth(): void {
   sessionSeq = 0;
   schoolRequestSeq = 0;
+  schoolRequests.length = 0;
   currentUser = null;
   currentTokens = null;
   openRequest = null;
@@ -222,8 +227,12 @@ export async function verifyOtp(input: OtpVerifyInput): Promise<OtpVerifyResult>
     throw new FixtureError("INVALID_OTP");
   }
   if (input.purpose === "login") {
-    if (mode === "unknown_phone") return { status: "unknown_phone" };
-    // A real login on a known phone — demo lands a VERIFIED teacher in the tabs.
+    if (mode === "unknown_phone") {
+      // Passwordless login (owner decision 2026-10-02): the unknown-target answer follows the
+      // channel — unknown_email for staff sign-in, unknown_phone for the app's phone flow.
+      return input.email ? { status: "unknown_email" } : { status: "unknown_phone" };
+    }
+    // A real login on a known target — demo lands a VERIFIED teacher in the tabs.
     const user = demoUser({
       role: "teacher",
       status: "VERIFIED",
@@ -270,24 +279,6 @@ export async function register(input: RegisterInput): Promise<RegisterResult> {
     reminderCount: 0,
   };
   return { user, ...tokens, verificationRequest: openRequest };
-}
-
-/** POST /auth/login/password — enumeration-safe; app receives tokens. */
-export async function loginPassword(input: PasswordLoginInput): Promise<PasswordLoginResult> {
-  await latency(500);
-  requireOnline();
-  if (mode === "suspended") throw new FixtureError("SUSPENDED");
-  if (input.password.length < 10) throw new FixtureError("UNAUTHENTICATED");
-  const user = demoUser({
-    role: "teacher",
-    status: "VERIFIED",
-    fullName: "ডেমো শিক্ষক",
-    locale: "bn",
-  });
-  const tokens = issueTokens();
-  currentUser = user;
-  currentTokens = tokens;
-  return { user, ...tokens };
 }
 
 /** GET /me — the cached account; UNAUTHENTICATED when signed out. */
@@ -390,17 +381,83 @@ const SCHOOLS: SchoolRow[] = [
 type SectionRow = HierarchySection & { schoolId: string };
 
 const SECTIONS: SectionRow[] = [
-  { id: "sec_6_a_demo_high", schoolId: "school_demo_high", classLevel: "6", name: "A", sessionYear: 2026 },
-  { id: "sec_6_b_demo_high", schoolId: "school_demo_high", classLevel: "6", name: "B", sessionYear: 2026 },
-  { id: "sec_9_a_demo_high", schoolId: "school_demo_high", classLevel: "9", name: "A", sessionYear: 2026 },
-  { id: "sec_9_b_demo_high", schoolId: "school_demo_high", classLevel: "9", name: "B", sessionYear: 2026 },
-  { id: "sec_10_a_demo_high", schoolId: "school_demo_high", classLevel: "10", name: "A", sessionYear: 2026 },
-  { id: "sec_7_a_demo_model", schoolId: "school_demo_model", classLevel: "7", name: "A", sessionYear: 2026 },
-  { id: "sec_8_b_demo_model", schoolId: "school_demo_model", classLevel: "8", name: "B", sessionYear: 2026 },
-  { id: "sec_9_a_demo_college", schoolId: "school_demo_college", classLevel: "9", name: "A", sessionYear: 2026 },
-  { id: "sec_6_a_demo_public", schoolId: "school_demo_public", classLevel: "6", name: "A", sessionYear: 2026 },
-  { id: "sec_10_a_demo_public", schoolId: "school_demo_public", classLevel: "10", name: "A", sessionYear: 2026 },
-  { id: "sec_10_b_demo_public", schoolId: "school_demo_public", classLevel: "10", name: "B", sessionYear: 2026 },
+  {
+    id: "sec_6_a_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "6",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_6_b_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "6",
+    name: "B",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_9_a_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "9",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_9_b_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "9",
+    name: "B",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_10_a_demo_high",
+    schoolId: "school_demo_high",
+    classLevel: "10",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_7_a_demo_model",
+    schoolId: "school_demo_model",
+    classLevel: "7",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_8_b_demo_model",
+    schoolId: "school_demo_model",
+    classLevel: "8",
+    name: "B",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_9_a_demo_college",
+    schoolId: "school_demo_college",
+    classLevel: "9",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_6_a_demo_public",
+    schoolId: "school_demo_public",
+    classLevel: "6",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_10_a_demo_public",
+    schoolId: "school_demo_public",
+    classLevel: "10",
+    name: "A",
+    sessionYear: 2026,
+  },
+  {
+    id: "sec_10_b_demo_public",
+    schoolId: "school_demo_public",
+    classLevel: "10",
+    name: "B",
+    sessionYear: 2026,
+  },
 ];
 
 /** GET /hierarchy/cities — launch cities first (Dhaka opens the rollout). */
@@ -436,6 +493,8 @@ export async function listSections(schoolId: string): FixtureResult<HierarchySec
 // ─── School requests (owner requirement 2026-10-01 — signup when the school is missing) ──────
 
 let schoolRequestSeq = 0;
+/** The submitted requests — the queue the application admin approves/rejects (07). */
+const schoolRequests: SchoolRequestInput[] = [];
 
 /**
  * POST /hierarchy/school-requests — queues the institution for the application admin, who
@@ -449,6 +508,7 @@ export async function createSchoolRequest(
   requireOnline();
   if (fixtureFlags.schoolRequest === "conflict") throw new FixtureError("CONFLICT");
   schoolRequestSeq += 1;
+  schoolRequests.push(input);
   return { id: `sr_demo_${String(schoolRequestSeq)}`, status: "PENDING" };
 }
 

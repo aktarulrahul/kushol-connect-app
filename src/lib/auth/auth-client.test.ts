@@ -1,4 +1,4 @@
-import { createAuthClient } from "./auth-client";
+import { createAuthClient, RefreshRejectedError } from "./auth-client";
 import { MemoryTokenStore } from "./token-store";
 
 // IDT-AP-009 — single-flight refresh interceptor: one 401 rotates the refresh token and retries
@@ -75,11 +75,11 @@ describe("createAuthClient", () => {
     expect(fn).toHaveBeenCalledTimes(4); // two 401s + two single retries, no more
   });
 
-  it("clears the session and surfaces the original 401 when rotation fails", async () => {
+  it("clears the session and surfaces the original 401 when rotation is rejected", async () => {
     const store = new MemoryTokenStore();
     await store.set({ accessToken: "a1", refreshToken: "revoked" });
     const { fn } = seqFetch([() => jsonResponse(401, PROBLEM)]);
-    const refresh = jest.fn().mockRejectedValue(new Error("family revoked"));
+    const refresh = jest.fn().mockRejectedValue(new RefreshRejectedError());
     const client = createAuthClient({ baseUrl: "http://api.test", store, refresh, fetchImpl: fn });
 
     const { data, response } = await client.GET("/healthz");
@@ -87,8 +87,50 @@ describe("createAuthClient", () => {
     expect(data).toBeUndefined();
     expect(response.status).toBe(401);
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(fn).toHaveBeenCalledTimes(1); // no retry after a failed rotation
+    expect(fn).toHaveBeenCalledTimes(1); // no retry after a rejected rotation
     expect(await store.get()).toBeNull();
+  });
+
+  it("keeps the stored pair when refresh fails because the network is down", async () => {
+    const store = new MemoryTokenStore();
+    await store.set({ accessToken: "a1", refreshToken: "r1" });
+    const { fn } = seqFetch([() => jsonResponse(401, PROBLEM)]);
+    const refresh = jest.fn().mockRejectedValue(new Error("Network request failed"));
+    const client = createAuthClient({ baseUrl: "http://api.test", store, refresh, fetchImpl: fn });
+
+    const { response } = await client.GET("/healthz");
+
+    expect(response.status).toBe(401);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(await store.get()).toEqual({ accessToken: "a1", refreshToken: "r1" });
+  });
+
+  it("does not rotate again when a refresh already replaced the access token", async () => {
+    const store = new MemoryTokenStore();
+    await store.set({ accessToken: "a1", refreshToken: "r1" });
+    const { fn, seen } = seqFetch([
+      () => jsonResponse(401, PROBLEM),
+      () => jsonResponse(200, { status: "ok" }),
+    ]);
+    const wrapped = jest.fn(async (request: Request) => {
+      if (request.headers.get("Authorization") === "Bearer a1") {
+        await store.set({ accessToken: "a2", refreshToken: "r2" });
+      }
+      return fn(request);
+    });
+    const refresh = jest.fn();
+    const client = createAuthClient({
+      baseUrl: "http://api.test",
+      store,
+      refresh,
+      fetchImpl: wrapped,
+    });
+
+    const { data } = await client.GET("/healthz");
+
+    expect(data?.status).toBe("ok");
+    expect(refresh).not.toHaveBeenCalled();
+    expect(seen[1]?.headers.get("Authorization")).toBe("Bearer a2");
   });
 
   it("keeps the middleware headers (Accept-Language) on the retried request", async () => {

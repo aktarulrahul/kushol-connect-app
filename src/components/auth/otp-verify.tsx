@@ -8,8 +8,9 @@ import { NativeOnlyAnimatedView } from "@/components/ui/native-only-animated-vie
 import { OtpInput } from "@/components/ui/otp-input";
 import { Text } from "@/components/ui/text";
 import type { TFunction } from "@/i18n";
-import { useT } from "@/i18n/locale-provider";
-import { FixtureError, requestOtp, type OtpVerifyResult, verifyOtp } from "@/fixtures/auth";
+import { useLocale, useT } from "@/i18n/locale-provider";
+import { FixtureError, type OtpVerifyResult } from "@/fixtures/auth";
+import { requestOtpLive, resendOtpLive, verifyOtpLive } from "@/lib/auth/live-otp";
 import {
   canResend,
   cooldownSecondsLeft,
@@ -53,30 +54,41 @@ function errorNotice(error: unknown, t: TFunction): string {
 
 function OtpVerify({
   phone,
+  email,
   purpose,
   autoSend = false,
   onVerified,
 }: {
-  /** Normalized E.164 phone. */
-  phone: string;
+  /** Normalized E.164 phone — exactly one of phone/email. */
+  phone?: string;
+  /** Lowercase email target — exactly one of phone/email (passwordless staff login, owner
+   * decision 2026-10-02). */
+  email?: string;
   purpose: "login" | "register";
   /** Send the first code on mount (onboarding flow). Login sends from its own button. */
   autoSend?: boolean;
-  /** Called after `verifyOtp` succeeds — `unknown_phone` arrives here for login routing. */
-  onVerified: (result: OtpVerifyResult) => void;
+  /** Called after verify succeeds — `unknown_phone`/`unknown_email` arrive here for login routing.
+   * The second argument is the code, so registration can prove it on POST /auth/register. */
+  onVerified: (result: OtpVerifyResult, otpCode: string) => void;
 }) {
   const t = useT();
+  const { locale } = useLocale();
   const router = useRouter();
   const [state, dispatch] = useReducer(otpReducer, initialOtpState);
   const [code, setCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const sentOnce = useRef(false);
+  const delivered = useRef(false);
 
   const send = useCallback(async () => {
     dispatch({ type: "send_started" });
     setNotice(null);
     try {
-      const result = await requestOtp({ phone, purpose });
+      const body = phone ? { phone, purpose } : { email: email ?? "", purpose };
+      const result = delivered.current
+        ? await resendOtpLive(body, locale)
+        : await requestOtpLive(body, locale);
+      delivered.current = true;
       sentOnce.current = true;
       dispatch({
         type: "send_succeeded",
@@ -96,7 +108,7 @@ function OtpVerify({
       }
       setNotice(errorNotice(error, t));
     }
-  }, [phone, purpose, t]);
+  }, [phone, email, purpose, t, locale]);
 
   useEffect(() => {
     if (autoSend && !sentOnce.current) {
@@ -119,9 +131,12 @@ function OtpVerify({
     setNotice(null);
     dispatch({ type: "verify_started" });
     try {
-      const result = await verifyOtp({ phone, otpCode: code, purpose });
+      const result = await verifyOtpLive(
+        phone ? { phone, otpCode: code, purpose } : { email: email ?? "", otpCode: code, purpose },
+        locale,
+      );
       dispatch({ type: "verify_succeeded" });
-      onVerified(result);
+      onVerified(result, code);
     } catch (error) {
       const nextAttempts = state.attempts + 1;
       dispatch({ type: "verify_failed" });
@@ -144,8 +159,12 @@ function OtpVerify({
   return (
     <View className="gap-4">
       <View className="gap-2">
-        <Text variant="lead">{t("auth.otp.prompt")}</Text>
-        <Text variant="muted">{t("auth.otp.sent_to", { phone })}</Text>
+        <Text variant="lead">{phone ? t("auth.otp.prompt") : t("auth.otp.prompt_email")}</Text>
+        <Text variant="muted">
+          {phone
+            ? t("auth.otp.sent_to", { phone })
+            : t("auth.otp.sent_to_email", { email: email ?? "" })}
+        </Text>
       </View>
 
       <NativeOnlyAnimatedView
@@ -173,7 +192,7 @@ function OtpVerify({
 
       {delayed && lockedFor === 0 ? (
         <View className="gap-1 rounded-lg bg-warning-soft p-3" accessibilityLiveRegion="polite">
-          <Text variant="small">{t("auth.sms_delayed")}</Text>
+          <Text variant="small">{phone ? t("auth.sms_delayed") : t("auth.email_delayed")}</Text>
           <Button
             variant="link"
             className="self-start px-0"

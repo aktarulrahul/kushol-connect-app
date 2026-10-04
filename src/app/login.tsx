@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -11,22 +11,19 @@ import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { TextField } from "@/components/ui/text-field";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { useT } from "@/i18n/locale-provider";
+import { useLocale, useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
+import { requestOtpLive } from "@/lib/auth/live-otp";
 import { color } from "@/theme/tokens";
-import {
-  FixtureError,
-  loginPassword,
-  requestOtp,
-  type OtpVerifyResult,
-  type User,
-} from "@/fixtures/auth";
+import { FixtureError, type OtpVerifyResult, type User } from "@/fixtures/auth";
 import { isBdPhone, normalizePhone } from "@/schemas/register";
+import { z } from "zod";
 
-// Returning users (IDT-US-003/-004/-005): phone OTP by default, email+password for staff, SSO
-// row. After a successful login the route depends on status — PENDING opens the friendly pending
-// screen (PendingNotice routing), VERIFIED goes straight to the tabs.
-type LoginTab = "phone" | "password";
+// Returning users (IDT-US-003/-004/-005): phone OTP by default, email OTP for staff — login is
+// passwordless (owner decision 2026-10-02) — plus the SSO row. After a successful login the route
+// depends on status — PENDING opens the friendly pending screen (PendingNotice routing), VERIFIED
+// goes straight to the tabs.
+type LoginTab = "phone" | "email";
 
 function routeFor(router: ReturnType<typeof useRouter>, user: User): void {
   if (user.status === "PENDING") {
@@ -39,41 +36,64 @@ function routeFor(router: ReturnType<typeof useRouter>, user: User): void {
 function LoginScreen() {
   const router = useRouter();
   const t = useT();
+  const { locale } = useLocale();
   const toast = useToast();
   const signIn = useAuthStore((s) => s.signIn);
+  const me = useAuthStore((s) => s.me);
+  const status = useAuthStore((s) => s.status);
   const [tab, setTab] = useState<LoginTab>("phone");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState(false);
   const [otpStage, setOtpStage] = useState(false);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
+  const [emailError, setEmailError] = useState(false);
+
+  const normalizedEmail = () => email.trim().toLowerCase();
+
+  const validEmail = () => z.email().safeParse(normalizedEmail()).success;
 
   const sendLoginCode = async () => {
-    if (!isBdPhone(phone)) {
+    if (tab === "phone" && !isBdPhone(phone)) {
       setPhoneError(true);
       return;
     }
+    if (tab === "email" && !validEmail()) {
+      setEmailError(true);
+      return;
+    }
     setPhoneError(false);
+    setEmailError(false);
     try {
-      await requestOtp({ phone: normalizePhone(phone), purpose: "login" });
+      if (tab === "phone") {
+        await requestOtpLive({ phone: normalizePhone(phone), purpose: "login" }, locale);
+      } else {
+        await requestOtpLive({ email: normalizedEmail(), purpose: "login" }, locale);
+      }
       setOtpStage(true);
     } catch (error) {
-      toast({
-        title: t(
-          error instanceof FixtureError && error.code === "OFFLINE"
-            ? "auth.otp.needs_internet"
-            : "errors.network",
-        ),
-        variant: "error",
-      });
+      if (error instanceof FixtureError && error.code === "OFFLINE") {
+        toast({ title: t("auth.otp.needs_internet"), variant: "error" });
+        return;
+      }
+      if (error instanceof FixtureError && error.code === "RATE_LIMITED") {
+        toast({
+          title: t("auth.otp.rate_limited", { seconds: error.retryAfterSeconds ?? 60 }),
+          variant: "error",
+        });
+        return;
+      }
+      toast({ title: t("errors.network"), variant: "error" });
     }
   };
 
   const onVerified = (result: OtpVerifyResult) => {
-    if (result.status === "unknown_phone" || !result.user) {
-      toast({ title: t("auth.otp.unknown_phone"), variant: "warning" });
+    if (result.status === "unknown_phone" || result.status === "unknown_email" || !result.user) {
+      toast({
+        title: t(
+          result.status === "unknown_email" ? "auth.otp.unknown_email" : "auth.otp.unknown_phone",
+        ),
+        variant: "warning",
+      });
       setOtpStage(false);
       return;
     }
@@ -84,33 +104,16 @@ function LoginScreen() {
     routeFor(router, result.user);
   };
 
-  const submitPassword = async () => {
-    setSigningIn(true);
-    setPasswordError(null);
-    try {
-      const result = await loginPassword({ email: email.trim(), password });
-      signIn(result.user, {
-        accessToken: result.accessToken ?? "",
-        refreshToken: result.refreshToken ?? "",
-      });
-      routeFor(router, result.user);
-    } catch (error) {
-      if (error instanceof FixtureError && error.code === "SUSPENDED") {
-        setPasswordError(t("auth.suspended"));
-      } else if (error instanceof FixtureError && error.code === "OFFLINE") {
-        setPasswordError(t("auth.otp.needs_internet"));
-      } else {
-        // Enumeration-safe: identical generic error for unknown account and wrong password.
-        setPasswordError(t("errors.unauthenticated"));
-      }
-    } finally {
-      setSigningIn(false);
-    }
-  };
-
   const startSso = (provider: "google" | "github") => {
     router.push(`/auth/sso/return?provider=${provider}&intent=login`);
   };
+
+  // Restore still running: stay blank (root splash already covers cold start). A finished
+  // restore with a session must not sit on the login form — even when `me` is briefly null.
+  if (status === "idle" || status === "checking") return null;
+  if (status === "authed") {
+    return <Redirect href={me?.status === "PENDING" ? "/verification-pending" : "/chat"} />;
+  }
 
   return (
     <Screen className="justify-center gap-6">
@@ -125,20 +128,20 @@ function LoginScreen() {
         onChange={setTab}
         segments={[
           { value: "phone", label: t("auth.login.tab_phone") },
-          { value: "password", label: t("auth.login.tab_password") },
+          { value: "email", label: t("auth.login.tab_email") },
         ]}
       />
 
-      {tab === "phone" ? (
-        otpStage ? (
-          <OtpVerify
-            phone={normalizePhone(phone)}
-            purpose="login"
-            autoSend
-            onVerified={onVerified}
-          />
-        ) : (
-          <View className="gap-4">
+      {otpStage ? (
+        <OtpVerify
+          {...(tab === "phone" ? { phone: normalizePhone(phone) } : { email: normalizedEmail() })}
+          purpose="login"
+          autoSend={false}
+          onVerified={onVerified}
+        />
+      ) : (
+        <View className="gap-4">
+          {tab === "phone" ? (
             <TextField
               label={t("auth.contact.phone")}
               value={phone}
@@ -151,40 +154,25 @@ function LoginScreen() {
               keyboardType="number-pad"
               autoComplete="tel"
             />
-            <Button size="lg" className="self-stretch" onPress={() => void sendLoginCode()}>
-              <Text>{t("auth.login.send_code")}</Text>
-            </Button>
-          </View>
-        )
-      ) : (
-        <View className="gap-4">
-          <TextField
-            label={t("auth.login.email")}
-            value={email}
-            onChangeText={setEmail}
-            required
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            textContentType="emailAddress"
-          />
-          <TextField
-            label={t("auth.login.password")}
-            value={password}
-            onChangeText={setPassword}
-            error={passwordError ?? undefined}
-            description={t("auth.login.password_hint")}
-            required
-            secureTextEntry
-          />
-          <Button
-            size="lg"
-            className="self-stretch"
-            loading={signingIn}
-            disabled={signingIn}
-            onPress={() => void submitPassword()}
-          >
-            <Text>{t("auth.login.sign_in")}</Text>
+          ) : (
+            <TextField
+              label={t("auth.login.email")}
+              value={email}
+              onChangeText={(next) => {
+                setEmail(next);
+                setEmailError(false);
+              }}
+              error={emailError ? t("validation.email.invalid") : undefined}
+              description={t("auth.login.email_hint")}
+              required
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              textContentType="emailAddress"
+            />
+          )}
+          <Button size="lg" className="self-stretch" onPress={() => void sendLoginCode()}>
+            <Text>{t("auth.login.send_code")}</Text>
           </Button>
         </View>
       )}

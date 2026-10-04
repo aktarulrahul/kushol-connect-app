@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { View } from "react-native";
 
 // Kept outside src/app: expo-router would treat any file there as a route.
 import HierarchyScreen from "@/app/(onboarding)/hierarchy";
@@ -17,6 +18,30 @@ jest.mock("expo-router", () => ({
   Redirect: () => null,
   usePathname: () => "/(onboarding)/hierarchy",
 }));
+
+// The @rn-primitives Select only mounts its portal once the trigger's native measure() lands
+// (triggerPosition gates the Portal) and the jest renderer has no layout engine. The View mock
+// shares one measure() across instances, so answer it synchronously with a fixed frame.
+type MeasureCallback = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  pageX: number,
+  pageY: number,
+) => void;
+
+beforeAll(() => {
+  jest
+    .spyOn(View.prototype as unknown as { measure: (callback: MeasureCallback) => void }, "measure")
+    .mockImplementation((callback) => {
+      callback(12, 120, 240, 44, 12, 120);
+    });
+});
+
+afterAll(() => {
+  jest.restoreAllMocks();
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -76,10 +101,14 @@ describe("hierarchy cascade", () => {
       expect(draft.classLevel).toBeNull();
       expect(draft.sectionId).toBeNull();
     });
-    // And the Chattogram master data loads into the school dropdown:
+    // And the Chattogram master data loads into the (reopened) school dropdown:
+    await fireEvent.press(await screen.findByLabelText("স্কুল"));
     expect(await screen.findByText("ডেমো পাবলিক স্কুল")).toBeOnTheScreen();
   });
 });
+
+// Mock latency jitters up to ~1s (createSchoolRequest), so waits after a submit need headroom.
+const SUBMIT_TIMEOUT = 4000;
 
 describe("school request", () => {
   const openSheet = async () => {
@@ -92,18 +121,20 @@ describe("school request", () => {
     await renderUi(<HierarchyScreen />);
     await openSheet();
 
-    fireEvent.changeText(await screen.findByLabelText("প্রতিষ্ঠানের নাম"), "ডেমো কলেজ");
-    fireEvent.changeText(screen.getByLabelText("যোগাযোগের ব্যক্তির নাম"), "ডেমো পিওসি");
-    fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "12345");
-    fireEvent.press(screen.getByTestId("school-request-submit"));
+    await fireEvent.changeText(await screen.findByLabelText("প্রতিষ্ঠানের নাম"), "ডেমো কলেজ");
+    await fireEvent.changeText(screen.getByLabelText("যোগাযোগের ব্যক্তির নাম"), "ডেমো পিওসি");
+    await fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "12345");
+    await fireEvent.press(screen.getByTestId("school-request-submit"));
 
     expect(await screen.findByText("সঠিক মোবাইল নম্বর দিন (যেমন 01712345678)")).toBeOnTheScreen();
     expect(screen.queryByText("আবেদন জমা হয়েছে")).not.toBeOnTheScreen();
 
-    fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "01812345678");
-    fireEvent.press(screen.getByTestId("school-request-submit"));
+    await fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "01812345678");
+    await fireEvent.press(screen.getByTestId("school-request-submit"));
 
-    expect(await screen.findByText("আবেদন জমা হয়েছে")).toBeOnTheScreen();
+    expect(
+      await screen.findByText("আবেদন জমা হয়েছে", { timeout: SUBMIT_TIMEOUT }),
+    ).toBeOnTheScreen();
     expect(screen.getByText(/আবেদন অ্যাডমিন প্রতিষ্ঠানটি যুক্ত করতে/)).toBeOnTheScreen();
   });
 
@@ -111,13 +142,13 @@ describe("school request", () => {
     await renderUi(<HierarchyScreen />);
     await openSheet();
 
-    fireEvent.changeText(await screen.findByLabelText("প্রতিষ্ঠানের নাম"), "ডেমো কলেজ");
-    fireEvent.changeText(screen.getByLabelText("যোগাযোগের ব্যক্তির নাম"), "ডেমো পিওসি");
-    fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "01812345678");
-    fireEvent.press(screen.getByTestId("school-request-submit"));
-    await screen.findByText("আবেদন জমা হয়েছে");
+    await fireEvent.changeText(await screen.findByLabelText("প্রতিষ্ঠানের নাম"), "ডেমো কলেজ");
+    await fireEvent.changeText(screen.getByLabelText("যোগাযোগের ব্যক্তির নাম"), "ডেমো পিওসি");
+    await fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "01812345678");
+    await fireEvent.press(screen.getByTestId("school-request-submit"));
+    await screen.findByText("আবেদন জমা হয়েছে", { timeout: SUBMIT_TIMEOUT });
 
-    fireEvent.press(screen.getByTestId("school-request-back"));
+    await fireEvent.press(screen.getByTestId("school-request-back"));
     expect(
       await screen.findByText(
         "আবেদন পাওয়া গেছে — প্রতিষ্ঠানটি যুক্ত হলেই আপনি এগিয়ে যেতে পারবেন।",
@@ -130,13 +161,15 @@ describe("school request", () => {
     await renderUi(<HierarchyScreen />);
     await openSheet();
 
-    fireEvent.changeText(await screen.findByLabelText("প্রতিষ্ঠানের নাম"), "ডেমো কলেজ");
-    fireEvent.changeText(screen.getByLabelText("যোগাযোগের ব্যক্তির নাম"), "ডেমো পিওসি");
-    fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "01812345678");
-    fireEvent.press(screen.getByTestId("school-request-submit"));
+    await fireEvent.changeText(await screen.findByLabelText("প্রতিষ্ঠানের নাম"), "ডেমো কলেজ");
+    await fireEvent.changeText(screen.getByLabelText("যোগাযোগের ব্যক্তির নাম"), "ডেমো পিওসি");
+    await fireEvent.changeText(screen.getByLabelText("যোগাযোগের মোবাইল নম্বর"), "01812345678");
+    await fireEvent.press(screen.getByTestId("school-request-submit"));
 
     expect(
-      await screen.findByText(/এই প্রতিষ্ঠানের জন্য আবেদন আগেই জমা আছে/),
+      await screen.findByText(/এই প্রতিষ্ঠানের জন্য আবেদন আগেই জমা আছে/, {
+        timeout: SUBMIT_TIMEOUT,
+      }),
     ).toBeOnTheScreen();
   });
 });

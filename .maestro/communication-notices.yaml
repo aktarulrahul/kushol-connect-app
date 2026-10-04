@@ -1,0 +1,39 @@
+# COM-E2E-003 — notices golden path: open the Notices tab, see the pinned school notice first,
+# open a section notice with an attachment chip, and view the attachment (short-lived URL +
+# recovering state is manual — the fixture resolves instantly).
+#   maestro test .maestro/communication-notices.yaml
+# NOT yet run — Maestro CLI/device not available in the build environment (G-6, pending owner).
+# Push deep link (06 payload → /notices/[id]) lands in Stage 5 with the real gateway.
+appId: com.kusholconnect.app
+---
+- launchApp:
+    clearState: true
+- tapOn: "সাইন-ইন"
+- tapOn: "মোবাইল নম্বর"
+- inputText: "01712345678"
+- tapOn: "কোড পাঠান"
+- tapOn: "৬ সংখ্যার ওটিপি কোড"
+- inputText: "123456"
+- tapOn: "যাচাই করুন"
+
+# Notices tab: pinned notice first, then the section notice with the scope badge.
+- tapOn: "নোটিশ"
+- assertVisible: "অর্ধবার্ষিক পরীক্ষার রুটিন (ডেমো)"
+- assertVisible: "ক্লাস টেস্ট — অধ্যায় ৪ (ডেমো)"
+- assertVisible: "সেকশন"
+
+# Detail: title, author + role, body, attachment entry.
+- tapOn: "ক্লাস টেস্ট — অধ্যায় ৪ (ডেমো)"
+- assertVisible: "রসায়নের চতুর্থ অধ্যায়"
+
+# Teacher publishes a section notice from the composer (BR-005 role→scope matrix).
+- tapOn:
+    id: "back"
+- tapOn:
+    id: "notice-compose"
+- tapOn: "শিরোনাম"
+- inputText: "গণিত এক্সট্রা ক্লাস (ডেমো)"
+- tapOn: "বিস্তারিত"
+- inputText: "বৃহস্পতিবার বিকালে গণিতের এক্সট্রা ক্লাস হবে।"
+- tapOn: "প্রকাশ করুন"
+- assertVisible: "গণিত এক্সট্রা ক্লাস (ডেমো)"

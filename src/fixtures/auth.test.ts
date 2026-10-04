@@ -11,7 +11,6 @@ import {
   listCities,
   listSchools,
   listSections,
-  loginPassword,
   patchMe,
   refreshTokens,
   register,
@@ -28,6 +27,12 @@ jest.setTimeout(30_000);
 beforeEach(() => {
   resetFixtureAuth();
 });
+
+/** Passwordless staff sign-in (owner decision 2026-10-02): the demo fixture accepts any code. */
+async function staffLogin(email = "demo@kusholconnect.edu"): Promise<void> {
+  await requestOtp({ email, purpose: "login" });
+  await verifyOtp({ email, otpCode: "123456", purpose: "login" });
+}
 
 describe("flag switcher", () => {
   it("exposes the documented modes and defaults to success", () => {
@@ -100,7 +105,7 @@ describe("registration golden path", () => {
   });
 
   it("patchMe updates the locale on the account", async () => {
-    await loginPassword({ email: "demo@kusholconnect.edu", password: "demopassword" });
+    await staffLogin();
     await expect(patchMe({ locale: "en" })).resolves.toMatchObject({ locale: "en" });
   });
 });
@@ -120,13 +125,13 @@ describe("flag-driven failures", () => {
     });
   });
 
-  it("suspended blocks login; login OTP answers unknown_phone without creating a session", async () => {
+  it("suspended blocks login; unknown targets answer by channel without creating a session", async () => {
     fixtureFlags.set("suspended");
+    await requestOtp({ email: "demo@kusholconnect.edu", purpose: "login" });
     await expect(
-      loginPassword({ email: "demo@kusholconnect.edu", password: "demopassword" }),
-    ).rejects.toMatchObject({
-      code: "SUSPENDED",
-    });
+      verifyOtp({ email: "demo@kusholconnect.edu", otpCode: "123456", purpose: "login" }),
+    ).rejects.toMatchObject({ code: "SUSPENDED" });
+    expect(fixtureSession().user).toBeNull();
 
     fixtureFlags.set("unknown_phone");
     await requestOtp({ phone: "+8801912345678", purpose: "login" });
@@ -134,21 +139,19 @@ describe("flag-driven failures", () => {
       verifyOtp({ phone: "+8801912345678", otpCode: "123456", purpose: "login" }),
     ).resolves.toEqual({ status: "unknown_phone" });
     expect(fixtureSession().user).toBeNull();
-  });
 
-  it("a wrong password answers UNAUTHENTICATED with no session", async () => {
+    // The email channel answers unknown_email (passwordless staff sign-in).
+    await requestOtp({ email: "nobody@kusholconnect.edu", purpose: "login" });
     await expect(
-      loginPassword({ email: "demo@kusholconnect.edu", password: "short" }),
-    ).rejects.toMatchObject({
-      code: "UNAUTHENTICATED",
-    });
+      verifyOtp({ email: "nobody@kusholconnect.edu", otpCode: "123456", purpose: "login" }),
+    ).resolves.toEqual({ status: "unknown_email" });
     expect(fixtureSession().user).toBeNull();
   });
 });
 
 describe("token rotation", () => {
   it("rotates once; replaying the old token clears the session (family revoked)", async () => {
-    await loginPassword({ email: "demo@kusholconnect.edu", password: "demopassword" });
+    await staffLogin();
     const first = fixtureSession().tokens;
     const rotated = await refreshTokens({ refreshToken: first?.refreshToken ?? "" });
     expect(rotated.refreshToken).not.toBe(first?.refreshToken);
@@ -261,7 +264,7 @@ describe("school requests (missing institution)", () => {
 
 describe("devices (P1)", () => {
   it("lists and revokes, but never the current device", async () => {
-    await loginPassword({ email: "demo@kusholconnect.edu", password: "demopassword" });
+    await staffLogin();
     const devices = await getDevices();
     expect(devices.length).toBeGreaterThan(0);
 

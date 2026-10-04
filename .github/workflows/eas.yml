@@ -1,0 +1,70 @@
+# EAS Build/Submit pipelines in CI (module 15 Part B — OPS-BE-013 §7; G-7 "EAS in CI").
+# Production store builds + internal preview APKs run on Expo's build servers; CI only queues
+# them and links the build page. Credentials stay in EAS (never in the repo):
+#   - EXPO_TOKEN repo secret (rotate per docs/secret-rotation.md in the api repo)
+#   - `eas credentials` store signing material (managed by EAS)
+name: eas
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile"
+        type: choice
+        options: [preview, production]
+        default: preview
+      submit:
+        description: "Submit to the store after a successful production build"
+        type: boolean
+        default: false
+  # Nightly internal APK so a testable build always exists (02:45 Asia/Dhaka ≈ 20:45 UTC).
+  schedule:
+    - cron: "45 20 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # version from package.json "packageManager"
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Resolve profile
+        id: profile
+        run: echo "profile=${{ github.event.inputs.profile || 'preview' }}" >> "$GITHUB_OUTPUT"
+      - name: EAS build (non-interactive, no wait — the build page is the artifact)
+        env:
+          PROFILE: ${{ steps.profile.outputs.profile }}
+        run: eas build --profile "$PROFILE" --platform all --non-interactive --no-wait
+      - name: Summary
+        run: echo "Queue the build at https://expo.dev — submit runs separately (production only)." >> "$GITHUB_STEP_SUMMARY"
+
+  submit:
+    if: github.event_name == 'workflow_dispatch' && inputs.submit && inputs.profile == 'production'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: EAS submit (store draft — human review before release)
+        run: eas submit --platform all --latest --non-interactive

@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import LoginScreen from "@/app/login";
 import LanguageScreen from "@/app/(onboarding)/language";
 import { renderUi } from "@/test/render";
+import { useAuthStore } from "@/lib/auth/auth-store";
 import { useOnboardingStore } from "@/lib/onboarding/onboarding-store";
 
 // Cross-navigation (owner requirement 2026-10-01): the login screen's register hint now opens
@@ -19,12 +20,16 @@ jest.mock("expo-router", () => ({
 beforeEach(() => {
   jest.clearAllMocks();
   useOnboardingStore.getState().reset();
+  useAuthStore.setState({ me: null, status: "anon", stale: false });
 });
 
 describe("login ↔ register cross-navigation", () => {
   it("shows the animated verification illustration (owner request 2026-10-01)", async () => {
     await renderUi(<LoginScreen />);
-    expect(screen.getByTestId("auth-illustration-hero")).toBeOnTheScreen();
+    // Decorative — hidden from assistive tech, hence includeHiddenElements:
+    expect(
+      screen.getByTestId("auth-illustration-hero", { includeHiddenElements: true }),
+    ).toBeOnTheScreen();
   });
 
   it("routes the register hint to /register", async () => {

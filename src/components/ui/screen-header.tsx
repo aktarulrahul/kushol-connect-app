@@ -1,18 +1,19 @@
 import type { LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { cn } from "@/lib/utils";
 import { color, layout } from "@/theme/tokens";
 
+import { GlassSurface } from "./glass-surface";
 import { Icon } from "./icon";
 import { Text } from "./text";
 
 // Tab-root header (DSN-AP-018, design-reference §6.1 — CircleUp 58): static header wash
-// (teal-50 → paper, ≤ 180pt), large left-aligned title, circular outlined action on the right,
-// optional avatar on the left that opens settings.
+// (teal-50 → paper, ≤ 180pt), large left-aligned title, circular outlined action(s) on the right.
+// Optional leading (legacy); Chat uses title | segment filters | + only, with search under the header.
 
 function HeaderWash() {
   return (
@@ -56,36 +57,57 @@ function CircleAction({
   );
 }
 
+type HeaderAction = { icon: LucideIcon; accessibilityLabel: string; onPress: () => void };
+
 function ScreenHeader({
   title,
   leading,
   action,
+  actions,
+  middle,
   children,
   className,
 }: {
   title: string;
   /** e.g. the user's avatar (opens /settings — wired by 03). */
   leading?: ReactNode;
-  action?: { icon: LucideIcon; accessibilityLabel: string; onPress: () => void };
-  /** Content under the title, e.g. a SegmentedPill. */
+  /** Single trailing circle action (legacy). Prefer `actions` for search + compose. */
+  action?: HeaderAction;
+  /** Trailing circle actions, left-to-right within the trailing group. */
+  actions?: HeaderAction[];
+  /** Inline chrome between title and actions (e.g. compact All · Official · Community · DMs). */
+  middle?: ReactNode;
+  /** Content under the title row, e.g. a search field. */
   children?: ReactNode;
   className?: string;
 }) {
   const insets = useSafeAreaInsets();
+  const trailing = actions ?? (action ? [action] : []);
   return (
-    <View className={cn("relative bg-background", className)} style={{ paddingTop: insets.top }}>
-      <HeaderWash />
-      <View className="gap-4 px-4 pb-3 pt-2">
-        <View className="flex-row items-center gap-3">
+    <GlassSurface
+      variant="light"
+      className={cn("relative", className)}
+      style={{ paddingTop: insets.top }}
+    >
+      {Platform.OS !== "ios" ? <HeaderWash /> : null}
+      <View className={cn("px-3 pb-1.5 pt-0.5", children || !middle ? "gap-1.5" : "gap-0")}>
+        <View className="flex-row items-center gap-2">
           {leading}
-          <Text variant="h2" className="flex-1">
+          <Text
+            variant="h2"
+            className={cn(middle ? "shrink-0 text-xl" : "flex-1", "leading-7")}
+            numberOfLines={1}
+          >
             {title}
           </Text>
-          {action ? <CircleAction {...action} /> : null}
+          {middle ? <View className="min-w-0 flex-1 items-center justify-center">{middle}</View> : null}
+          {trailing.map((item) => (
+            <CircleAction key={item.accessibilityLabel} {...item} />
+          ))}
         </View>
         {children}
       </View>
-    </View>
+    </GlassSurface>
   );
 }
 

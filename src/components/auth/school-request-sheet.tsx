@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 
 import { Sheet } from "@/components/ui/sheet";
@@ -8,11 +8,7 @@ import { Text } from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import type { CatalogKey } from "@/i18n";
 import { useT } from "@/i18n/locale-provider";
-import {
-  createSchoolRequest,
-  FixtureError,
-  type SchoolRequestInput,
-} from "@/fixtures/auth";
+import { createSchoolRequest, FixtureError, type SchoolRequestInput } from "@/fixtures/auth";
 import { normalizePhone } from "@/schemas/register";
 import {
   emptySchoolRequestForm,
@@ -49,6 +45,22 @@ function SchoolRequestSheet({
   /** Fired when the back-from-confirmation button returns the user to the hierarchy step. */
   onSent: () => void;
 }) {
+  // Mounted only while open: the Sheet is a Modal with entering-only animations, so an instant
+  // unmount on close is invisible, and every open starts from a pristine form/stage — no
+  // reset effect needed.
+  if (!open) return null;
+  return <SchoolRequestSheetBody onOpenChange={onOpenChange} cityId={cityId} onSent={onSent} />;
+}
+
+function SchoolRequestSheetBody({
+  onOpenChange,
+  cityId,
+  onSent,
+}: {
+  onOpenChange: (open: boolean) => void;
+  cityId: string;
+  onSent: () => void;
+}) {
   const t = useT();
   const [stage, setStage] = useState<"form" | "success">("form");
   const [form, setForm] = useState<SchoolRequestForm>(() => emptySchoolRequestForm(cityId));
@@ -56,19 +68,11 @@ function SchoolRequestSheet({
   const [formError, setFormError] = useState<CatalogKey | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setStage("form");
-      setForm(emptySchoolRequestForm(cityId));
-      setErrors({});
-      setFormError(null);
-      setSubmitting(false);
-    }
-  }, [open, cityId]);
-
-  const setField = <K extends keyof SchoolRequestForm>(field: K) => (value: SchoolRequestForm[K]) => {
-    setForm((previous) => ({ ...previous, [field]: value }));
-  };
+  const setField =
+    <K extends keyof SchoolRequestForm>(field: K) =>
+    (value: SchoolRequestForm[K]) => {
+      setForm((previous) => ({ ...previous, [field]: value }));
+    };
 
   const submit = async () => {
     const found = validateSchoolRequest(form);
@@ -102,9 +106,11 @@ function SchoolRequestSheet({
 
   return (
     <Sheet
-      open={open}
+      open
       onOpenChange={onOpenChange}
-      title={stage === "form" ? t("auth.school_request.title") : t("auth.school_request.success_title")}
+      title={
+        stage === "form" ? t("auth.school_request.title") : t("auth.school_request.success_title")
+      }
       description={
         stage === "form" ? t("auth.school_request.hint") : t("auth.school_request.success_body")
       }
@@ -120,11 +126,7 @@ function SchoolRequestSheet({
             <Text>{t("auth.school_request.submit")}</Text>
           </Button>
         ) : (
-          <Button
-            size="lg"
-            onPress={backToHierarchy}
-            testID="school-request-back"
-          >
+          <Button size="lg" onPress={backToHierarchy} testID="school-request-back">
             <Text>{t("auth.school_request.back")}</Text>
           </Button>
         )
@@ -150,7 +152,11 @@ function SchoolRequestSheet({
               }}
               segments={SCHOOL_REQUEST_TYPES.map((type) => ({
                 value: type,
-                label: t(type === "school" ? "auth.school_request.type_school" : "auth.school_request.type_college"),
+                label: t(
+                  type === "school"
+                    ? "auth.school_request.type_school"
+                    : "auth.school_request.type_college",
+                ),
               }))}
             />
           </View>

@@ -1,0 +1,31 @@
+# NTF-E2E-001 — pilot golden path (bn default): device registers on login, the primer shows once,
+# settings flip a class (optimistic), history lists rows, admin test push reports sent.
+# Fixture mode is ON by design (Stage 2 has no api) — src/fixtures/notifications.ts.
+#   maestro test .maestro/notifications-pilot.yaml
+# NOT yet run — Maestro CLI/device not available in the build environment (06 08-gaps, pending owner).
+# NOTE (owner freeze 2026-10-02): this flow never touches the Chat tab or the bottom menu.
+appId: com.kusholconnect.app
+---
+- launchApp:
+    clearState: true
+- tapOn: "সাইন-ইন"
+- tapOn: "মোবাইল নম্বর"
+- inputText: "01712345678"
+- tapOn: "কোড পাঠান"
+- tapOn: "৬ সংখ্যার ওটিপি কোড"
+- inputText: "123456"
+- tapOn: "যাচাই করুন"
+
+# Primer (once): value-first explainer, allow → OS ask (fixture grants).
+- assertVisible: "খবর সবার আগে — ঠিক আপনার ফোনে"
+- tapOn: "চালু করুন"
+
+# Settings → notifications: three classes, optimistic toggle, history rows.
+- tapOn: "সেটিংস"
+- tapOn: "নোটিশ"
+- assertVisible: "কোন ধরনের খবর পাবেন তা বেছে নিন।"
+- assertVisible: "ক্যাম্পেইন"
+- tapOn:
+    point: "90%, 25%"
+- assertVisible: "নোটিফিকেশন ইতিহাস"
+- assertVisible: "নতুন নোটিশ"

@@ -1,6 +1,6 @@
 import config from "../../tailwind.config";
 
-import { brand, color, hexToOklch, motion, neutral, steps, teal, text } from "./tokens";
+import { avatarPalette, avatarTintFor, brand, color, hexToOklch, motion, neutral, steps, teal, text } from "./tokens";
 
 // DSN-UT-005 — token values pinned to docs/design-reference/README.md §2 (the web repo runs the
 // same pins), NativeWind theme built only from tokens (DSN-AP-001), and the light theme's
@@ -57,6 +57,16 @@ describe("tokens", () => {
     expect(colors.teal).toEqual(teal);
     expect(Object.keys(colors)).not.toContain("red"); // Tailwind's default palette is replaced
     expect(config.darkMode).toBe("class"); // OS dark mode never activates `dark:` classes
+  });
+
+  it("keeps a stable WhatsApp-style avatar placeholder palette", () => {
+    expect(avatarPalette.length).toBeGreaterThanOrEqual(6);
+    expect(avatarTintFor("seed")).toEqual(avatarTintFor("seed"));
+    expect(avatarPalette).toContainEqual(avatarTintFor("seed"));
+    for (const swatch of avatarPalette) {
+      expect(swatch.bg).toMatch(/^#[0-9A-F]{6}$/i);
+      expect(swatch.fg).toBe("#FFFFFF");
+    }
   });
 });
 

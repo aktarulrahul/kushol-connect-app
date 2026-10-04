@@ -1,3 +1,4 @@
+import { Children } from "react";
 import { Icon } from "@/components/ui/icon";
 import { Text, TextClassContext } from "@/components/ui/text";
 import { useT } from "@/i18n/locale-provider";
@@ -66,11 +67,20 @@ type BadgeProps = React.ComponentProps<typeof View> &
     asChild?: boolean;
   } & VariantProps<typeof badgeVariants>;
 
-function Badge({ className, variant, asChild, ...props }: BadgeProps) {
+function Badge({ className, variant, asChild, children, ...props }: BadgeProps) {
   const Component = asChild ? Slot : View;
+  // Native Views cannot host raw strings; callers often pass counts/labels as children.
+  const content =
+    Platform.OS === "web"
+      ? children
+      : Children.map(children, (child) =>
+          typeof child === "string" || typeof child === "number" ? <Text>{child}</Text> : child,
+        );
   return (
     <TextClassContext.Provider value={badgeTextVariants({ variant })}>
-      <Component className={cn(badgeVariants({ variant }), className)} {...props} />
+      <Component className={cn(badgeVariants({ variant }), className)} {...props}>
+        {content}
+      </Component>
     </TextClassContext.Provider>
   );
 }

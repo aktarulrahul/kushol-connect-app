@@ -1,9 +1,8 @@
 // Authenticated api plumbing (IDT-AP-009): wraps the generated openapi-fetch client with a
-// bearer token and a single-flight refresh interceptor. On a 401 it rotates the refresh token
-// (POST /auth/refresh — through the fixture seam today) and retries the original call ONCE;
-// concurrent 401s share one rotation promise; a failed rotation clears the session (re-login).
-// `refresh` is injected so the call stays inside the seam (src/fixtures/auth.ts) until
-// integration swaps it for the real client.
+// bearer token and a single-flight refresh. On a 401 it rotates once (POST /auth/refresh) and
+// retries the original call; concurrent 401s share that promise. A rejected refresh (401, reuse,
+// revoked) clears the session. A transport error keeps the stored pair so the next foreground
+// can try again. `refresh` is injected so tests never touch the network.
 import { createApiClient, type ApiClient, type Locale } from "@/api/client";
 import type { TokenStore } from "@/lib/auth/token-store";
 
@@ -11,6 +10,14 @@ export type RefreshFn = (refreshToken: string) => Promise<{
   accessToken: string;
   refreshToken: string;
 }>;
+
+/** The refresh token was rejected (expired, reused, revoked, or the account is suspended). */
+export class RefreshRejectedError extends Error {
+  constructor() {
+    super("refresh rejected");
+    this.name = "RefreshRejectedError";
+  }
+}
 
 type AuthClientOptions = {
   baseUrl?: string;
@@ -21,6 +28,11 @@ type AuthClientOptions = {
   fetchImpl: (input: Request) => Promise<Response>;
 };
 
+export type AuthApiClient = ApiClient & {
+  /** Single-flight rotation. Shares its promise with every 401 retry. */
+  rotate(): Promise<void>;
+};
+
 function withBearer(request: Request, accessToken: string | undefined): Request {
   if (!accessToken) return request;
   // Request(request, { headers }) REPLACES all headers — start from the originals.
@@ -29,10 +41,38 @@ function withBearer(request: Request, accessToken: string | undefined): Request 
   return new Request(request, { headers });
 }
 
-export function createAuthClient(options: AuthClientOptions): ApiClient {
+export function createAuthClient(options: AuthClientOptions): AuthApiClient {
   const { store, refresh } = options;
-  // Single flight: every 401 awaiting rotation awaits this one promise (03 `05` §4).
+  // Single flight: every 401 and every proactive renew awaits this one promise.
   let refreshPromise: Promise<void> | null = null;
+
+  const rotate = (): Promise<void> => {
+    refreshPromise ??= runRotation().finally(() => {
+      refreshPromise = null;
+    });
+    return refreshPromise;
+  };
+
+  async function runRotation(): Promise<void> {
+    const generation = store.generation();
+    const current = await store.get();
+    if (store.generation() !== generation) throw new Error("signed out");
+    if (!current?.refreshToken) throw new RefreshRejectedError();
+    try {
+      const next = await refresh(current.refreshToken);
+      if (store.generation() !== generation) throw new Error("signed out");
+      await store.setIfGeneration(generation, next);
+      if (store.generation() !== generation) throw new Error("signed out");
+    } catch (error) {
+      // Sign-out won the race — do not clear a session that is already gone, and do not
+      // wipe a newer sign-in.
+      if (store.generation() !== generation) {
+        throw error instanceof Error ? error : new Error("signed out");
+      }
+      if (error instanceof RefreshRejectedError) await store.clear();
+      throw error instanceof Error ? error : new Error("token refresh failed");
+    }
+  }
 
   const authedFetch = async (input: Request): Promise<Response> => {
     const tokens = await store.get();
@@ -41,29 +81,27 @@ export function createAuthClient(options: AuthClientOptions): ApiClient {
     const response = await options.fetchImpl(withBearer(input, tokens?.accessToken));
     if (response.status !== 401 || !tokens) return response;
 
-    refreshPromise ??= refresh(tokens.refreshToken)
-      .then((next) => store.set(next))
-      .catch(async (error: unknown) => {
-        await store.clear();
-        throw error instanceof Error ? error : new Error("token refresh failed");
-      })
-      .finally(() => {
-        refreshPromise = null;
-      });
+    // A proactive renew may have rotated while this request was in flight. Refreshing again
+    // with the already-rotated token is reuse detection and kills the family.
+    const latest = await store.get();
+    if (latest && latest.accessToken !== tokens.accessToken) {
+      return options.fetchImpl(withBearer(replay, latest.accessToken));
+    }
 
     try {
-      await refreshPromise;
+      await rotate();
     } catch {
-      // Rotation failed (reuse detection revokes the family) — surface the original 401.
+      // Rejected rotations have already cleared the store. Transport errors have not.
       return response;
     }
     const next = await store.get();
     return options.fetchImpl(withBearer(replay, next?.accessToken));
   };
 
-  return createApiClient({
+  const client = createApiClient({
     baseUrl: options.baseUrl,
     locale: options.locale,
     fetch: authedFetch,
   });
+  return Object.assign(client, { rotate });
 }

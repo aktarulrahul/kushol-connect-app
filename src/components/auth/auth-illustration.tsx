@@ -9,7 +9,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import { Circle, Defs, LinearGradient, Path, Rect, Stop, Svg } from "react-native-svg";
+import { Defs, Ellipse, LinearGradient, Path, Rect, Stop, Svg } from "react-native-svg";
 
 import { cn } from "@/lib/utils";
 import { color, teal } from "@/theme/tokens";
@@ -60,7 +60,12 @@ function TypingDot({ index }: { index: number }) {
     );
   }, [index, opacity]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  return <Animated.View style={[style, { backgroundColor: teal[700] }]} className="size-2 rounded-full" />;
+  return (
+    <Animated.View
+      style={[style, { backgroundColor: teal[700] }]}
+      className="size-2 rounded-full"
+    />
+  );
 }
 
 function AuthIllustration({
@@ -78,7 +83,9 @@ function AuthIllustration({
       false,
     );
   }, [orbit]);
-  const orbitStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${orbit.value}deg` }] }));
+  const orbitStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${String(orbit.value)}deg` }],
+  }));
 
   const shieldFloat = useFloat(-7, 1700);
   const bubbleFloat = useFloat(-5, 2100, 500);
@@ -103,15 +110,26 @@ function AuthIllustration({
         }}
       >
         {/* gradient blob backdrop */}
-        <Svg width={STAGE.width} height={STAGE.height} style={{ position: "absolute", left: 0, top: 0 }}>
+        <Svg
+          width={STAGE.width}
+          height={STAGE.height}
+          style={{ position: "absolute", left: 0, top: 0 }}
+        >
           <Defs>
             <LinearGradient id="auth-illustration-blob" x1="0" y1="0" x2="1" y2="1">
               <Stop offset="0" stopColor={teal[100]} />
               <Stop offset="1" stopColor={teal[300]} />
             </LinearGradient>
           </Defs>
-          <Circle cx="120" cy="86" rx="104" ry="64" fill="url(#auth-illustration-blob)" opacity={0.55} />
-          <Circle cx="188" cy="52" r="34" fill={teal[200]} opacity={0.5} />
+          <Ellipse
+            cx="120"
+            cy="86"
+            rx="104"
+            ry="64"
+            fill="url(#auth-illustration-blob)"
+            opacity={0.55}
+          />
+          <Ellipse cx="188" cy="52" rx="34" ry="30" fill={teal[200]} opacity={0.5} />
         </Svg>
 
         {/* orbiting dot — rotates around the stage centre */}
@@ -128,7 +146,13 @@ function AuthIllustration({
           ]}
         >
           <View
-            style={{ position: "absolute", left: 78, top: 0, opacity: 0.9, backgroundColor: color.primary }}
+            style={{
+              position: "absolute",
+              left: 78,
+              top: 0,
+              opacity: 0.9,
+              backgroundColor: color.primary,
+            }}
             className="size-3 rounded-full"
           />
         </Animated.View>
@@ -160,11 +184,10 @@ function AuthIllustration({
         >
           <Svg width={84} height={62} viewBox="0 0 84 62">
             <Rect
-              x="2"
-              y="2"
               width="80"
               height="44"
               rx="12"
+              transform={[{ translateX: 2 }, { translateY: 2 }]}
               fill={color.card}
               stroke={teal[200]}
               strokeWidth={1.5}

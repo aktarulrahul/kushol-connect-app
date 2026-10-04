@@ -1,0 +1,39 @@
+# COM-E2E-001 — chat golden path (bn default): open the section group, send a text message, see
+# the optimistic bubble settle (SENDING → SENT → SEEN ticks) and the demo peer reply arrive via
+# the realtime stream. Fixture mode ON by design (Stage 2 has no api) — src/fixtures/chat.ts
+# boots in `success`.
+# Run against a development or preview build:
+#   maestro test .maestro/communication-chat-send.yaml
+# NOT yet run — Maestro CLI/device not available in the build environment (recorded as
+# "e2e pending owner run" in 05 07-progress.md and 08-gaps.md G-6).
+# Reduced-motion form (COM-AP-019): with Reduce Motion on the bubble state swap is instant —
+# verify manually on a 360pt device.
+appId: com.kusholconnect.app
+---
+- launchApp:
+    clearState: true
+# Sign in (identity fixtures land a VERIFIED demo teacher — the section moderator).
+- assertVisible: "কুশল কানেক্ট"
+- tapOn: "সাইন-ইন"
+- tapOn: "মোবাইল নম্বর"
+- inputText: "01712345678"
+- tapOn: "কোড পাঠান"
+- tapOn: "৬ সংখ্যার ওটিপি কোড"
+- inputText: "123456"
+- tapOn: "যাচাই করুন"
+
+# Chat home: the official section group is listed with an unread badge.
+- assertVisible: "চ্যাট"
+- assertVisible: "দশম শ্রেণি · বিজ্ঞান (ডেমো)"
+- tapOn: "দশম শ্রেণি · বিজ্ঞান (ডেমো)"
+
+# History loads with bn date separators; compose a reply.
+- assertVisible: "মেসেজ লিখুন…"
+- tapOn: "মেসেজ লিখুন…"
+- inputText: "স্যার, খাতা জমা দিয়েছি।"
+- tapOn:
+    id: "chat-send-button"
+
+# The optimistic bubble appears, then settles — the demo ack + peer reply land within seconds.
+- assertVisible: "স্যার, খাতা জমা দিয়েছি।"
+- assertVisible: "জি স্যার, বুঝেছি।"

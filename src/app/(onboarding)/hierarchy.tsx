@@ -19,12 +19,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
-import {
-  FixtureError,
-  listCities,
-  listSchools,
-  listSections,
-} from "@/fixtures/auth";
+import { FixtureError, listCities, listSchools, listSections } from "@/fixtures/auth";
 import { useLocale, useT } from "@/i18n/locale-provider";
 import { distinctClassLevels, sectionsForClass } from "@/lib/onboarding/hierarchy";
 import { useOnboardingStore } from "@/lib/onboarding/onboarding-store";
@@ -182,7 +177,11 @@ export default function HierarchyScreen() {
               />
             ) : (
               <Select
-                value={school ? { value: school.id, label: label(school.nameBn, school.nameEn) } : undefined}
+                value={
+                  school
+                    ? { value: school.id, label: label(school.nameBn, school.nameEn) }
+                    : undefined
+                }
                 onValueChange={pickSchool}
               >
                 <SelectTrigger accessibilityLabel={t("auth.hierarchy.school")}>
@@ -268,7 +267,10 @@ export default function HierarchyScreen() {
           <Select
             value={
               section
-                ? { value: section.id, label: t("auth.hierarchy.section_option", { name: section.name }) }
+                ? {
+                    value: section.id,
+                    label: t("auth.hierarchy.section_option", { name: section.name }),
+                  }
                 : undefined
             }
             onValueChange={pickSection}

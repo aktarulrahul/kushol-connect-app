@@ -1,0 +1,18 @@
+# PAY-E2E-002 (Maestro, app) — fee golden path with fixture mode ON: marketplace → Pay fees →
+# invoice list → pay screen → gateway chooser → status settle → receipt. Pending owner run.
+appId: com.kushol.connect
+---
+- launchApp:
+    clearState: false
+- tapOn: "মার্কেটপ্লেস"
+    optional: true
+- assertVisible: "ফি পরিশোধ"
+- tapOn: "ফি পরিশোধ"
+- assertVisible: "টিউশন ফি.*"
+- tapOn: "টিউশন ফি.*"
+- assertVisible: "পরিমাণ হিসাব"
+- assertVisible: "SSLCommerz.*"
+- tapOn: "পেমেন্ট করুন"
+- assertVisible: ".*পেমেন্ট সফল.*|.*পেমেন্ট প্রসেসিং.*"
+- tapOn: "রসিদ দেখুন"
+    optional: true
