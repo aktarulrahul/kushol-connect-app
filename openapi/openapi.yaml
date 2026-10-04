@@ -37,6 +37,17 @@ tags:
       One-way notice boards, school and section scope (05-communication-engine). Read for all
       verified tenant members; publish per the role→scope matrix (School Admin = school,
       Teacher = own section). Immutable after publish except pin + soft delete.
+  - name: console
+    description: >
+      Command Center web console (07-command-center-web): public lead funnel (pilot / vendor
+      inquiry / download click), Super Admin leads pipeline + vendor lifecycle + platform stats +
+      audit viewer, School Admin stats. Lead writes are create-only public; everything else is
+      role-gated. Revenue figures are never invented (placeholder constants).
+  - name: notifications
+    description: >
+      Push backbone (06-notifications): device tokens (native FCM), one-way topic fan-out and
+      tracked directed sends, per-class mute preferences, delivery log with admin aggregates,
+      pilot test pushes. Payloads carry a message KEY + ids only — never message bodies.
   - name: media
     description: >
       Cloudflare R2 media service (05-communication-engine; reused by 08/11/12): presigned PUT
@@ -1513,6 +1524,2102 @@ paths:
                 $ref: '#/components/schemas/MediaDownloadUrl'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/approve:
+    post:
+      operationId: approveChatGroup
+      tags: [chat]
+      summary: Approve a pending club (same-school School Admin; endpoint #22)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Club activated; creator is owner; audited
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/devices:
+    post:
+      operationId: registerNotificationDevice
+      tags: [notifications]
+      summary: Register (or refresh) this device's native FCM token (idempotent upsert)
+      description: Pending users may register; hierarchy topics are subscribed only once VERIFIED
+        (resolved from module 04 bindings — never client-supplied). Re-registration refreshes
+        `last_seen_at` without duplicating (NTF-BR-002).
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegisterInput'
+      responses:
+        '200':
+          description: Token already existed — refreshed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRegistered'
+        '201':
+          description: Token stored first time
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceRegistered'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/devices/{deviceId}:
+    delete:
+      operationId: deleteNotificationDevice
+      tags: [notifications]
+      summary: Prune this device's token (logout cleanup; caller-owned rows only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Token pruned (soft; never re-targeted)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceDeleted'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/preferences:
+    get:
+      operationId: getNotificationPreferences
+      tags: [notifications]
+      summary: My per-class mute state (always exactly the three rows, lazy-created unmuted)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The three classes
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferencePage'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: patchNotificationPreference
+      tags: [notifications]
+      summary: Toggle one class's mute (single-class PATCH, matches the settings screen)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferencePatch'
+      responses:
+        '200':
+          description: The updated three rows
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferencePage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/deliveries:
+    get:
+      operationId: listNotificationDeliveries
+      tags: [notifications]
+      summary: My notification history (newest first; directed rows carry opened state)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: class
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/NotificationClass'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/DeliveryStatus'
+      responses:
+        '200':
+          description: The caller's rows only (NTF-BR-008)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/deliveries/{deliveryId}/opened:
+    post:
+      operationId: markNotificationOpened
+      tags: [notifications]
+      summary: Report a directed push opened (write-once, idempotent on retry)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: deliveryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Flipped to opened (or already opened)
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/notifications/deliveries:
+    get:
+      operationId: listSchoolNotificationDeliveries
+      tags: [notifications]
+      summary: Delivery aggregates for my school (counts + rows, never bodies)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Tenant-forced by claim (NTF-BR-008)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryAdminPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/notifications/deliveries:
+    get:
+      operationId: listPlatformNotificationDeliveries
+      tags: [notifications]
+      summary: Platform delivery aggregates (Super Admin; optional schoolId filter)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: schoolId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Platform-wide aggregates
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryAdminPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/notifications/test:
+    post:
+      operationId: sendTestNotification
+      tags: [notifications]
+      summary: Send a visibly-marked test push to self or one in-tenant section (pilot tooling)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestPushInput'
+      responses:
+        '200':
+          description: Directed send queued; payload carries type=test
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestPushResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/requirements:
+    post:
+      operationId: createTuitionRequirement
+      tags: [tuition]
+      summary: Post a tuition requirement (verified Guardian/Student) and enqueue matching
+      description: Creates the row `open` with `expiresAt = now + 14 days` (config) and
+        enqueues the `tuition.match` job — matching itself is asynchronous and idempotent.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TuitionRequirementInput'
+      responses:
+        '201':
+          description: Posted; matching job queued
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionRequirementResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listTuitionRequirements
+      tags: [tuition]
+      summary: My requirements (poster) — School Admin role gets the school oversight list
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Poster rows or tenant oversight rows (role-driven server-side)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionRequirementPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/requirements/{requirementId}:
+    patch:
+      operationId: updateTuitionRequirement
+      tags: [tuition]
+      summary: Edit while `open` (poster) — or close (poster; School Admin may close abusive)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: requirementId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TuitionRequirementPatch'
+      responses:
+        '200':
+          description: Edited or closed (close notifies interested tutors; admin close audited)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionRequirementResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/requirements/{requirementId}/matches:
+    get:
+      operationId: listTuitionRequirementMatches
+      tags: [tuition]
+      summary: The poster's matches for one requirement (interested detail; contact post-accept)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: requirementId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matches newest-first; contact fields null until this match is accepted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionPosterMatchPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/tutors:
+    get:
+      operationId: browseTuitionTutors
+      tags: [tuition]
+      summary: Browse verified tutors (public-safe; verified filter locked ON for non-admins)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: subject
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        - name: area
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 80
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Verified profiles only; cached 120 s under `tuition:tutors:{area}`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionTutorPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/tutors/{tutorId}:
+    get:
+      operationId: getTuitionTutor
+      tags: [tuition]
+      summary: One tutor's public profile (contact fields null unless an accepted match links us)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: tutorId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public-safe DTO; unverified profiles are `NOT_FOUND`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionTutorDetail'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/tutor-profile:
+    get:
+      operationId: getMyTuitionTutorProfile
+      tags: [tuition]
+      summary: My tutor profile with the verification tracker state (draft-safe read)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The caller's profile (status, pending flag, rejection note)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionTutorProfileResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: upsertTuitionTutorProfile
+      tags: [tuition]
+      summary: Create or update my tutor profile (draft-safe; one per user)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TuitionTutorProfileInput'
+      responses:
+        '200':
+          description: The stored profile (own view incl. review tracker state)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionTutorProfileResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/tutor-profile/submit-for-review:
+    post:
+      operationId: submitTuitionTutorProfileForReview
+      tags: [tuition]
+      summary: Submit evidence and route to the verification queue (draft/rejected → pending)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TuitionSubmitForReviewInput'
+      responses:
+        '200':
+          description: Profile becomes `pending_review`; SLA reminder armed; evidence complete
+            required
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionTutorProfileResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/matches/{matchId}/interest:
+    post:
+      operationId: expressTuitionInterest
+      tags: [tuition]
+      summary: A notified tutor expresses interest (poster notified; contact stays hidden)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Match now `interested`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionMatchAction'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/matches/{matchId}/accept:
+    post:
+      operationId: acceptTuitionMatch
+      tags: [tuition]
+      summary: Poster accepts one interested tutor — contact reveal + chat + fee DUE fact (tx)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Match `accepted`, requirement `matched`; audited (the fee event)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionAcceptResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/matches/{matchId}/decline:
+    post:
+      operationId: declineTuitionMatch
+      tags: [tuition]
+      summary: Tutor or poster declines (counterpart notified politely; no contact leaked)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Match `declined`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionMatchAction'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/tuition/matches:
+    get:
+      operationId: listMyTuitionMatches
+      tags: [tuition]
+      summary: Tutor-side matches (requirement summaries; poster contact post-accept only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The caller's matches as a tutor, newest first
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionTutorMatchPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/tutor-verifications:
+    get:
+      operationId: listTuitionVerifications
+      tags: [tuition]
+      summary: Verification queue — School Admin (linked school) / Super Admin (platform, NULL school)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: scope
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/VerificationScope'
+      responses:
+        '200':
+          description: Pending (+ decided history) rows routed to the caller's queue
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionVerificationPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/tutor-verifications/{verificationId}/approve:
+    post:
+      operationId: approveTuitionVerification
+      tags: [tuition]
+      summary: Approve (optional note) — profile verified, badge live, tutor notified, audited
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: verificationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TuitionApproveInput'
+      responses:
+        '200':
+          description: Decision recorded; tutor tags busted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionVerificationResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/tutor-verifications/{verificationId}/reject:
+    post:
+      operationId: rejectTuitionVerification
+      tags: [tuition]
+      summary: Reject — `decisionNote` required (5–500), readable by the tutor; audited
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: verificationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TuitionRejectInput'
+      responses:
+        '200':
+          description: Decision recorded; tutor notified with the reason
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TuitionVerificationResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/storefronts:
+    post:
+      operationId: createVendorStorefront
+      tags: [commerce]
+      summary: Create a storefront (approved vendor gate — 07; schools served, pickup address)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceStorefrontInput'
+      responses:
+        '201':
+          description: Created `active`; school tags busted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceStorefrontResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listVendorStorefronts
+      tags: [commerce]
+      summary: My storefronts + orders-needing-action counts
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Own rows (INV-5)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceStorefrontList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/storefronts/{id}:
+    patch:
+      operationId: updateVendorStorefront
+      tags: [commerce]
+      summary: Edit fields / schools list / pause-resume (orders continue while paused)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceStorefrontPatch'
+      responses:
+        '200':
+          description: Updated; old+new school tags busted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceStorefrontResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/storefronts/{id}/products:
+    post:
+      operationId: createVendorProduct
+      tags: [commerce]
+      summary: Create product (+variants + one inventory row per sellable, images via 05)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceProductInput'
+      responses:
+        '201':
+          description: Created `active` with inventory rows
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceProductResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/products/{id}:
+    patch:
+      operationId: updateVendorProduct
+      tags: [commerce]
+      summary: Edit product / archive (snapshots untouched — INV-4)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceProductPatch'
+      responses:
+        '200':
+          description: Updated; product + store tags busted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceProductResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/products/{id}/inventory:
+    patch:
+      operationId: updateVendorInventory
+      tags: [commerce]
+      summary: Set stock (`qtyOnHand` ≥ reserved enforced server-side; optional variantId)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceInventoryPatch'
+      responses:
+        '200':
+          description: Updated inventory row
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceInventoryResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/commerce/stores:
+    get:
+      operationId: listCommerceStores
+      tags: [commerce]
+      summary: Buyer — active stores serving my school (INV-1; vendor approved fail-closed INV-6)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: School-scoped list; cached `commerce:stores:school:{id}`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceStoreList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/commerce/stores/{id}/products:
+    get:
+      operationId: listStoreProducts
+      tags: [commerce]
+      summary: Store grid with availability states (archived/out-of-stock visible-with-label)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active products + per-item stock state
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceProductCardList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/commerce/products/{id}:
+    get:
+      operationId: getCommerceProduct
+      tags: [commerce]
+      summary: Product detail — variant picker, stock state, trust signals (INV-1 school check)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detail payload
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceProductDetailResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/commerce/orders:
+    post:
+      operationId: placeCommerceOrder
+      tags: [commerce]
+      summary: Place order (tx — reserve stock, snapshot items, freeze commission; COD guard)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceOrderInput'
+      responses:
+        '201':
+          description: Order `placed`; reservation held; auto-cancel timer armed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listMyCommerceOrders
+      tags: [commerce]
+      summary: Buyer — my orders (row-level own)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Newest first
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/commerce/orders/{id}:
+    get:
+      operationId: getMyCommerceOrder
+      tags: [commerce]
+      summary: Buyer — order detail / pickup instructions / tracking
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The order with snapshot items
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/commerce/orders/{id}/cancel:
+    post:
+      operationId: cancelMyCommerceOrder
+      tags: [commerce]
+      summary: Buyer cancel (placed/confirmed/ready only; reason optional)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceBuyerCancelInput'
+      responses:
+        '200':
+          description: Cancelled; reservation released or stock restocked per state
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/orders:
+    get:
+      operationId: listVendorOrders
+      tags: [commerce]
+      summary: Vendor fulfilment board — own storefronts only (INV-5)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Orders grouped client-side by status
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/orders/{id}:
+    get:
+      operationId: getVendorOrder
+      tags: [commerce]
+      summary: Vendor order detail (buyer, fulfilment info, commission row)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Own order or `FORBIDDEN`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/orders/{id}/confirm:
+    post:
+      operationId: confirmVendorOrder
+      tags: [commerce]
+      summary: placed → confirmed (one tx decrements reserved + on-hand)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Status `confirmed`; buyer pushed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/orders/{id}/ready:
+    post:
+      operationId: readyVendorOrder
+      tags: [commerce]
+      summary: confirmed → ready_for_pickup (pickup orders only — INV-3)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Status `ready_for_pickup`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/orders/{id}/ship:
+    post:
+      operationId: shipVendorOrder
+      tags: [commerce]
+      summary: confirmed → shipped (courier orders only; courier + tracking required)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceShipInput'
+      responses:
+        '200':
+          description: Status `shipped` with tracking
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/orders/{id}/complete:
+    post:
+      operationId: completeVendorOrder
+      tags: [commerce]
+      summary: ready/shipped → completed (terminal; COD collection audited)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Status `completed`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/orders/{id}/cancel:
+    post:
+      operationId: cancelVendorOrder
+      tags: [commerce]
+      summary: Vendor cancel (placed/confirmed only; reason required ≥ 5 chars)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommerceVendorCancelInput'
+      responses:
+        '200':
+          description: Cancelled with restock semantics per state
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommerceOrderResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/invoices:
+    post:
+      operationId: issueInvoice
+      tags: [payments]
+      summary: Issue a fee invoice to one student of the caller's school (audited)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentsInvoiceInput'
+      responses:
+        '201':
+          description: Invoice created `issued`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsInvoiceResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listSchoolInvoices
+      tags: [payments]
+      summary: School ledger — invoices (tenant-scoped, filters + server totals)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/PaymentsInvoiceStatus'
+        - name: month
+          in: query
+          schema:
+            type: string
+            description: 'YYYY-MM'
+      responses:
+        '200':
+          description: Tenant-scoped rows + server-computed totals (never client math)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsInvoicePage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/invoices/bulk:
+    post:
+      operationId: issueInvoicesBulk
+      tags: [payments]
+      summary: Bulk-issue to a section (1–200 students, one tx; notify jobs after commit)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentsBulkInput'
+      responses:
+        '201':
+          description: '{created, failed[]} — never a silent partial batch'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsBulkResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/invoices/{id}/void:
+    patch:
+      operationId: voidInvoice
+      tags: [payments]
+      summary: Void an invoice before any successful payment (CONFLICT after)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentsVoidInput'
+      responses:
+        '200':
+          description: Invoice `void`
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsInvoiceResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/ledger:
+    get:
+      operationId: listSchoolLedger
+      tags: [payments]
+      summary: Append-only ledger entries (tenant-scoped; always fresh — never cached)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: month
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Entries + server totals
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsLedgerPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/ledger/summary:
+    get:
+      operationId: getSchoolLedgerSummary
+      tags: [payments]
+      summary: 'Counts + ৳ totals (issued/paid/overdue, collected, outstanding) per month'
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: month
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Summary payload
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsSummaryResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/payments/initiate:
+    post:
+      operationId: initiatePayment
+      tags: [payments]
+      summary: Start a gateway payment for an invoice or an online order (verified + entitled payer)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentsInitiateInput'
+      responses:
+        '201':
+          description: RedirectPayload — the gateway-hosted checkout reference
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsRedirectResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/payments/transactions:
+    get:
+      operationId: listMyPayments
+      tags: [payments]
+      summary: Payer-scoped own transactions, newest first
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Own transactions
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsTransactionList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/payments/transactions/{txnId}:
+    get:
+      operationId: getPaymentTransaction
+      tags: [payments]
+      summary: Transaction detail (payer or the school's admin; ids/amounts/status only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transaction + items context
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsTransactionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/payments/invoices/{invoiceId}/status:
+    get:
+      operationId: getInvoicePaymentStatus
+      tags: [payments]
+      summary: 'InvoiceStatus (export): status + amount + paid txn id (status-screen poll)'
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: invoiceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: InvoiceStatusDTO
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsInvoiceStatusResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/payments/receipts/{txnId}:
+    get:
+      operationId: getPaymentReceipt
+      tags: [payments]
+      summary: Immutable R2 URL + serial (payer or school admin; NOT_FOUND while generating)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Receipt link payload
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsReceiptResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/webhooks/{gateway}:
+    post:
+      operationId: gatewayWebhook
+      tags: [payments]
+      summary: |
+        SIGNATURE-VERIFIED EXCEPTION — the one route outside the auth chain (11/12 §2 §6):
+        rate limit → signature + replay-window verification BEFORE parsing. Invalid → 403 with a
+        flagged gateway_events row; valid → 200 {"processed": bool, "reason"?} (always 2xx —
+        gateways retry on non-2xx); duplicates → 200 DUPLICATE_WEBHOOK with zero side effects.
+      security: []
+      parameters:
+        - name: gateway
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/PaymentsGateway'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Opaque gateway payload — parsed only after verification
+      responses:
+        '200':
+          description: Envelope accepted (idempotent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentsWebhookResult'
+        '403':
+          description: Invalid signature / replayed timestamp (flagged + alerted)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/leads:
+    post:
+      operationId: createLead
+      tags: [console]
+      summary: Public lead create (pilot_registration / download_click)
+      description: >-
+        Create-only (WEB-BR-004) — status forced `new`, source server-allowlisted, utm
+        captured and capped (never trusted from the client). Rate-limit class `leads`.
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadCreate'
+      responses:
+        '201':
+          description: Lead stored (`new`)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadCreated'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/register:
+    post:
+      operationId: registerVendor
+      tags: [console]
+      summary: Vendor inquiry — creates the lead AND a pending vendor account in one transaction
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorRegisterInput'
+      responses:
+        '201':
+          description: Lead + pending account stored
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadCreated'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/leads:
+    get:
+      operationId: listAdminLeads
+      tags: [console]
+      summary: Leads pipeline (Super Admin; type/status filters)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/LeadType'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/LeadStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: The pipeline page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/leads/{leadId}:
+    patch:
+      operationId: updateLeadStatus
+      tags: [console]
+      summary: Move a lead through new → contacted → converted or archived (transition table)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: leadId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeadStatusPatch'
+      responses:
+        '200':
+          description: Updated lead
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/vendors:
+    get:
+      operationId: listAdminVendors
+      tags: [console]
+      summary: Vendor queue (Super Admin; status filter + name search)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/VendorStatus'
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 150
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: The queue page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/vendors/{vendorId}/approve:
+    patch:
+      operationId: approveVendor
+      tags: [console]
+      summary: Approve a vendor (creates the portal login idempotently; audited)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: vendorId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Vendor approved
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorAccount'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/vendors/{vendorId}/reject:
+    patch:
+      operationId: rejectVendor
+      tags: [console]
+      summary: Reject a vendor (reason 10–500 required; audited)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: vendorId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorReasonInput'
+      responses:
+        '200':
+          description: Vendor rejected
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorAccount'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/vendors/{vendorId}/suspend:
+    patch:
+      operationId: suspendVendor
+      tags: [console]
+      summary: Suspend a vendor (reason required; sessions invalidated; audited)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: vendorId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorReasonInput'
+      responses:
+        '200':
+          description: Vendor suspended
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorAccount'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/schools:
+    get:
+      operationId: listAdminSchools
+      tags: [console]
+      summary: Tenant list (Super Admin; read-only projection of 04's schools)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: >-
+            Tenants page — id, names, type, city, status, createdAt.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [console]
+      summary: Platform dashboard counts (Super Admin; revenue placeholder per WEB-BR-009)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Tenants, cities, leads by status/type, pending vendors, revenue placeholder
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/stats:
+    get:
+      operationId: getSchoolStats
+      tags: [console]
+      summary: School dashboard counts (claim-scoped; partial-payload flags per source)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: students / activeSections / pendingVerifications / noticesLast30d
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchoolStats'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/audit-log:
+    get:
+      operationId: listAdminAuditLog
+      tags: [console]
+      summary: Read-only audit viewer over 01's append-only log (Super Admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: entityType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: entityId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Newest-first audit page (no mutation affordance exists)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogPage'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   headers:
     XRequestId:
@@ -2631,6 +4738,2014 @@ components:
             rehydrated:
               type: boolean
               description: True when an archived asset was restored to the hot prefix first
+    NotificationClass:
+      type: string
+      enum: [notices, chat, campaigns]
+    DeliveryStatus:
+      type: string
+      enum: [queued, sent, delivered, opened, failed]
+    DevicePlatform:
+      type: string
+      enum: [ios, android]
+    DeviceRegisterInput:
+      type: object
+      required: [token, platform]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Native FCM registration token (Expo/APNs tokens rejected)
+          pattern: '^[^\s]+$'
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        appVersion:
+          type: string
+          maxLength: 32
+    DeviceRegistered:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, platform, appVersion, lastSeenAt, topics]
+          properties:
+            id:
+              type: string
+            platform:
+              $ref: '#/components/schemas/DevicePlatform'
+            appVersion:
+              type: string
+            lastSeenAt:
+              type: string
+              format: date-time
+            topics:
+              type: array
+              description: Bound topics now subscribed (empty while PENDING)
+              items:
+                type: string
+    DeviceDeleted:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [deleted]
+          properties:
+            deleted:
+              type: boolean
+    PreferenceRow:
+      type: object
+      required: [class, muted]
+      properties:
+        class:
+          $ref: '#/components/schemas/NotificationClass'
+        muted:
+          type: boolean
+    PreferencePage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreferenceRow'
+    PreferencePatch:
+      type: object
+      required: [class, muted]
+      properties:
+        class:
+          $ref: '#/components/schemas/NotificationClass'
+        muted:
+          type: boolean
+    Delivery:
+      type: object
+      required: [id, class, payloadKey, deepLink, status, createdAt]
+      properties:
+        id:
+          type: string
+        class:
+          $ref: '#/components/schemas/NotificationClass'
+        payloadKey:
+          type: string
+          description: i18n key from the notifications.* catalog (never message content)
+        topicName:
+          type: string
+        deepLink:
+          type: string
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+        sentAt:
+          type: string
+          format: date-time
+        openedAt:
+          type: string
+          format: date-time
+          description: Directed rows only
+        createdAt:
+          type: string
+          format: date-time
+    DeliveryPage:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Delivery'
+        page:
+          type: object
+          required: [number, size, total]
+          properties:
+            number:
+              type: integer
+            size:
+              type: integer
+            total:
+              type: integer
+    DeliveryStatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status:
+          $ref: '#/components/schemas/DeliveryStatus'
+        count:
+          type: integer
+    DeliveryAdminPage:
+      type: object
+      required: [data, counts, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Delivery'
+        counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryStatusCount'
+        page:
+          type: object
+          required: [number, size, total]
+          properties:
+            number:
+              type: integer
+            size:
+              type: integer
+            total:
+              type: integer
+    TestPushInput:
+      type: object
+      required: [class, target]
+      properties:
+        class:
+          $ref: '#/components/schemas/NotificationClass'
+        target:
+          type: string
+          enum: [self, section]
+        sectionId:
+          type: string
+          description: Required iff target=section; must resolve to the caller's school
+    TestPushResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [deliveryIds, devices]
+          properties:
+            deliveryIds:
+              type: array
+              items:
+                type: string
+            devices:
+              type: integer
+    LeadType:
+      type: string
+      enum: [pilot_registration, vendor_inquiry, download_click]
+    LeadStatus:
+      type: string
+      enum: [new, contacted, converted, archived]
+    LeadSource:
+      type: string
+      enum: [landing_hero, roi_calculator, for_vendors, download_page, direct]
+    LeadCreate:
+      type: object
+      required: [type, source]
+      properties:
+        type:
+          $ref: '#/components/schemas/LeadType'
+        contactName:
+          type: string
+          minLength: 3
+          maxLength: 120
+        phone:
+          type: string
+          description: BD mobile E.164 +8801XXXXXXXXX
+          pattern: '^\+8801[3-9][0-9]{8}$'
+        email:
+          type: string
+          maxLength: 200
+        schoolName:
+          type: string
+          minLength: 3
+          maxLength: 150
+        cityId:
+          type: string
+        studentsCount:
+          type: integer
+          minimum: 1
+          maximum: 20000
+        targeting:
+          type: string
+          minLength: 10
+          maxLength: 1000
+        message:
+          type: string
+          maxLength: 1000
+        source:
+          $ref: '#/components/schemas/LeadSource'
+        utmSource:
+          type: string
+          maxLength: 120
+        utmMedium:
+          type: string
+          maxLength: 120
+        utmCampaign:
+          type: string
+          maxLength: 120
+    LeadCreated:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, type, status]
+          properties:
+            id:
+              type: string
+            type:
+              $ref: '#/components/schemas/LeadType'
+            status:
+              $ref: '#/components/schemas/LeadStatus'
+    Lead:
+      type: object
+      required: [id, type, status, source, createdAt]
+      properties:
+        id:
+          type: string
+        type:
+          $ref: '#/components/schemas/LeadType'
+        contactName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        schoolName:
+          type: string
+        cityId:
+          type: string
+        studentsCount:
+          type: integer
+        targeting:
+          type: string
+        message:
+          type: string
+        status:
+          $ref: '#/components/schemas/LeadStatus'
+        source:
+          $ref: '#/components/schemas/LeadSource'
+        utmSource:
+          type: string
+        utmMedium:
+          type: string
+        utmCampaign:
+          type: string
+        vendorAccountId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    LeadPage:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lead'
+        page:
+          type: object
+          required: [number, size, total]
+          properties:
+            number:
+              type: integer
+            size:
+              type: integer
+            total:
+              type: integer
+    LeadStatusPatch:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/LeadStatus'
+        reason:
+          type: string
+          maxLength: 500
+    VendorStatus:
+      type: string
+      enum: [pending, approved, rejected, suspended]
+    VendorRegisterInput:
+      type: object
+      required: [companyName, contactName, phone, targeting]
+      properties:
+        companyName:
+          type: string
+          minLength: 3
+          maxLength: 150
+        contactName:
+          type: string
+          minLength: 3
+          maxLength: 120
+        phone:
+          type: string
+          pattern: '^\+8801[3-9][0-9]{8}$'
+        email:
+          type: string
+          maxLength: 200
+        targeting:
+          type: string
+          minLength: 10
+          maxLength: 1000
+        utmSource:
+          type: string
+          maxLength: 120
+        utmMedium:
+          type: string
+          maxLength: 120
+        utmCampaign:
+          type: string
+          maxLength: 120
+    VendorAccount:
+      type: object
+      required: [id, companyName, contactName, phone, targeting, status, createdAt]
+      properties:
+        id:
+          type: string
+        companyName:
+          type: string
+        contactName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        targeting:
+          type: string
+        status:
+          $ref: '#/components/schemas/VendorStatus'
+        decisionReason:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    VendorPage:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VendorAccount'
+        page:
+          type: object
+          required: [number, size, total]
+          properties:
+            number:
+              type: integer
+            size:
+              type: integer
+            total:
+              type: integer
+    VendorReasonInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 500
+    SchoolRow:
+      type: object
+      required: [id, nameBn, nameEn, type, status, createdAt]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        type:
+          type: string
+          enum: [school, college]
+        cityId:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, ARCHIVED]
+        createdAt:
+          type: string
+          format: date-time
+    SchoolPage:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchoolRow'
+        page:
+          type: object
+          required: [number, size, total]
+          properties:
+            number:
+              type: integer
+            size:
+              type: integer
+            total:
+              type: integer
+    AdminStats:
+      type: object
+      required: [tenants, activeCities, leadsByStatus, leadsByType, vendorsPending, revenue]
+      properties:
+        tenants:
+          type: integer
+        activeCities:
+          type: integer
+        leadsByStatus:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryStatusCount'
+        leadsByType:
+          type: array
+          items:
+            type: object
+            required: [type, count]
+            properties:
+              type:
+                $ref: '#/components/schemas/LeadType'
+              count:
+                type: integer
+        vendorsPending:
+          type: integer
+        revenue:
+          type: object
+          required: [connected, connectsIn]
+          properties:
+            connected:
+              type: boolean
+            connectsIn:
+              type: string
+    SchoolStats:
+      type: object
+      required: [students, activeSections, pendingVerifications, noticesLast30d]
+      properties:
+        students:
+          type: object
+          required: [count, available]
+          properties:
+            count:
+              type: integer
+            available:
+              type: boolean
+        activeSections:
+          type: object
+          required: [count, available]
+          properties:
+            count:
+              type: integer
+            available:
+              type: boolean
+        pendingVerifications:
+          type: object
+          required: [count, available]
+          properties:
+            count:
+              type: integer
+            available:
+              type: boolean
+        noticesLast30d:
+          type: object
+          required: [count, available]
+          properties:
+            count:
+              type: integer
+            available:
+              type: boolean
+    AuditLogEntry:
+      type: object
+      required: [id, actorUserId, actorRole, action, entityType, entityId, createdAt]
+      properties:
+        id:
+          type: string
+        actorUserId:
+          type: string
+        actorRole:
+          type: string
+        schoolId:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    AuditLogPage:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+        page:
+          type: object
+          required: [number, size, total]
+          properties:
+            number:
+              type: integer
+            size:
+              type: integer
+            total:
+              type: integer
+    TuitionSubjectKey:
+      title: SubjectKey
+      type: string
+      description: Shared bn/en subject catalog key (বিষয়)
+      enum: [math, physics, chemistry, biology, english, bangla, higher_math, ict]
+    TuitionClassLevel:
+      title: ClassLevel
+      type: string
+      description: Class-level catalog key (শ্রেণি)
+      enum: [class_6, class_7, class_8, class_9, class_10, ssc, hsc]
+    TuitionGenderPref:
+      title: GenderPref
+      type: string
+      enum: [any, male, female]
+    TuitionRequirementStatus:
+      title: RequirementStatus
+      type: string
+      enum: [open, matched, closed, expired]
+    TuitionTutorStatus:
+      title: TutorStatus
+      type: string
+      enum: [draft, pending_review, verified, rejected, suspended]
+    TuitionVerificationStatus:
+      title: VerificationStatus
+      type: string
+      enum: [pending, approved, rejected]
+    VerificationScope:
+      title: VerificationScope
+      type: string
+      description: Queue scope — `school` (School Admin) or `platform` (Super Admin, NULL-school tutors)
+      enum: [school, platform]
+    TuitionMatchStatus:
+      title: MatchStatus
+      type: string
+      enum: [notified, interested, accepted, declined, expired]
+    TuitionRequirement:
+      type: object
+      required: [id, posterRole, subjects, classLevel, budgetMin, budgetMax, genderPref,
+        locationArea, lat, lng, status, interestedCount, expiresAt, createdAt]
+      properties:
+        id:
+          type: string
+        posterRole:
+          type: string
+          enum: [guardian, student]
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        classLevel:
+          $ref: '#/components/schemas/TuitionClassLevel'
+        budgetMin:
+          type: integer
+        budgetMax:
+          type: integer
+        genderPref:
+          $ref: '#/components/schemas/TuitionGenderPref'
+        locationArea:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        scheduleNote:
+          type: string
+        status:
+          $ref: '#/components/schemas/TuitionRequirementStatus'
+        interestedCount:
+          type: integer
+          description: Count of interested matches (list/detail display)
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    TuitionRequirementInput:
+      type: object
+      required: [subjects, classLevel, budgetMin, budgetMax, genderPref, locationArea, lat, lng]
+      properties:
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+          minItems: 1
+          maxItems: 5
+        classLevel:
+          $ref: '#/components/schemas/TuitionClassLevel'
+        budgetMin:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        budgetMax:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        genderPref:
+          $ref: '#/components/schemas/TuitionGenderPref'
+        locationArea:
+          type: string
+          minLength: 2
+          maxLength: 80
+        lat:
+          type: number
+          format: double
+          description: Bangladesh bounds (lat 20.5–26.7)
+        lng:
+          type: number
+          format: double
+          description: Bangladesh bounds (lng 88.0–92.7)
+        scheduleNote:
+          type: string
+          maxLength: 500
+    TuitionRequirementPatch:
+      type: object
+      description: 'Edit fields while `open`; `close: true` closes (mutually exclusive with
+        edits)'
+      properties:
+        close:
+          type: boolean
+          description: Close the requirement (poster own, or School Admin within tenant)
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        classLevel:
+          $ref: '#/components/schemas/TuitionClassLevel'
+        budgetMin:
+          type: integer
+        budgetMax:
+          type: integer
+        genderPref:
+          $ref: '#/components/schemas/TuitionGenderPref'
+        locationArea:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        scheduleNote:
+          type: string
+    TuitionRequirementResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/TuitionRequirement'
+    TuitionRequirementPage:
+      type: object
+      required: [data, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionRequirement'
+        page:
+          type: object
+          required: [number, size, total]
+          properties:
+            number:
+              type: integer
+            size:
+              type: integer
+            total:
+              type: integer
+    TuitionTutorCard:
+      type: object
+      required: [id, name, university, subjects, classesTaught, verifiedAt]
+      properties:
+        id:
+          type: string
+          description: Tutor profile id
+        name:
+          type: string
+        photoUrl:
+          type: string
+        university:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        classesTaught:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionClassLevel'
+        hourlyRateHint:
+          type: integer
+        locationArea:
+          type: string
+        verifiedAt:
+          type: string
+          format: date-time
+    TuitionTutorPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionTutorCard'
+        nextCursor:
+          type: string
+    TuitionContact:
+      type: object
+      description: Revealed only after the linking match is accepted (INV-4)
+      required: [phone]
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+    TuitionTutorDetail:
+      type: object
+      required: [id, name, university, subjects, classesTaught, verifiedAt, contact]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        photoUrl:
+          type: string
+        university:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        classesTaught:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionClassLevel'
+        bioBn:
+          type: string
+        bioEn:
+          type: string
+        hourlyRateHint:
+          type: integer
+        availability:
+          type: string
+        locationArea:
+          type: string
+        verifiedAt:
+          type: string
+          format: date-time
+        contact:
+          oneOf:
+            - $ref: '#/components/schemas/TuitionContact'
+            - type: 'null'
+    TuitionTutorProfileInput:
+      type: object
+      required: [university, subjects, classesTaught]
+      properties:
+        university:
+          type: string
+          minLength: 2
+          maxLength: 120
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+          minItems: 1
+          maxItems: 5
+        classesTaught:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionClassLevel'
+          minItems: 1
+        bioBn:
+          type: string
+          maxLength: 1000
+        bioEn:
+          type: string
+          maxLength: 1000
+        hourlyRateHint:
+          type: integer
+          minimum: 0
+          maximum: 5000
+        availability:
+          type: string
+          maxLength: 500
+        locationArea:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        photoMediaId:
+          type: string
+    TuitionTutorProfile:
+      type: object
+      required: [id, status, university, subjects, classesTaught]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/TuitionTutorStatus'
+        university:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        classesTaught:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionClassLevel'
+        bioBn:
+          type: string
+        bioEn:
+          type: string
+        hourlyRateHint:
+          type: integer
+        availability:
+          type: string
+        locationArea:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        photoUrl:
+          type: string
+        hasPendingReview:
+          type: boolean
+        rejectionNote:
+          type: string
+          description: The latest rejected review's decision note (tracker display)
+        verifiedAt:
+          type: string
+          format: date-time
+    TuitionTutorProfileResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/TuitionTutorProfile'
+    TuitionSubmitForReviewInput:
+      type: object
+      required: [nationalIdMediaId, evidenceMediaIds]
+      properties:
+        nationalIdMediaId:
+          type: string
+          description: A `confirmed` 05 media asset (image/PDF)
+        evidenceMediaIds:
+          type: array
+          items:
+            type: string
+          minItems: 1
+    TuitionVerificationRow:
+      type: object
+      required: [id, tutorProfileId, tutorName, university, subjects, classesTaught,
+        submittedAt, status, nationalIdMediaId, evidenceMediaIds]
+      properties:
+        id:
+          type: string
+        tutorProfileId:
+          type: string
+        tutorName:
+          type: string
+        tutorPhotoUrl:
+          type: string
+        university:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        classesTaught:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionClassLevel'
+        locationArea:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        slaOverdue:
+          type: boolean
+          description: Pending longer than the 48 h SLA (OQ-7 default)
+        status:
+          $ref: '#/components/schemas/TuitionVerificationStatus'
+        reviewerScope:
+          type: string
+          enum: [school, platform]
+        decisionNote:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        nationalIdMediaId:
+          type: string
+          description: Reviewer-only (plus owning tutor); never in public payloads
+        evidenceMediaIds:
+          type: array
+          items:
+            type: string
+    TuitionVerificationPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionVerificationRow'
+    TuitionVerificationResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/TuitionVerificationRow'
+    TuitionApproveInput:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+    TuitionRejectInput:
+      type: object
+      required: [decisionNote]
+      properties:
+        decisionNote:
+          type: string
+          minLength: 5
+          maxLength: 500
+    TuitionMatchTutorSummary:
+      type: object
+      required: [profileId, name, university, subjects]
+      properties:
+        profileId:
+          type: string
+        name:
+          type: string
+        photoUrl:
+          type: string
+        university:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        hourlyRateHint:
+          type: integer
+    TuitionMatchRequirementSummary:
+      type: object
+      required: [subjects, classLevel, budgetMin, budgetMax, locationArea]
+      properties:
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionSubjectKey'
+        classLevel:
+          $ref: '#/components/schemas/TuitionClassLevel'
+        budgetMin:
+          type: integer
+        budgetMax:
+          type: integer
+        genderPref:
+          $ref: '#/components/schemas/TuitionGenderPref'
+        locationArea:
+          type: string
+        scheduleNote:
+          type: string
+    TuitionChatHandle:
+      type: object
+      description: Same-school accept → `dmGroupId`; cross-school accept → `messageRequestId`
+      properties:
+        dmGroupId:
+          type: string
+        messageRequestId:
+          type: string
+        pendingRequest:
+          type: boolean
+    TuitionPosterMatch:
+      type: object
+      required: [id, status, notifiedAt, tutor]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/TuitionMatchStatus'
+        notifiedAt:
+          type: string
+          format: date-time
+        respondedAt:
+          type: string
+          format: date-time
+        tutor:
+          $ref: '#/components/schemas/TuitionMatchTutorSummary'
+        contact:
+          oneOf:
+            - $ref: '#/components/schemas/TuitionContact'
+            - type: 'null'
+        chat:
+          oneOf:
+            - $ref: '#/components/schemas/TuitionChatHandle'
+            - type: 'null'
+    TuitionPosterMatchPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionPosterMatch'
+    TuitionTutorMatch:
+      type: object
+      required: [id, status, notifiedAt, requirement]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/TuitionMatchStatus'
+        notifiedAt:
+          type: string
+          format: date-time
+        respondedAt:
+          type: string
+          format: date-time
+        requirement:
+          $ref: '#/components/schemas/TuitionMatchRequirementSummary'
+        contact:
+          oneOf:
+            - $ref: '#/components/schemas/TuitionContact'
+            - type: 'null'
+        chat:
+          oneOf:
+            - $ref: '#/components/schemas/TuitionChatHandle'
+            - type: 'null'
+    TuitionTutorMatchPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TuitionTutorMatch'
+    TuitionMatchAction:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, status]
+          properties:
+            id:
+              type: string
+            status:
+              $ref: '#/components/schemas/TuitionMatchStatus'
+            respondedAt:
+              type: string
+              format: date-time
+    TuitionAcceptResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [match, contact]
+          properties:
+            match:
+              $ref: '#/components/schemas/TuitionPosterMatch'
+            contact:
+              $ref: '#/components/schemas/TuitionContact'
+            chat:
+              $ref: '#/components/schemas/TuitionChatHandle'
+    CommerceStorefrontStatus:
+      title: StorefrontStatus
+      type: string
+      enum: [active, paused]
+    CommerceCategory:
+      title: Category
+      type: string
+      enum: [books, uniforms, stationery, other]
+    CommerceProductStatus:
+      title: ProductStatus
+      type: string
+      enum: [active, archived]
+    CommerceStockState:
+      title: StockState
+      type: string
+      description: Frozen buyer DTO tri-state (in / low / out)
+      enum: [in_stock, low, out_of_stock]
+    CommerceOrderStatus:
+      title: OrderStatus
+      type: string
+      enum: [placed, confirmed, ready_for_pickup, shipped, completed, cancelled]
+    CommerceFulfilment:
+      title: Fulfilment
+      type: string
+      enum: [pickup, courier]
+    CommercePaymentMethod:
+      title: PaymentMethod
+      type: string
+      enum: [cod, online]
+    CommerceCancelledBy:
+      title: CancelledBy
+      type: string
+      enum: [buyer, vendor, system]
+    CommerceStorefront:
+      type: object
+      required: [id, nameBn, status, pickupAddress, schoolIds, placedCount, createdAt]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/CommerceStorefrontStatus'
+        pickupAddress:
+          type: string
+        deliveryNote:
+          type: string
+        schoolIds:
+          type: array
+          items:
+            type: string
+        placedCount:
+          type: integer
+          description: Orders needing action (status placed)
+        createdAt:
+          type: string
+          format: date-time
+    CommerceStorefrontInput:
+      type: object
+      required: [nameBn, schoolIds, pickupAddress]
+      properties:
+        nameBn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        nameEn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 1000
+        schoolIds:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 50
+        pickupAddress:
+          type: string
+          minLength: 10
+          maxLength: 300
+        deliveryNote:
+          type: string
+          maxLength: 300
+    CommerceStorefrontPatch:
+      type: object
+      description: 'Field edits, schools replace-set, or the pause/resume action'
+      properties:
+        pause:
+          type: boolean
+          description: 'true = paused, false = active (orders continue either way)'
+        nameBn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        nameEn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 1000
+        schoolIds:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 50
+        pickupAddress:
+          type: string
+          minLength: 10
+          maxLength: 300
+        deliveryNote:
+          type: string
+          maxLength: 300
+    CommerceStorefrontResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CommerceStorefront'
+    CommerceStorefrontList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceStorefront'
+    CommerceStoreSummary:
+      type: object
+      required: [id, nameBn, pickupAddress]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        description:
+          type: string
+        deliveryNote:
+          type: string
+        pickupAddress:
+          type: string
+    CommerceStoreList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceStoreSummary'
+    CommerceProductCard:
+      type: object
+      required: [id, nameBn, priceBdt, stockState, category]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        priceBdt:
+          type: number
+          format: double
+        stockState:
+          $ref: '#/components/schemas/CommerceStockState'
+        imagePrimary:
+          type: string
+          description: Primary image URL (05/R2); placeholder when missing
+        category:
+          $ref: '#/components/schemas/CommerceCategory'
+    CommerceProductCardList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceProductCard'
+    CommerceVariant:
+      type: object
+      required: [id, name, priceDelta, stockState]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        priceDelta:
+          type: number
+          format: double
+        sku:
+          type: string
+        stockState:
+          $ref: '#/components/schemas/CommerceStockState'
+    CommerceProductDetail:
+      type: object
+      required: [id, nameBn, priceBdt, category, stockState, variants, storefrontNameBn,
+        vendorApproved, pickupAddress, images]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        description:
+          type: string
+        priceBdt:
+          type: number
+          format: double
+        category:
+          $ref: '#/components/schemas/CommerceCategory'
+        stockState:
+          $ref: '#/components/schemas/CommerceStockState'
+        images:
+          type: array
+          items:
+            type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceVariant'
+        storefrontId:
+          type: string
+        storefrontNameBn:
+          type: string
+        vendorApproved:
+          type: boolean
+          description: Trust signal — approved-vendor badge
+        servedSchools:
+          type: array
+          items:
+            type: string
+          description: Trust signal — schools this store serves (names)
+        pickupAddress:
+          type: string
+        deliveryNote:
+          type: string
+    CommerceProductDetailResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CommerceProductDetail'
+    CommerceVariantInput:
+      type: object
+      required: [name, priceDelta]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        priceDelta:
+          type: number
+          format: double
+        sku:
+          type: string
+          maxLength: 40
+          pattern: '^[A-Za-z0-9-]*$'
+    CommerceProductInput:
+      type: object
+      required: [nameBn, category, priceBdt]
+      properties:
+        nameBn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        nameEn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 2000
+        category:
+          $ref: '#/components/schemas/CommerceCategory'
+        priceBdt:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 100000
+        imageMediaIds:
+          type: array
+          items:
+            type: string
+          maxItems: 5
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceVariantInput'
+    CommerceProductPatch:
+      type: object
+      properties:
+        archive:
+          type: boolean
+          description: 'true = archived (visible with label, not purchasable); false = restore'
+        nameBn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        nameEn:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 2000
+        category:
+          $ref: '#/components/schemas/CommerceCategory'
+        priceBdt:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 100000
+        imageMediaIds:
+          type: array
+          items:
+            type: string
+          maxItems: 5
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceVariantInput'
+    CommerceProductResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CommerceProductCard'
+    CommerceInventoryItem:
+      type: object
+      required: [id, productId, variantId, qtyOnHand, qtyReserved, reorderLevel, stockState]
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        variantId:
+          type: string
+          description: Empty string = product-level row
+        variantName:
+          type: string
+        qtyOnHand:
+          type: integer
+        qtyReserved:
+          type: integer
+        reorderLevel:
+          type: integer
+        stockState:
+          $ref: '#/components/schemas/CommerceStockState'
+    CommerceInventoryPatch:
+      type: object
+      required: [qtyOnHand]
+      properties:
+        qtyOnHand:
+          type: integer
+          minimum: 0
+        reorderLevel:
+          type: integer
+          minimum: 0
+        variantId:
+          type: string
+          description: Absent/empty = the product-level row
+    CommerceInventoryResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CommerceInventoryItem'
+    CommerceOrderItem:
+      type: object
+      required: [productId, qty, unitPriceBdt, snapshot]
+      properties:
+        productId:
+          type: string
+        variantId:
+          type: string
+        qty:
+          type: integer
+          minimum: 1
+          maximum: 10
+        unitPriceBdt:
+          type: number
+          format: double
+        snapshot:
+          $ref: '#/components/schemas/CommerceItemSnapshot'
+    CommerceItemSnapshot:
+      type: object
+      description: Immutable placement-time copy (BR-006) — no UPDATE path exists
+      required: [nameBn, category, imageMediaIds, storefrontNameBn]
+      properties:
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        variantName:
+          type: string
+        category:
+          $ref: '#/components/schemas/CommerceCategory'
+        sku:
+          type: string
+        imageMediaIds:
+          type: array
+          items:
+            type: string
+        storefrontNameBn:
+          type: string
+    CommerceOrder:
+      type: object
+      required: [id, orderCode, storefrontId, status, fulfilment, paymentMethod, totalBdt,
+        commissionRate, commissionBdt, items, placedAt]
+      properties:
+        id:
+          type: string
+        orderCode:
+          type: string
+          description: Human pickup reference (e.g. KSL-8F3K2)
+        storefrontId:
+          type: string
+        storefrontNameBn:
+          type: string
+        buyerName:
+          type: string
+          description: Vendor-board view only
+        schoolName:
+          type: string
+        fulfilment:
+          $ref: '#/components/schemas/CommerceFulfilment'
+        fulfilmentAddress:
+          type: string
+        status:
+          $ref: '#/components/schemas/CommerceOrderStatus'
+        totalBdt:
+          type: number
+          format: double
+        commissionRate:
+          type: number
+          format: double
+        commissionBdt:
+          type: number
+          format: double
+        courierName:
+          type: string
+        trackingNumber:
+          type: string
+        paymentMethod:
+          $ref: '#/components/schemas/CommercePaymentMethod'
+        buyerNote:
+          type: string
+        cancelReason:
+          type: string
+        cancelledBy:
+          $ref: '#/components/schemas/CommerceCancelledBy'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceOrderItem'
+        placedAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: string
+          format: date-time
+        readyAt:
+          type: string
+          format: date-time
+        shippedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+    CommerceOrderResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/CommerceOrder'
+    CommerceOrderList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceOrder'
+    CommerceOrderItemInput:
+      type: object
+      required: [productId, qty]
+      properties:
+        productId:
+          type: string
+        variantId:
+          type: string
+        qty:
+          type: integer
+          minimum: 1
+          maximum: 10
+    CommerceCourierAddress:
+      type: object
+      required: [recipientName, recipientPhone, city, area, addressLine]
+      properties:
+        recipientName:
+          type: string
+          minLength: 3
+          maxLength: 120
+        recipientPhone:
+          type: string
+          description: BD E.164
+        city:
+          type: string
+          minLength: 2
+          maxLength: 80
+        area:
+          type: string
+          minLength: 2
+          maxLength: 80
+        addressLine:
+          type: string
+          minLength: 10
+          maxLength: 200
+    CommerceOrderInput:
+      type: object
+      required: [storefrontId, items, fulfilment]
+      properties:
+        storefrontId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommerceOrderItemInput'
+          minItems: 1
+          maxItems: 10
+        fulfilment:
+          $ref: '#/components/schemas/CommerceFulfilment'
+        fulfilmentAddress:
+          $ref: '#/components/schemas/CommerceCourierAddress'
+        buyerNote:
+          type: string
+          maxLength: 300
+    CommerceShipInput:
+      type: object
+      required: [courierName, trackingNumber]
+      properties:
+        courierName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        trackingNumber:
+          type: string
+          minLength: 4
+          maxLength: 60
+    CommerceVendorCancelInput:
+      type: object
+      required: [cancelReason]
+      properties:
+        cancelReason:
+          type: string
+          minLength: 5
+          maxLength: 500
+    CommerceBuyerCancelInput:
+      type: object
+      properties:
+        cancelReason:
+          type: string
+          maxLength: 500
+    PaymentsInvoiceStatus:
+      title: InvoiceStatus
+      type: string
+      enum: [draft, issued, paid, partially_paid, void, overdue]
+    PaymentsTxnStatus:
+      title: TxnStatus
+      type: string
+      enum: [initiated, redirected, success, failed, expired, refunded]
+    PaymentsGateway:
+      title: Gateway
+      type: string
+      enum: [sslcommerz, bkash, nagad]
+    PaymentsInvoiceKind:
+      title: InvoiceKind
+      type: string
+      enum: [tuition, exam, transport, other]
+    PaymentsLedgerType:
+      title: LedgerType
+      type: string
+      enum: [fee_payment, convenience_fee, commission, payout, adjustment]
+    PaymentsInvoice:
+      type: object
+      required: [id, studentId, title, kind, amountBdt, dueDate, status, createdAt]
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        studentName:
+          type: string
+        title:
+          type: string
+        kind:
+          $ref: '#/components/schemas/PaymentsInvoiceKind'
+        amountBdt:
+          type: number
+          format: double
+        dueDate:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/PaymentsInvoiceStatus'
+        createdAt:
+          type: string
+          format: date-time
+    PaymentsInvoiceInput:
+      type: object
+      required: [studentId, title, kind, amountBdt, dueDate]
+      properties:
+        studentId:
+          type: string
+        title:
+          type: string
+          minLength: 3
+          maxLength: 120
+        kind:
+          $ref: '#/components/schemas/PaymentsInvoiceKind'
+        amountBdt:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 1000000
+        dueDate:
+          type: string
+          format: date
+    PaymentsInvoiceResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PaymentsInvoice'
+    PaymentsInvoicePage:
+      type: object
+      required: [data, totals]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentsInvoice'
+        totals:
+          $ref: '#/components/schemas/PaymentsTotals'
+    PaymentsTotals:
+      type: object
+      required: [count, amountBdt]
+      properties:
+        count:
+          type: integer
+        amountBdt:
+          type: number
+          format: double
+    PaymentsBulkInput:
+      type: object
+      required: [sectionId, title, kind, amountBdt, dueDate]
+      properties:
+        sectionId:
+          type: string
+        title:
+          type: string
+          minLength: 3
+          maxLength: 120
+        kind:
+          $ref: '#/components/schemas/PaymentsInvoiceKind'
+        amountBdt:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 1000000
+        dueDate:
+          type: string
+          format: date
+    PaymentsBulkResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [created, failed]
+          properties:
+            created:
+              type: integer
+            failed:
+              type: array
+              items:
+                type: object
+                properties:
+                  studentId:
+                    type: string
+                  reason:
+                    type: string
+    PaymentsVoidInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+    PaymentsLedgerEntry:
+      type: object
+      required: [id, type, debitBdt, creditBdt, balanceNote, createdAt]
+      properties:
+        id:
+          type: string
+        txnId:
+          type: string
+        type:
+          $ref: '#/components/schemas/PaymentsLedgerType'
+        debitBdt:
+          type: number
+          format: double
+        creditBdt:
+          type: number
+          format: double
+        balanceNote:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    PaymentsLedgerPage:
+      type: object
+      required: [data, totals]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentsLedgerEntry'
+        totals:
+          $ref: '#/components/schemas/PaymentsTotals'
+    PaymentsSummary:
+      type: object
+      required: [issuedCount, paidCount, overdueCount, collectedBdt, outstandingBdt]
+      properties:
+        issuedCount:
+          type: integer
+        paidCount:
+          type: integer
+        overdueCount:
+          type: integer
+        collectedBdt:
+          type: number
+          format: double
+        outstandingBdt:
+          type: number
+          format: double
+    PaymentsSummaryResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PaymentsSummary'
+    PaymentsInitiateInput:
+      type: object
+      required: [gateway]
+      properties:
+        invoiceId:
+          type: string
+          description: Exactly one of invoiceId/orderId
+        orderId:
+          type: string
+        gateway:
+          $ref: '#/components/schemas/PaymentsGateway'
+    PaymentsRedirectPayload:
+      type: object
+      required: [txnId, gateway, redirectUrl, redirectMethod]
+      properties:
+        txnId:
+          type: string
+        gateway:
+          $ref: '#/components/schemas/PaymentsGateway'
+        redirectUrl:
+          type: string
+        redirectMethod:
+          type: string
+        params:
+          type: object
+          additionalProperties:
+            type: string
+          description: Opaque gateway checkout reference (SandboxAdapter default)
+    PaymentsRedirectResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PaymentsRedirectPayload'
+    PaymentsTransaction:
+      type: object
+      required: [id, gateway, amountBdt, convenienceFeeBdt, status, createdAt]
+      properties:
+        id:
+          type: string
+        invoiceId:
+          type: string
+        orderId:
+          type: string
+        title:
+          type: string
+        gateway:
+          $ref: '#/components/schemas/PaymentsGateway'
+        amountBdt:
+          type: number
+          format: double
+        convenienceFeeBdt:
+          type: number
+          format: double
+        status:
+          $ref: '#/components/schemas/PaymentsTxnStatus'
+        receiptUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    PaymentsTransactionList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentsTransaction'
+    PaymentsTransactionResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/PaymentsTransaction'
+    PaymentsInvoiceStatusResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [invoiceId, status, amountBdt]
+          properties:
+            invoiceId:
+              type: string
+            status:
+              $ref: '#/components/schemas/PaymentsInvoiceStatus'
+            amountBdt:
+              type: number
+              format: double
+            paidTxnId:
+              type: string
+            lastTxnStatus:
+              $ref: '#/components/schemas/PaymentsTxnStatus'
+    PaymentsReceiptResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [receiptUrl, serialNo, issuedAt]
+          properties:
+            receiptUrl:
+              type: string
+            serialNo:
+              type: string
+            issuedAt:
+              type: string
+              format: date-time
+    PaymentsWebhookResult:
+      type: object
+      required: [processed]
+      properties:
+        processed:
+          type: boolean
+        reason:
+          type: string
+          description: 'DUPLICATE_WEBHOOK etc. — always 2xx for valid signatures'
   securitySchemes:
     bearerJWT:
       type: http

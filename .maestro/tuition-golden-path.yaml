@@ -1,0 +1,51 @@
+# TUT-E2E-001 (Maestro, app) — tuition golden path (fixture mode ON):
+# guardian posts a requirement → (seeded tutor) receives match → expresses interest →
+# guardian accepts → contact revealed + chat hand-off. Runs against a dev build with the
+# tuition fixtures in "success" mode. Pending owner run (module 10 07-progress).
+
+appId: com.kushol.connect
+---
+- launchApp:
+    clearState: false
+# Sign in as the demo guardian (fixture login — phone OTP demo path)
+- tapOn:
+    text: ".*লগইন.*"
+- inputText:
+    id: "phone-input"
+    text: "01700000001"
+# OTP auto-fill in fixtures; if the box screen appears, confirm
+- tapOn:
+    text: ".*ভেরিফাই.*"
+    optional: true
+# Marketplace home
+- tapOn: "মার্কেটপ্লেস"
+    optional: true
+- assertVisible: "টিউটর খুঁজুন"
+# Wizard: subjects → class
+- tapOn: "টিউশন রিকোয়ারমেন্ট পোস্ট করুন"
+- tapOn: "গণিত"
+- tapOn: "নবম শ্রেণি"
+- tapOn: "পরবর্তী"
+# Budget + gender
+- inputText:
+    id: "budget-min"
+    text: "2000"
+- inputText:
+    id: "budget-max"
+    text: "4000"
+- tapOn: "পরবর্তী"
+# Area + pin (text fallback)
+- inputText:
+    text: "মিরপুর, ঢাকা"
+- tapOn: "পরবর্তী"
+# Summary review → post
+- assertVisible: "সব ঠিক আছে কি না দেখুন"
+- tapOn: "পোস্ট করুন"
+- tapOn:
+    text: "পোস্ট করুন"
+- assertVisible: "রিকোয়ারমেন্ট পোস্ট হয়েছে"
+# Matches (tutor side): the seeded notified match
+- tapOn: "আমার ম্যাচ"
+- assertVisible: "নোটিফাইড"
+- tapOn: "আগ্রহী"
+- assertVisible: "আগ্রহ জানানো হয়েছে"

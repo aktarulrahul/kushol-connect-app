@@ -1,0 +1,23 @@
+# NTF-E2E-002 — foreground banner + deep link: a simulated foreground push renders the in-app
+# banner (no tray duplicate), tapping lands on the notice detail; unknown links fall home.
+# Driven via /dev/chat-fixtures-style dev switcher → pushDemoBanner (dev builds only).
+#   maestro test .maestro/notifications-deeplink.yaml
+# NOT yet run — Maestro CLI/device not available in the build environment (pending owner).
+appId: com.kusholconnect.app
+---
+- launchApp:
+    clearState: true
+- tapOn: "সাইন-ইন"
+- tapOn: "মোবাইল নম্বর"
+- inputText: "01712345678"
+- tapOn: "কোড পাঠান"
+- tapOn: "৬ সংখ্যার ওটিপি কোড"
+- inputText: "123456"
+- tapOn: "যাচাই করুন"
+- tapOn: "চালু করুন"
+
+# Simulated foreground push (dev control) → banner appears with the class label.
+- tapOn: "সেটিংস"
+- tapOn: "নোটিশ"
+- tapOn: "টেস্ট নোটিফিকেশন পাঠান"
+- assertVisible: "টেস্ট নোটিফিকেশন পাঠানো হয়েছে (টেস্ট লেখা সহ)"

@@ -1,0 +1,19 @@
+# CMP-E2E-002 (Maestro, app) — buyer golden path with fixture mode ON: browse own-school store →
+# product detail → pickup checkout (COD) → order placed. Pending owner run (module 11 07-progress).
+appId: com.kushol.connect
+---
+- launchApp:
+    clearState: false
+- tapOn: "মার্কেটপ্লেস"
+    optional: true
+- assertVisible: "স্কুলের স্টোর"
+- tapOn: "স্কুলের স্টোর"
+- assertVisible: "ডেমো স্টোর"
+- tapOn: "ডেমো স্টোর"
+- assertVisible: "বইয়ের বান্ডেল.*"
+- tapOn: "বইয়ের বান্ডেল.*"
+- assertVisible: ".*অর্ডার করুন.*"
+- tapOn: ".*অর্ডার করুন.*"
+- assertVisible: "চেকআউট"
+- tapOn: "অর্ডার নিশ্চিত করুন"
+- assertVisible: "অর্ডার জমা হয়েছে.*"

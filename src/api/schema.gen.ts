@@ -879,6 +879,1114 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/chat/groups/{groupId}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Approve a pending club (same-school School Admin; endpoint */
+    post: operations["approveChatGroup"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/devices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Register (or refresh) this device's native FCM token (idempotent upsert)
+     * @description Pending users may register; hierarchy topics are subscribed only once VERIFIED (resolved from module 04 bindings — never client-supplied). Re-registration refreshes `last_seen_at` without duplicating (NTF-BR-002).
+     */
+    post: operations["registerNotificationDevice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/devices/{deviceId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Prune this device's token (logout cleanup; caller-owned rows only) */
+    delete: operations["deleteNotificationDevice"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/preferences": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** My per-class mute state (always exactly the three rows, lazy-created unmuted) */
+    get: operations["getNotificationPreferences"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Toggle one class's mute (single-class PATCH, matches the settings screen) */
+    patch: operations["patchNotificationPreference"];
+    trace?: never;
+  };
+  "/api/v1/notifications/deliveries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** My notification history (newest first; directed rows carry opened state) */
+    get: operations["listNotificationDeliveries"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/deliveries/{deliveryId}/opened": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Report a directed push opened (write-once, idempotent on retry) */
+    post: operations["markNotificationOpened"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/notifications/deliveries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Delivery aggregates for my school (counts + rows, never bodies) */
+    get: operations["listSchoolNotificationDeliveries"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/notifications/deliveries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Platform delivery aggregates (Super Admin; optional schoolId filter) */
+    get: operations["listPlatformNotificationDeliveries"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/notifications/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Send a visibly-marked test push to self or one in-tenant section (pilot tooling) */
+    post: operations["sendTestNotification"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/requirements": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** My requirements (poster) — School Admin role gets the school oversight list */
+    get: operations["listTuitionRequirements"];
+    put?: never;
+    /**
+     * Post a tuition requirement (verified Guardian/Student) and enqueue matching
+     * @description Creates the row `open` with `expiresAt = now + 14 days` (config) and enqueues the `tuition.match` job — matching itself is asynchronous and idempotent.
+     */
+    post: operations["createTuitionRequirement"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/requirements/{requirementId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Edit while `open` (poster) — or close (poster; School Admin may close abusive) */
+    patch: operations["updateTuitionRequirement"];
+    trace?: never;
+  };
+  "/api/v1/tuition/requirements/{requirementId}/matches": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The poster's matches for one requirement (interested detail; contact post-accept) */
+    get: operations["listTuitionRequirementMatches"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/tutors": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Browse verified tutors (public-safe; verified filter locked ON for non-admins) */
+    get: operations["browseTuitionTutors"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/tutors/{tutorId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** One tutor's public profile (contact fields null unless an accepted match links us) */
+    get: operations["getTuitionTutor"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/tutor-profile": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** My tutor profile with the verification tracker state (draft-safe read) */
+    get: operations["getMyTuitionTutorProfile"];
+    put?: never;
+    /** Create or update my tutor profile (draft-safe; one per user) */
+    post: operations["upsertTuitionTutorProfile"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/tutor-profile/submit-for-review": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Submit evidence and route to the verification queue (draft/rejected → pending) */
+    post: operations["submitTuitionTutorProfileForReview"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/matches/{matchId}/interest": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** A notified tutor expresses interest (poster notified; contact stays hidden) */
+    post: operations["expressTuitionInterest"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/matches/{matchId}/accept": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Poster accepts one interested tutor — contact reveal + chat + fee DUE fact (tx) */
+    post: operations["acceptTuitionMatch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/matches/{matchId}/decline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Tutor or poster declines (counterpart notified politely; no contact leaked) */
+    post: operations["declineTuitionMatch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/tuition/matches": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Tutor-side matches (requirement summaries; poster contact post-accept only) */
+    get: operations["listMyTuitionMatches"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/tutor-verifications": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Verification queue — School Admin (linked school) / Super Admin (platform, NULL school) */
+    get: operations["listTuitionVerifications"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/tutor-verifications/{verificationId}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Approve (optional note) — profile verified, badge live, tutor notified, audited */
+    post: operations["approveTuitionVerification"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/tutor-verifications/{verificationId}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reject — `decisionNote` required (5–500), readable by the tutor; audited */
+    post: operations["rejectTuitionVerification"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/storefronts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** My storefronts + orders-needing-action counts */
+    get: operations["listVendorStorefronts"];
+    put?: never;
+    /** Create a storefront (approved vendor gate — 07; schools served, pickup address) */
+    post: operations["createVendorStorefront"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/storefronts/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Edit fields / schools list / pause-resume (orders continue while paused) */
+    patch: operations["updateVendorStorefront"];
+    trace?: never;
+  };
+  "/api/v1/vendor/storefronts/{id}/products": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Create product (+variants + one inventory row per sellable, images via 05) */
+    post: operations["createVendorProduct"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/products/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Edit product / archive (snapshots untouched — INV-4) */
+    patch: operations["updateVendorProduct"];
+    trace?: never;
+  };
+  "/api/v1/vendor/products/{id}/inventory": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Set stock (`qtyOnHand` ≥ reserved enforced server-side; optional variantId) */
+    patch: operations["updateVendorInventory"];
+    trace?: never;
+  };
+  "/api/v1/commerce/stores": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Buyer — active stores serving my school (INV-1; vendor approved fail-closed INV-6) */
+    get: operations["listCommerceStores"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/commerce/stores/{id}/products": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Store grid with availability states (archived/out-of-stock visible-with-label) */
+    get: operations["listStoreProducts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/commerce/products/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Product detail — variant picker, stock state, trust signals (INV-1 school check) */
+    get: operations["getCommerceProduct"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/commerce/orders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Buyer — my orders (row-level own) */
+    get: operations["listMyCommerceOrders"];
+    put?: never;
+    /** Place order (tx — reserve stock, snapshot items, freeze commission; COD guard) */
+    post: operations["placeCommerceOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/commerce/orders/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Buyer — order detail / pickup instructions / tracking */
+    get: operations["getMyCommerceOrder"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/commerce/orders/{id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Buyer cancel (placed/confirmed/ready only; reason optional) */
+    post: operations["cancelMyCommerceOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/orders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Vendor fulfilment board — own storefronts only (INV-5) */
+    get: operations["listVendorOrders"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/orders/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Vendor order detail (buyer, fulfilment info, commission row) */
+    get: operations["getVendorOrder"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/orders/{id}/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** placed → confirmed (one tx decrements reserved + on-hand) */
+    post: operations["confirmVendorOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/orders/{id}/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** confirmed → ready_for_pickup (pickup orders only — INV-3) */
+    post: operations["readyVendorOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/orders/{id}/ship": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** confirmed → shipped (courier orders only; courier + tracking required) */
+    post: operations["shipVendorOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/orders/{id}/complete": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** ready/shipped → completed (terminal; COD collection audited) */
+    post: operations["completeVendorOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/orders/{id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Vendor cancel (placed/confirmed only; reason required ≥ 5 chars) */
+    post: operations["cancelVendorOrder"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/invoices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** School ledger — invoices (tenant-scoped, filters + server totals) */
+    get: operations["listSchoolInvoices"];
+    put?: never;
+    /** Issue a fee invoice to one student of the caller's school (audited) */
+    post: operations["issueInvoice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/invoices/bulk": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Bulk-issue to a section (1–200 students, one tx; notify jobs after commit) */
+    post: operations["issueInvoicesBulk"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/invoices/{id}/void": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Void an invoice before any successful payment (CONFLICT after) */
+    patch: operations["voidInvoice"];
+    trace?: never;
+  };
+  "/api/v1/school/ledger": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Append-only ledger entries (tenant-scoped; always fresh — never cached) */
+    get: operations["listSchoolLedger"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/ledger/summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Counts + ৳ totals (issued/paid/overdue, collected, outstanding) per month */
+    get: operations["getSchoolLedgerSummary"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/payments/initiate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Start a gateway payment for an invoice or an online order (verified + entitled payer) */
+    post: operations["initiatePayment"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/payments/transactions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Payer-scoped own transactions, newest first */
+    get: operations["listMyPayments"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/payments/transactions/{txnId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Transaction detail (payer or the school's admin; ids/amounts/status only) */
+    get: operations["getPaymentTransaction"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/payments/invoices/{invoiceId}/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** InvoiceStatus (export): status + amount + paid txn id (status-screen poll) */
+    get: operations["getInvoicePaymentStatus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/payments/receipts/{txnId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Immutable R2 URL + serial (payer or school admin; NOT_FOUND while generating) */
+    get: operations["getPaymentReceipt"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/webhooks/{gateway}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * SIGNATURE-VERIFIED EXCEPTION — the one route outside the auth chain (11/12 §2 §6):
+     *     rate limit → signature + replay-window verification BEFORE parsing. Invalid → 403 with a
+     *     flagged gateway_events row; valid → 200 {"processed": bool, "reason"?} (always 2xx —
+     *     gateways retry on non-2xx); duplicates → 200 DUPLICATE_WEBHOOK with zero side effects.
+     */
+    post: operations["gatewayWebhook"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/leads": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Public lead create (pilot_registration / download_click)
+     * @description Create-only (WEB-BR-004) — status forced `new`, source server-allowlisted, utm captured and capped (never trusted from the client). Rate-limit class `leads`.
+     */
+    post: operations["createLead"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/register": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Vendor inquiry — creates the lead AND a pending vendor account in one transaction */
+    post: operations["registerVendor"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/leads": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Leads pipeline (Super Admin; type/status filters) */
+    get: operations["listAdminLeads"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/leads/{leadId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Move a lead through new → contacted → converted or archived (transition table) */
+    patch: operations["updateLeadStatus"];
+    trace?: never;
+  };
+  "/api/v1/admin/vendors": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Vendor queue (Super Admin; status filter + name search) */
+    get: operations["listAdminVendors"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/vendors/{vendorId}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Approve a vendor (creates the portal login idempotently; audited) */
+    patch: operations["approveVendor"];
+    trace?: never;
+  };
+  "/api/v1/admin/vendors/{vendorId}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Reject a vendor (reason 10–500 required; audited) */
+    patch: operations["rejectVendor"];
+    trace?: never;
+  };
+  "/api/v1/admin/vendors/{vendorId}/suspend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Suspend a vendor (reason required; sessions invalidated; audited) */
+    patch: operations["suspendVendor"];
+    trace?: never;
+  };
+  "/api/v1/admin/schools": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Tenant list (Super Admin; read-only projection of 04's schools) */
+    get: operations["listAdminSchools"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Platform dashboard counts (Super Admin; revenue placeholder per WEB-BR-009) */
+    get: operations["getAdminStats"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** School dashboard counts (claim-scoped; partial-payload flags per source) */
+    get: operations["getSchoolStats"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/audit-log": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read-only audit viewer over 01's append-only log (Super Admin) */
+    get: operations["listAdminAuditLog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1466,6 +2574,1017 @@ export interface components {
         /** @description True when an archived asset was restored to the hot prefix first */
         rehydrated?: boolean;
       };
+    };
+    /** @enum {string} */
+    NotificationClass: "notices" | "chat" | "campaigns";
+    /** @enum {string} */
+    DeliveryStatus: "queued" | "sent" | "delivered" | "opened" | "failed";
+    /** @enum {string} */
+    DevicePlatform: "ios" | "android";
+    DeviceRegisterInput: {
+      /** @description Native FCM registration token (Expo/APNs tokens rejected) */
+      token: string;
+      platform: components["schemas"]["DevicePlatform"];
+      appVersion?: string;
+    };
+    DeviceRegistered: {
+      data: {
+        id: string;
+        platform: components["schemas"]["DevicePlatform"];
+        appVersion: string;
+        /** Format: date-time */
+        lastSeenAt: string;
+        /** @description Bound topics now subscribed (empty while PENDING) */
+        topics: string[];
+      };
+    };
+    DeviceDeleted: {
+      data: {
+        deleted: boolean;
+      };
+    };
+    PreferenceRow: {
+      class: components["schemas"]["NotificationClass"];
+      muted: boolean;
+    };
+    PreferencePage: {
+      data: components["schemas"]["PreferenceRow"][];
+    };
+    PreferencePatch: {
+      class: components["schemas"]["NotificationClass"];
+      muted: boolean;
+    };
+    Delivery: {
+      id: string;
+      class: components["schemas"]["NotificationClass"];
+      /** @description i18n key from the notifications.* catalog (never message content) */
+      payloadKey: string;
+      topicName?: string;
+      deepLink: string;
+      status: components["schemas"]["DeliveryStatus"];
+      /** Format: date-time */
+      sentAt?: string;
+      /**
+       * Format: date-time
+       * @description Directed rows only
+       */
+      openedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    DeliveryPage: {
+      data: components["schemas"]["Delivery"][];
+      page: {
+        number: number;
+        size: number;
+        total: number;
+      };
+    };
+    DeliveryStatusCount: {
+      status: components["schemas"]["DeliveryStatus"];
+      count: number;
+    };
+    DeliveryAdminPage: {
+      data: components["schemas"]["Delivery"][];
+      counts: components["schemas"]["DeliveryStatusCount"][];
+      page: {
+        number: number;
+        size: number;
+        total: number;
+      };
+    };
+    TestPushInput: {
+      class: components["schemas"]["NotificationClass"];
+      /** @enum {string} */
+      target: "self" | "section";
+      /** @description Required iff target=section; must resolve to the caller's school */
+      sectionId?: string;
+    };
+    TestPushResult: {
+      data: {
+        deliveryIds: string[];
+        devices: number;
+      };
+    };
+    /** @enum {string} */
+    LeadType: "pilot_registration" | "vendor_inquiry" | "download_click";
+    /** @enum {string} */
+    LeadStatus: "new" | "contacted" | "converted" | "archived";
+    /** @enum {string} */
+    LeadSource: "landing_hero" | "roi_calculator" | "for_vendors" | "download_page" | "direct";
+    LeadCreate: {
+      type: components["schemas"]["LeadType"];
+      contactName?: string;
+      /** @description BD mobile E.164 +8801XXXXXXXXX */
+      phone?: string;
+      email?: string;
+      schoolName?: string;
+      cityId?: string;
+      studentsCount?: number;
+      targeting?: string;
+      message?: string;
+      source: components["schemas"]["LeadSource"];
+      utmSource?: string;
+      utmMedium?: string;
+      utmCampaign?: string;
+    };
+    LeadCreated: {
+      data: {
+        id: string;
+        type: components["schemas"]["LeadType"];
+        status: components["schemas"]["LeadStatus"];
+      };
+    };
+    Lead: {
+      id: string;
+      type: components["schemas"]["LeadType"];
+      contactName?: string;
+      phone?: string;
+      email?: string;
+      schoolName?: string;
+      cityId?: string;
+      studentsCount?: number;
+      targeting?: string;
+      message?: string;
+      status: components["schemas"]["LeadStatus"];
+      source: components["schemas"]["LeadSource"];
+      utmSource?: string;
+      utmMedium?: string;
+      utmCampaign?: string;
+      vendorAccountId?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    LeadPage: {
+      data: components["schemas"]["Lead"][];
+      page: {
+        number: number;
+        size: number;
+        total: number;
+      };
+    };
+    LeadStatusPatch: {
+      status: components["schemas"]["LeadStatus"];
+      reason?: string;
+    };
+    /** @enum {string} */
+    VendorStatus: "pending" | "approved" | "rejected" | "suspended";
+    VendorRegisterInput: {
+      companyName: string;
+      contactName: string;
+      phone: string;
+      email?: string;
+      targeting: string;
+      utmSource?: string;
+      utmMedium?: string;
+      utmCampaign?: string;
+    };
+    VendorAccount: {
+      id: string;
+      companyName: string;
+      contactName: string;
+      phone: string;
+      email?: string;
+      targeting: string;
+      status: components["schemas"]["VendorStatus"];
+      decisionReason?: string;
+      /** Format: date-time */
+      decidedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    VendorPage: {
+      data: components["schemas"]["VendorAccount"][];
+      page: {
+        number: number;
+        size: number;
+        total: number;
+      };
+    };
+    VendorReasonInput: {
+      reason: string;
+    };
+    SchoolRow: {
+      id: string;
+      nameBn: string;
+      nameEn: string;
+      /** @enum {string} */
+      type: "school" | "college";
+      cityId?: string;
+      /** @enum {string} */
+      status: "ACTIVE" | "ARCHIVED";
+      /** Format: date-time */
+      createdAt: string;
+    };
+    SchoolPage: {
+      data: components["schemas"]["SchoolRow"][];
+      page: {
+        number: number;
+        size: number;
+        total: number;
+      };
+    };
+    AdminStats: {
+      tenants: number;
+      activeCities: number;
+      leadsByStatus: components["schemas"]["DeliveryStatusCount"][];
+      leadsByType: {
+        type: components["schemas"]["LeadType"];
+        count: number;
+      }[];
+      vendorsPending: number;
+      revenue: {
+        connected: boolean;
+        connectsIn: string;
+      };
+    };
+    SchoolStats: {
+      students: {
+        count: number;
+        available: boolean;
+      };
+      activeSections: {
+        count: number;
+        available: boolean;
+      };
+      pendingVerifications: {
+        count: number;
+        available: boolean;
+      };
+      noticesLast30d: {
+        count: number;
+        available: boolean;
+      };
+    };
+    AuditLogEntry: {
+      id: string;
+      actorUserId: string;
+      actorRole: string;
+      schoolId?: string;
+      action: string;
+      entityType: string;
+      entityId: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    AuditLogPage: {
+      data: components["schemas"]["AuditLogEntry"][];
+      page: {
+        number: number;
+        size: number;
+        total: number;
+      };
+    };
+    /**
+     * SubjectKey
+     * @description Shared bn/en subject catalog key (বিষয়)
+     * @enum {string}
+     */
+    TuitionSubjectKey:
+      "math" | "physics" | "chemistry" | "biology" | "english" | "bangla" | "higher_math" | "ict";
+    /**
+     * ClassLevel
+     * @description Class-level catalog key (শ্রেণি)
+     * @enum {string}
+     */
+    TuitionClassLevel: "class_6" | "class_7" | "class_8" | "class_9" | "class_10" | "ssc" | "hsc";
+    /**
+     * GenderPref
+     * @enum {string}
+     */
+    TuitionGenderPref: "any" | "male" | "female";
+    /**
+     * RequirementStatus
+     * @enum {string}
+     */
+    TuitionRequirementStatus: "open" | "matched" | "closed" | "expired";
+    /**
+     * TutorStatus
+     * @enum {string}
+     */
+    TuitionTutorStatus: "draft" | "pending_review" | "verified" | "rejected" | "suspended";
+    /**
+     * VerificationStatus
+     * @enum {string}
+     */
+    TuitionVerificationStatus: "pending" | "approved" | "rejected";
+    /**
+     * VerificationScope
+     * @description Queue scope — `school` (School Admin) or `platform` (Super Admin, NULL-school tutors)
+     * @enum {string}
+     */
+    VerificationScope: "school" | "platform";
+    /**
+     * MatchStatus
+     * @enum {string}
+     */
+    TuitionMatchStatus: "notified" | "interested" | "accepted" | "declined" | "expired";
+    TuitionRequirement: {
+      id: string;
+      /** @enum {string} */
+      posterRole: "guardian" | "student";
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classLevel: components["schemas"]["TuitionClassLevel"];
+      budgetMin: number;
+      budgetMax: number;
+      genderPref: components["schemas"]["TuitionGenderPref"];
+      locationArea: string;
+      /** Format: double */
+      lat: number;
+      /** Format: double */
+      lng: number;
+      scheduleNote?: string;
+      status: components["schemas"]["TuitionRequirementStatus"];
+      /** @description Count of interested matches (list/detail display) */
+      interestedCount: number;
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    TuitionRequirementInput: {
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classLevel: components["schemas"]["TuitionClassLevel"];
+      budgetMin: number;
+      budgetMax: number;
+      genderPref: components["schemas"]["TuitionGenderPref"];
+      locationArea: string;
+      /**
+       * Format: double
+       * @description Bangladesh bounds (lat 20.5–26.7)
+       */
+      lat: number;
+      /**
+       * Format: double
+       * @description Bangladesh bounds (lng 88.0–92.7)
+       */
+      lng: number;
+      scheduleNote?: string;
+    };
+    /** @description Edit fields while `open`; `close: true` closes (mutually exclusive with edits) */
+    TuitionRequirementPatch: {
+      /** @description Close the requirement (poster own, or School Admin within tenant) */
+      close?: boolean;
+      subjects?: components["schemas"]["TuitionSubjectKey"][];
+      classLevel?: components["schemas"]["TuitionClassLevel"];
+      budgetMin?: number;
+      budgetMax?: number;
+      genderPref?: components["schemas"]["TuitionGenderPref"];
+      locationArea?: string;
+      /** Format: double */
+      lat?: number;
+      /** Format: double */
+      lng?: number;
+      scheduleNote?: string;
+    };
+    TuitionRequirementResult: {
+      data: components["schemas"]["TuitionRequirement"];
+    };
+    TuitionRequirementPage: {
+      data: components["schemas"]["TuitionRequirement"][];
+      page: {
+        number: number;
+        size: number;
+        total: number;
+      };
+    };
+    TuitionTutorCard: {
+      /** @description Tutor profile id */
+      id: string;
+      name: string;
+      photoUrl?: string;
+      university: string;
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classesTaught: components["schemas"]["TuitionClassLevel"][];
+      hourlyRateHint?: number;
+      locationArea?: string;
+      /** Format: date-time */
+      verifiedAt: string;
+    };
+    TuitionTutorPage: {
+      data: components["schemas"]["TuitionTutorCard"][];
+      nextCursor?: string;
+    };
+    /** @description Revealed only after the linking match is accepted (INV-4) */
+    TuitionContact: {
+      phone: string;
+      email?: string;
+    };
+    TuitionTutorDetail: {
+      id: string;
+      name: string;
+      photoUrl?: string;
+      university: string;
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classesTaught: components["schemas"]["TuitionClassLevel"][];
+      bioBn?: string;
+      bioEn?: string;
+      hourlyRateHint?: number;
+      availability?: string;
+      locationArea?: string;
+      /** Format: date-time */
+      verifiedAt: string;
+      contact: components["schemas"]["TuitionContact"] | null;
+    };
+    TuitionTutorProfileInput: {
+      university: string;
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classesTaught: components["schemas"]["TuitionClassLevel"][];
+      bioBn?: string;
+      bioEn?: string;
+      hourlyRateHint?: number;
+      availability?: string;
+      locationArea?: string;
+      /** Format: double */
+      lat?: number;
+      /** Format: double */
+      lng?: number;
+      photoMediaId?: string;
+    };
+    TuitionTutorProfile: {
+      id: string;
+      status: components["schemas"]["TuitionTutorStatus"];
+      university: string;
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classesTaught: components["schemas"]["TuitionClassLevel"][];
+      bioBn?: string;
+      bioEn?: string;
+      hourlyRateHint?: number;
+      availability?: string;
+      locationArea?: string;
+      /** Format: double */
+      lat?: number;
+      /** Format: double */
+      lng?: number;
+      photoUrl?: string;
+      hasPendingReview?: boolean;
+      /** @description The latest rejected review's decision note (tracker display) */
+      rejectionNote?: string;
+      /** Format: date-time */
+      verifiedAt?: string;
+    };
+    TuitionTutorProfileResult: {
+      data: components["schemas"]["TuitionTutorProfile"];
+    };
+    TuitionSubmitForReviewInput: {
+      /** @description A `confirmed` 05 media asset (image/PDF) */
+      nationalIdMediaId: string;
+      evidenceMediaIds: string[];
+    };
+    TuitionVerificationRow: {
+      id: string;
+      tutorProfileId: string;
+      tutorName: string;
+      tutorPhotoUrl?: string;
+      university: string;
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classesTaught: components["schemas"]["TuitionClassLevel"][];
+      locationArea?: string;
+      /** Format: date-time */
+      submittedAt: string;
+      /** @description Pending longer than the 48 h SLA (OQ-7 default) */
+      slaOverdue?: boolean;
+      status: components["schemas"]["TuitionVerificationStatus"];
+      /** @enum {string} */
+      reviewerScope?: "school" | "platform";
+      decisionNote?: string;
+      /** Format: date-time */
+      decidedAt?: string;
+      /** @description Reviewer-only (plus owning tutor); never in public payloads */
+      nationalIdMediaId: string;
+      evidenceMediaIds: string[];
+    };
+    TuitionVerificationPage: {
+      data: components["schemas"]["TuitionVerificationRow"][];
+    };
+    TuitionVerificationResult: {
+      data: components["schemas"]["TuitionVerificationRow"];
+    };
+    TuitionApproveInput: {
+      note?: string;
+    };
+    TuitionRejectInput: {
+      decisionNote: string;
+    };
+    TuitionMatchTutorSummary: {
+      profileId: string;
+      name: string;
+      photoUrl?: string;
+      university: string;
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      hourlyRateHint?: number;
+    };
+    TuitionMatchRequirementSummary: {
+      subjects: components["schemas"]["TuitionSubjectKey"][];
+      classLevel: components["schemas"]["TuitionClassLevel"];
+      budgetMin: number;
+      budgetMax: number;
+      genderPref?: components["schemas"]["TuitionGenderPref"];
+      locationArea: string;
+      scheduleNote?: string;
+    };
+    /** @description Same-school accept → `dmGroupId`; cross-school accept → `messageRequestId` */
+    TuitionChatHandle: {
+      dmGroupId?: string;
+      messageRequestId?: string;
+      pendingRequest?: boolean;
+    };
+    TuitionPosterMatch: {
+      id: string;
+      status: components["schemas"]["TuitionMatchStatus"];
+      /** Format: date-time */
+      notifiedAt: string;
+      /** Format: date-time */
+      respondedAt?: string;
+      tutor: components["schemas"]["TuitionMatchTutorSummary"];
+      contact?: components["schemas"]["TuitionContact"] | null;
+      chat?: components["schemas"]["TuitionChatHandle"] | null;
+    };
+    TuitionPosterMatchPage: {
+      data: components["schemas"]["TuitionPosterMatch"][];
+    };
+    TuitionTutorMatch: {
+      id: string;
+      status: components["schemas"]["TuitionMatchStatus"];
+      /** Format: date-time */
+      notifiedAt: string;
+      /** Format: date-time */
+      respondedAt?: string;
+      requirement: components["schemas"]["TuitionMatchRequirementSummary"];
+      contact?: components["schemas"]["TuitionContact"] | null;
+      chat?: components["schemas"]["TuitionChatHandle"] | null;
+    };
+    TuitionTutorMatchPage: {
+      data: components["schemas"]["TuitionTutorMatch"][];
+    };
+    TuitionMatchAction: {
+      data: {
+        id: string;
+        status: components["schemas"]["TuitionMatchStatus"];
+        /** Format: date-time */
+        respondedAt?: string;
+      };
+    };
+    TuitionAcceptResult: {
+      data: {
+        match: components["schemas"]["TuitionPosterMatch"];
+        contact: components["schemas"]["TuitionContact"];
+        chat?: components["schemas"]["TuitionChatHandle"];
+      };
+    };
+    /**
+     * StorefrontStatus
+     * @enum {string}
+     */
+    CommerceStorefrontStatus: "active" | "paused";
+    /**
+     * Category
+     * @enum {string}
+     */
+    CommerceCategory: "books" | "uniforms" | "stationery" | "other";
+    /**
+     * ProductStatus
+     * @enum {string}
+     */
+    CommerceProductStatus: "active" | "archived";
+    /**
+     * StockState
+     * @description Frozen buyer DTO tri-state (in / low / out)
+     * @enum {string}
+     */
+    CommerceStockState: "in_stock" | "low" | "out_of_stock";
+    /**
+     * OrderStatus
+     * @enum {string}
+     */
+    CommerceOrderStatus:
+      "placed" | "confirmed" | "ready_for_pickup" | "shipped" | "completed" | "cancelled";
+    /**
+     * Fulfilment
+     * @enum {string}
+     */
+    CommerceFulfilment: "pickup" | "courier";
+    /**
+     * PaymentMethod
+     * @enum {string}
+     */
+    CommercePaymentMethod: "cod" | "online";
+    /**
+     * CancelledBy
+     * @enum {string}
+     */
+    CommerceCancelledBy: "buyer" | "vendor" | "system";
+    CommerceStorefront: {
+      id: string;
+      nameBn: string;
+      nameEn?: string;
+      description?: string;
+      status: components["schemas"]["CommerceStorefrontStatus"];
+      pickupAddress: string;
+      deliveryNote?: string;
+      schoolIds: string[];
+      /** @description Orders needing action (status placed) */
+      placedCount: number;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CommerceStorefrontInput: {
+      nameBn: string;
+      nameEn?: string;
+      description?: string;
+      schoolIds: string[];
+      pickupAddress: string;
+      deliveryNote?: string;
+    };
+    /** @description Field edits, schools replace-set, or the pause/resume action */
+    CommerceStorefrontPatch: {
+      /** @description true = paused, false = active (orders continue either way) */
+      pause?: boolean;
+      nameBn?: string;
+      nameEn?: string;
+      description?: string;
+      schoolIds?: string[];
+      pickupAddress?: string;
+      deliveryNote?: string;
+    };
+    CommerceStorefrontResult: {
+      data: components["schemas"]["CommerceStorefront"];
+    };
+    CommerceStorefrontList: {
+      data: components["schemas"]["CommerceStorefront"][];
+    };
+    CommerceStoreSummary: {
+      id: string;
+      nameBn: string;
+      nameEn?: string;
+      description?: string;
+      deliveryNote?: string;
+      pickupAddress: string;
+    };
+    CommerceStoreList: {
+      data: components["schemas"]["CommerceStoreSummary"][];
+    };
+    CommerceProductCard: {
+      id: string;
+      nameBn: string;
+      nameEn?: string;
+      /** Format: double */
+      priceBdt: number;
+      stockState: components["schemas"]["CommerceStockState"];
+      /** @description Primary image URL (05/R2); placeholder when missing */
+      imagePrimary?: string;
+      category: components["schemas"]["CommerceCategory"];
+    };
+    CommerceProductCardList: {
+      data: components["schemas"]["CommerceProductCard"][];
+    };
+    CommerceVariant: {
+      id: string;
+      name: string;
+      /** Format: double */
+      priceDelta: number;
+      sku?: string;
+      stockState: components["schemas"]["CommerceStockState"];
+    };
+    CommerceProductDetail: {
+      id: string;
+      nameBn: string;
+      nameEn?: string;
+      description?: string;
+      /** Format: double */
+      priceBdt: number;
+      category: components["schemas"]["CommerceCategory"];
+      stockState: components["schemas"]["CommerceStockState"];
+      images: string[];
+      variants: components["schemas"]["CommerceVariant"][];
+      storefrontId?: string;
+      storefrontNameBn: string;
+      /** @description Trust signal — approved-vendor badge */
+      vendorApproved: boolean;
+      /** @description Trust signal — schools this store serves (names) */
+      servedSchools?: string[];
+      pickupAddress: string;
+      deliveryNote?: string;
+    };
+    CommerceProductDetailResult: {
+      data: components["schemas"]["CommerceProductDetail"];
+    };
+    CommerceVariantInput: {
+      name: string;
+      /** Format: double */
+      priceDelta: number;
+      sku?: string;
+    };
+    CommerceProductInput: {
+      nameBn: string;
+      nameEn?: string;
+      description?: string;
+      category: components["schemas"]["CommerceCategory"];
+      /** Format: double */
+      priceBdt: number;
+      imageMediaIds?: string[];
+      variants?: components["schemas"]["CommerceVariantInput"][];
+    };
+    CommerceProductPatch: {
+      /** @description true = archived (visible with label, not purchasable); false = restore */
+      archive?: boolean;
+      nameBn?: string;
+      nameEn?: string;
+      description?: string;
+      category?: components["schemas"]["CommerceCategory"];
+      /** Format: double */
+      priceBdt?: number;
+      imageMediaIds?: string[];
+      variants?: components["schemas"]["CommerceVariantInput"][];
+    };
+    CommerceProductResult: {
+      data: components["schemas"]["CommerceProductCard"];
+    };
+    CommerceInventoryItem: {
+      id: string;
+      productId: string;
+      /** @description Empty string = product-level row */
+      variantId: string;
+      variantName?: string;
+      qtyOnHand: number;
+      qtyReserved: number;
+      reorderLevel: number;
+      stockState: components["schemas"]["CommerceStockState"];
+    };
+    CommerceInventoryPatch: {
+      qtyOnHand: number;
+      reorderLevel?: number;
+      /** @description Absent/empty = the product-level row */
+      variantId?: string;
+    };
+    CommerceInventoryResult: {
+      data: components["schemas"]["CommerceInventoryItem"];
+    };
+    CommerceOrderItem: {
+      productId: string;
+      variantId?: string;
+      qty: number;
+      /** Format: double */
+      unitPriceBdt: number;
+      snapshot: components["schemas"]["CommerceItemSnapshot"];
+    };
+    /** @description Immutable placement-time copy (BR-006) — no UPDATE path exists */
+    CommerceItemSnapshot: {
+      nameBn: string;
+      nameEn?: string;
+      variantName?: string;
+      category: components["schemas"]["CommerceCategory"];
+      sku?: string;
+      imageMediaIds: string[];
+      storefrontNameBn: string;
+    };
+    CommerceOrder: {
+      id: string;
+      /** @description Human pickup reference (e.g. KSL-8F3K2) */
+      orderCode: string;
+      storefrontId: string;
+      storefrontNameBn?: string;
+      /** @description Vendor-board view only */
+      buyerName?: string;
+      schoolName?: string;
+      fulfilment: components["schemas"]["CommerceFulfilment"];
+      fulfilmentAddress?: string;
+      status: components["schemas"]["CommerceOrderStatus"];
+      /** Format: double */
+      totalBdt: number;
+      /** Format: double */
+      commissionRate: number;
+      /** Format: double */
+      commissionBdt: number;
+      courierName?: string;
+      trackingNumber?: string;
+      paymentMethod: components["schemas"]["CommercePaymentMethod"];
+      buyerNote?: string;
+      cancelReason?: string;
+      cancelledBy?: components["schemas"]["CommerceCancelledBy"];
+      items: components["schemas"]["CommerceOrderItem"][];
+      /** Format: date-time */
+      placedAt: string;
+      /** Format: date-time */
+      confirmedAt?: string;
+      /** Format: date-time */
+      readyAt?: string;
+      /** Format: date-time */
+      shippedAt?: string;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      cancelledAt?: string;
+    };
+    CommerceOrderResult: {
+      data: components["schemas"]["CommerceOrder"];
+    };
+    CommerceOrderList: {
+      data: components["schemas"]["CommerceOrder"][];
+    };
+    CommerceOrderItemInput: {
+      productId: string;
+      variantId?: string;
+      qty: number;
+    };
+    CommerceCourierAddress: {
+      recipientName: string;
+      /** @description BD E.164 */
+      recipientPhone: string;
+      city: string;
+      area: string;
+      addressLine: string;
+    };
+    CommerceOrderInput: {
+      storefrontId: string;
+      items: components["schemas"]["CommerceOrderItemInput"][];
+      fulfilment: components["schemas"]["CommerceFulfilment"];
+      fulfilmentAddress?: components["schemas"]["CommerceCourierAddress"];
+      buyerNote?: string;
+    };
+    CommerceShipInput: {
+      courierName: string;
+      trackingNumber: string;
+    };
+    CommerceVendorCancelInput: {
+      cancelReason: string;
+    };
+    CommerceBuyerCancelInput: {
+      cancelReason?: string;
+    };
+    /**
+     * InvoiceStatus
+     * @enum {string}
+     */
+    PaymentsInvoiceStatus: "draft" | "issued" | "paid" | "partially_paid" | "void" | "overdue";
+    /**
+     * TxnStatus
+     * @enum {string}
+     */
+    PaymentsTxnStatus: "initiated" | "redirected" | "success" | "failed" | "expired" | "refunded";
+    /**
+     * Gateway
+     * @enum {string}
+     */
+    PaymentsGateway: "sslcommerz" | "bkash" | "nagad";
+    /**
+     * InvoiceKind
+     * @enum {string}
+     */
+    PaymentsInvoiceKind: "tuition" | "exam" | "transport" | "other";
+    /**
+     * LedgerType
+     * @enum {string}
+     */
+    PaymentsLedgerType: "fee_payment" | "convenience_fee" | "commission" | "payout" | "adjustment";
+    PaymentsInvoice: {
+      id: string;
+      studentId: string;
+      studentName?: string;
+      title: string;
+      kind: components["schemas"]["PaymentsInvoiceKind"];
+      /** Format: double */
+      amountBdt: number;
+      /** Format: date */
+      dueDate: string;
+      status: components["schemas"]["PaymentsInvoiceStatus"];
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PaymentsInvoiceInput: {
+      studentId: string;
+      title: string;
+      kind: components["schemas"]["PaymentsInvoiceKind"];
+      /** Format: double */
+      amountBdt: number;
+      /** Format: date */
+      dueDate: string;
+    };
+    PaymentsInvoiceResult: {
+      data: components["schemas"]["PaymentsInvoice"];
+    };
+    PaymentsInvoicePage: {
+      data: components["schemas"]["PaymentsInvoice"][];
+      totals: components["schemas"]["PaymentsTotals"];
+    };
+    PaymentsTotals: {
+      count: number;
+      /** Format: double */
+      amountBdt: number;
+    };
+    PaymentsBulkInput: {
+      sectionId: string;
+      title: string;
+      kind: components["schemas"]["PaymentsInvoiceKind"];
+      /** Format: double */
+      amountBdt: number;
+      /** Format: date */
+      dueDate: string;
+    };
+    PaymentsBulkResult: {
+      data: {
+        created: number;
+        failed: {
+          studentId?: string;
+          reason?: string;
+        }[];
+      };
+    };
+    PaymentsVoidInput: {
+      reason: string;
+    };
+    PaymentsLedgerEntry: {
+      id: string;
+      txnId?: string;
+      type: components["schemas"]["PaymentsLedgerType"];
+      /** Format: double */
+      debitBdt: number;
+      /** Format: double */
+      creditBdt: number;
+      balanceNote: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PaymentsLedgerPage: {
+      data: components["schemas"]["PaymentsLedgerEntry"][];
+      totals: components["schemas"]["PaymentsTotals"];
+    };
+    PaymentsSummary: {
+      issuedCount: number;
+      paidCount: number;
+      overdueCount: number;
+      /** Format: double */
+      collectedBdt: number;
+      /** Format: double */
+      outstandingBdt: number;
+    };
+    PaymentsSummaryResult: {
+      data: components["schemas"]["PaymentsSummary"];
+    };
+    PaymentsInitiateInput: {
+      /** @description Exactly one of invoiceId/orderId */
+      invoiceId?: string;
+      orderId?: string;
+      gateway: components["schemas"]["PaymentsGateway"];
+    };
+    PaymentsRedirectPayload: {
+      txnId: string;
+      gateway: components["schemas"]["PaymentsGateway"];
+      redirectUrl: string;
+      redirectMethod: string;
+      /** @description Opaque gateway checkout reference (SandboxAdapter default) */
+      params?: {
+        [key: string]: string;
+      };
+    };
+    PaymentsRedirectResult: {
+      data: components["schemas"]["PaymentsRedirectPayload"];
+    };
+    PaymentsTransaction: {
+      id: string;
+      invoiceId?: string;
+      orderId?: string;
+      title?: string;
+      gateway: components["schemas"]["PaymentsGateway"];
+      /** Format: double */
+      amountBdt: number;
+      /** Format: double */
+      convenienceFeeBdt: number;
+      status: components["schemas"]["PaymentsTxnStatus"];
+      receiptUrl?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      completedAt?: string;
+    };
+    PaymentsTransactionList: {
+      data: components["schemas"]["PaymentsTransaction"][];
+    };
+    PaymentsTransactionResult: {
+      data: components["schemas"]["PaymentsTransaction"];
+    };
+    PaymentsInvoiceStatusResult: {
+      data: {
+        invoiceId: string;
+        status: components["schemas"]["PaymentsInvoiceStatus"];
+        /** Format: double */
+        amountBdt: number;
+        paidTxnId?: string;
+        lastTxnStatus?: components["schemas"]["PaymentsTxnStatus"];
+      };
+    };
+    PaymentsReceiptResult: {
+      data: {
+        receiptUrl: string;
+        serialNo: string;
+        /** Format: date-time */
+        issuedAt: string;
+      };
+    };
+    PaymentsWebhookResult: {
+      processed: boolean;
+      /** @description DUPLICATE_WEBHOOK etc. — always 2xx for valid signatures */
+      reason?: string;
     };
   };
   responses: {
@@ -2882,6 +5001,1995 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["MediaDownloadUrl"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approveChatGroup: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Club activated; creator is owner; audited */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroup"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  registerNotificationDevice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeviceRegisterInput"];
+      };
+    };
+    responses: {
+      /** @description Token already existed — refreshed */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceRegistered"];
+        };
+      };
+      /** @description Token stored first time */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceRegistered"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deleteNotificationDevice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        deviceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Token pruned (soft; never re-targeted) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeviceDeleted"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getNotificationPreferences: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The three classes */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreferencePage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  patchNotificationPreference: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PreferencePatch"];
+      };
+    };
+    responses: {
+      /** @description The updated three rows */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PreferencePage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listNotificationDeliveries: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+        class?: components["schemas"]["NotificationClass"];
+        status?: components["schemas"]["DeliveryStatus"];
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The caller's rows only (NTF-BR-008) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeliveryPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  markNotificationOpened: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        deliveryId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Flipped to opened (or already opened) */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listSchoolNotificationDeliveries: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-forced by claim (NTF-BR-008) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeliveryAdminPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listPlatformNotificationDeliveries: {
+    parameters: {
+      query?: {
+        schoolId?: string;
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Platform-wide aggregates */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeliveryAdminPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  sendTestNotification: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TestPushInput"];
+      };
+    };
+    responses: {
+      /** @description Directed send queued; payload carries type=test */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TestPushResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listTuitionRequirements: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Poster rows or tenant oversight rows (role-driven server-side) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionRequirementPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createTuitionRequirement: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TuitionRequirementInput"];
+      };
+    };
+    responses: {
+      /** @description Posted; matching job queued */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionRequirementResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateTuitionRequirement: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        requirementId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TuitionRequirementPatch"];
+      };
+    };
+    responses: {
+      /** @description Edited or closed (close notifies interested tutors; admin close audited) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionRequirementResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listTuitionRequirementMatches: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        requirementId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Matches newest-first; contact fields null until this match is accepted */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionPosterMatchPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  browseTuitionTutors: {
+    parameters: {
+      query?: {
+        subject?: components["schemas"]["TuitionSubjectKey"];
+        area?: string;
+        cursor?: string;
+        limit?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Verified profiles only; cached 120 s under `tuition:tutors:{area}` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionTutorPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getTuitionTutor: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        tutorId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Public-safe DTO; unverified profiles are `NOT_FOUND` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionTutorDetail"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getMyTuitionTutorProfile: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The caller's profile (status, pending flag, rejection note) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionTutorProfileResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  upsertTuitionTutorProfile: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TuitionTutorProfileInput"];
+      };
+    };
+    responses: {
+      /** @description The stored profile (own view incl. review tracker state) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionTutorProfileResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  submitTuitionTutorProfileForReview: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TuitionSubmitForReviewInput"];
+      };
+    };
+    responses: {
+      /** @description Profile becomes `pending_review`; SLA reminder armed; evidence complete required */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionTutorProfileResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  expressTuitionInterest: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        matchId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Match now `interested` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionMatchAction"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  acceptTuitionMatch: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        matchId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Match `accepted`, requirement `matched`; audited (the fee event) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionAcceptResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  declineTuitionMatch: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        matchId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Match `declined` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionMatchAction"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyTuitionMatches: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The caller's matches as a tutor, newest first */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionTutorMatchPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listTuitionVerifications: {
+    parameters: {
+      query?: {
+        scope?: components["schemas"]["VerificationScope"];
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Pending (+ decided history) rows routed to the caller's queue */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionVerificationPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approveTuitionVerification: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        verificationId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["TuitionApproveInput"];
+      };
+    };
+    responses: {
+      /** @description Decision recorded; tutor tags busted */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionVerificationResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rejectTuitionVerification: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        verificationId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TuitionRejectInput"];
+      };
+    };
+    responses: {
+      /** @description Decision recorded; tutor notified with the reason */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TuitionVerificationResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVendorStorefronts: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Own rows (INV-5) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceStorefrontList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createVendorStorefront: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceStorefrontInput"];
+      };
+    };
+    responses: {
+      /** @description Created `active`; school tags busted */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceStorefrontResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateVendorStorefront: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceStorefrontPatch"];
+      };
+    };
+    responses: {
+      /** @description Updated; old+new school tags busted */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceStorefrontResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createVendorProduct: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceProductInput"];
+      };
+    };
+    responses: {
+      /** @description Created `active` with inventory rows */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceProductResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateVendorProduct: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceProductPatch"];
+      };
+    };
+    responses: {
+      /** @description Updated; product + store tags busted */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceProductResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateVendorInventory: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceInventoryPatch"];
+      };
+    };
+    responses: {
+      /** @description Updated inventory row */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceInventoryResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listCommerceStores: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description School-scoped list; cached `commerce:stores:school:{id}` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceStoreList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listStoreProducts: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Active products + per-item stock state */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceProductCardList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getCommerceProduct: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Detail payload */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceProductDetailResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyCommerceOrders: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Newest first */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  placeCommerceOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceOrderInput"];
+      };
+    };
+    responses: {
+      /** @description Order `placed`; reservation held; auto-cancel timer armed */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getMyCommerceOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The order with snapshot items */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  cancelMyCommerceOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["CommerceBuyerCancelInput"];
+      };
+    };
+    responses: {
+      /** @description Cancelled; reservation released or stock restocked per state */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVendorOrders: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Orders grouped client-side by status */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getVendorOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Own order or `FORBIDDEN` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  confirmVendorOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Status `confirmed`; buyer pushed */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  readyVendorOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Status `ready_for_pickup` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  shipVendorOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceShipInput"];
+      };
+    };
+    responses: {
+      /** @description Status `shipped` with tracking */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  completeVendorOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Status `completed` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  cancelVendorOrder: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CommerceVendorCancelInput"];
+      };
+    };
+    responses: {
+      /** @description Cancelled with restock semantics per state */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommerceOrderResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listSchoolInvoices: {
+    parameters: {
+      query?: {
+        status?: components["schemas"]["PaymentsInvoiceStatus"];
+        month?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-scoped rows + server-computed totals (never client math) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsInvoicePage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  issueInvoice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PaymentsInvoiceInput"];
+      };
+    };
+    responses: {
+      /** @description Invoice created `issued` */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsInvoiceResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  issueInvoicesBulk: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PaymentsBulkInput"];
+      };
+    };
+    responses: {
+      /** @description {created, failed[]} — never a silent partial batch */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsBulkResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  voidInvoice: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PaymentsVoidInput"];
+      };
+    };
+    responses: {
+      /** @description Invoice `void` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsInvoiceResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listSchoolLedger: {
+    parameters: {
+      query?: {
+        month?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Entries + server totals */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsLedgerPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getSchoolLedgerSummary: {
+    parameters: {
+      query?: {
+        month?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Summary payload */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsSummaryResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  initiatePayment: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PaymentsInitiateInput"];
+      };
+    };
+    responses: {
+      /** @description RedirectPayload — the gateway-hosted checkout reference */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsRedirectResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyPayments: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Own transactions */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsTransactionList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getPaymentTransaction: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        txnId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Transaction + items context */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsTransactionResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getInvoicePaymentStatus: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        invoiceId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description InvoiceStatusDTO */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsInvoiceStatusResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getPaymentReceipt: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        txnId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Receipt link payload */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsReceiptResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  gatewayWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        gateway: components["schemas"]["PaymentsGateway"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": Record<string, never>;
+      };
+    };
+    responses: {
+      /** @description Envelope accepted (idempotent) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PaymentsWebhookResult"];
+        };
+      };
+      /** @description Invalid signature / replayed timestamp (flagged + alerted) */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createLead: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LeadCreate"];
+      };
+    };
+    responses: {
+      /** @description Lead stored (`new`) */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LeadCreated"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  registerVendor: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorRegisterInput"];
+      };
+    };
+    responses: {
+      /** @description Lead + pending account stored */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LeadCreated"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listAdminLeads: {
+    parameters: {
+      query?: {
+        type?: components["schemas"]["LeadType"];
+        status?: components["schemas"]["LeadStatus"];
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The pipeline page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LeadPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateLeadStatus: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        leadId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LeadStatusPatch"];
+      };
+    };
+    responses: {
+      /** @description Updated lead */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Lead"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listAdminVendors: {
+    parameters: {
+      query?: {
+        status?: components["schemas"]["VendorStatus"];
+        q?: string;
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The queue page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approveVendor: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        vendorId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Vendor approved */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorAccount"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rejectVendor: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        vendorId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorReasonInput"];
+      };
+    };
+    responses: {
+      /** @description Vendor rejected */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorAccount"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  suspendVendor: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        vendorId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorReasonInput"];
+      };
+    };
+    responses: {
+      /** @description Vendor suspended */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorAccount"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listAdminSchools: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenants page — id, names, type, city, status, createdAt. */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SchoolPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAdminStats: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenants, cities, leads by status/type, pending vendors, revenue placeholder */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdminStats"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getSchoolStats: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description students / activeSections / pendingVerifications / noticesLast30d */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SchoolStats"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listAdminAuditLog: {
+    parameters: {
+      query?: {
+        entityType?: string;
+        entityId?: string;
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Newest-first audit page (no mutation affordance exists) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AuditLogPage"];
         };
       };
       default: components["responses"]["Problem"];

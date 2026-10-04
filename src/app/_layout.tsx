@@ -23,6 +23,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { SplashReveal } from "@/components/ui/splash-reveal";
 import { ToastProvider } from "@/components/ui/toast";
+import { NotificationsRuntime } from "@/components/notifications/runtime";
 import { LocaleProvider } from "@/i18n/locale-provider";
 import { AuthProvider } from "@/lib/auth/auth-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
@@ -78,6 +79,7 @@ export default function RootLayout() {
               />
               <PortalHost />
               <SplashReveal />
+              <NotificationsRuntime />
             </AuthProvider>
           </ToastProvider>
         </LocaleProvider>
