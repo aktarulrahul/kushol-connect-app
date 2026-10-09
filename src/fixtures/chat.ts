@@ -19,6 +19,11 @@ export type ChatMessage = Omit<Schemas["ChatMessage"], "kind"> & {
   kind: ChatMessageKind;
   /** Present when `kind === "sticker"` — id into `DEMO_STICKERS`. */
   stickerId?: string;
+  /** Fixture-only (Spartens channel parity, owner 2026-10-09): set ⇒ "edited". No OpenAPI
+   * field yet — `TODO: Confirm` before Stage 5 (05 `08-gaps.md` G-7). */
+  editedAt?: string;
+  /** Fixture-only, same note: set ⇒ the message shows in the room's pinned bar. */
+  pinnedAt?: string;
 };
 export type ChatMessageSendInput = Omit<Schemas["ChatMessageSendInput"], "kind"> & {
   kind: Schemas["ChatMessageSendInput"]["kind"] | "sticker";
@@ -139,6 +144,20 @@ type DemoGroup = ChatGroup & { lastReadMessageId: string | null };
 
 const GROUPS: DemoGroup[] = [
   {
+    id: "grp_kushol_admin",
+    kind: "custom",
+    schoolId: DEMO_ME.schoolId,
+    name: "Kushol Admin (কুশল অ্যাডমিন)",
+    status: "active",
+    myRole: "moderator",
+    memberCount: 3,
+    unreadCount: 1,
+    lastMessagePreview: "আকতারুল ইসলাম: কুশল কানেক্ট প্ল্যাটফর্ম সক্রিয়",
+    lastMessageAt: iso(2),
+    createdAt: iso(60 * 24 * 10),
+    lastReadMessageId: null,
+  },
+  {
     id: "grp_official_10a",
     kind: "official",
     schoolId: DEMO_ME.schoolId,
@@ -227,6 +246,36 @@ type DemoMessage = ChatMessage;
 /** Newest last — history pagination walks this array backwards. */
 const MESSAGES: DemoMessage[] = [
   {
+    id: "msg_ka_01",
+    groupId: "grp_kushol_admin",
+    senderId: "01925345-0001-7000-8000-000000000001",
+    senderName: "আকতারুল ইসলাম",
+    kind: "text",
+    body: "কুশল কানেক্ট প্ল্যাটফর্মের সেন্ট্রাল অ্যাডমিন গ্রুপে স্বাগতম।",
+    clientMsgId: "00000000-0000-4000-8000-000000000901",
+    createdAt: iso(60),
+  },
+  {
+    id: "msg_ka_02",
+    groupId: "grp_kushol_admin",
+    senderId: "01925345-0002-7000-8000-000000000002",
+    senderName: "আতিকুল ইসলাম",
+    kind: "text",
+    body: "স্কুল পাইলট সাইন-আপ ও ভেরিফিকেশন মনিটরিং আপডেট প্রস্তুত।",
+    clientMsgId: "00000000-0000-4000-8000-000000000902",
+    createdAt: iso(30),
+  },
+  {
+    id: "msg_ka_03",
+    groupId: "grp_kushol_admin",
+    senderId: DEMO_ME.userId,
+    senderName: DEMO_ME.name,
+    kind: "text",
+    body: "মোবাইল ওটিপি এবং সেশন রোটেশন সফলভাবে ইন্টিগ্রেট করা হয়েছে।",
+    clientMsgId: "00000000-0000-4000-8000-000000000903",
+    createdAt: iso(2),
+  },
+  {
     id: "msg_101",
     groupId: "grp_official_10a",
     senderId: "user_demo_karim",
@@ -261,6 +310,7 @@ const MESSAGES: DemoMessage[] = [
       fileName: "অর্ধবার্ষিক-সিলেবাস.pdf",
       status: "confirmed",
     },
+    pinnedAt: iso(530, 1),
     createdAt: iso(540, 1),
   },
   {
@@ -669,6 +719,60 @@ export async function deleteChatMessage(messageId: string): Promise<{ id: string
   message.deletedAt = new Date().toISOString();
   emit({ type: "message.deleted", groupId: message.groupId, id: message.id, deletedAt: message.deletedAt });
   return { id: message.id, deletedAt: message.deletedAt };
+}
+
+/** Pinned messages per room (Spartens rule: unpin an older one before adding a sixth). */
+export const MAX_PINNED_MESSAGES = 5;
+
+/**
+ * Fixture-only edit (Spartens parity, owner 2026-10-09; no OpenAPI path yet — `TODO: Confirm`,
+ * 08-gaps G-7): the author rewrites their own text message; it keeps its id and shows "edited".
+ */
+export async function editChatMessage(messageId: string, body: string): Promise<ChatMessage> {
+  await latency(200);
+  requireOnline();
+  assertMemberOfMessage(messageId);
+  const message = MESSAGES.find((m) => m.id === messageId);
+  if (!message) throw new ChatFixtureError("NOT_FOUND");
+  if (message.senderId !== DEMO_ME.userId || message.kind !== "text" || message.deletedAt) {
+    throw new ChatFixtureError("FORBIDDEN");
+  }
+  const trimmed = body.trim();
+  if (!trimmed) throw new ChatFixtureError("VALIDATION_FAILED");
+  message.body = trimmed;
+  message.editedAt = new Date().toISOString();
+  const group = GROUPS.find((g) => g.id === message.groupId);
+  const newest = MESSAGES.filter((m) => m.groupId === message.groupId).at(-1);
+  if (group && newest?.id === message.id) group.lastMessagePreview = previewFor(message);
+  return { ...message };
+}
+
+/**
+ * Fixture-only pin/unpin (same note as editChatMessage): room moderators and owners pin up to
+ * MAX_PINNED_MESSAGES messages; members get FORBIDDEN, a sixth pin CONFLICT.
+ */
+export async function setChatMessagePinned(
+  messageId: string,
+  pinned: boolean,
+): Promise<ChatMessage> {
+  await latency(200);
+  requireOnline();
+  assertMemberOfMessage(messageId);
+  const message = MESSAGES.find((m) => m.id === messageId);
+  if (!message) throw new ChatFixtureError("NOT_FOUND");
+  const group = GROUPS.find((g) => g.id === message.groupId);
+  if (!group || group.myRole === "member" || message.deletedAt) {
+    throw new ChatFixtureError("FORBIDDEN");
+  }
+  if (!pinned) {
+    delete message.pinnedAt;
+    return { ...message };
+  }
+  if (message.pinnedAt) return { ...message };
+  const count = MESSAGES.filter((m) => m.groupId === message.groupId && m.pinnedAt).length;
+  if (count >= MAX_PINNED_MESSAGES) throw new ChatFixtureError("CONFLICT", "pin_limit");
+  message.pinnedAt = new Date().toISOString();
+  return { ...message };
 }
 
 function assertMemberOfMessage(messageId: string): void {

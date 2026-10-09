@@ -16,9 +16,13 @@ const phone = {
 
 /** Renders inside the same providers as the root layout (fresh query cache per test). */
 export function renderUi(ui: ReactNode, { locale = "bn" }: { locale?: Locale } = {}) {
-  // gcTime Infinity: no cache timers left running after unmount (Jest would wait on them).
+  // gcTime Infinity: no cache timers left running after unmount (Jest would wait on them) —
+  // mutations too: their default 5-minute GC timer kept a screen test's worker alive.
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { retry: false, gcTime: Infinity },
+    },
   });
   return render(
     <SafeAreaProvider initialMetrics={phone}>

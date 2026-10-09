@@ -13,6 +13,7 @@ import {
 } from "lucide-react-native";
 
 import { SettingsMenuRow } from "@/components/settings/settings-menu-row";
+import { useNotificationBellAction } from "@/components/notifications/notification-bell";
 import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
@@ -78,12 +79,13 @@ export default function YouScreen() {
   const name = me?.fullName ?? t("settings.you_title");
   // Optional subtitle only when the account already has a masked phone — no invented status.
   const subtitle = me?.maskedPhone;
+  const bell = useNotificationBellAction();
 
   return (
     <Screen
       // Dense tab root: override Screen's default gap-4 / py-4 / px-4 (same pattern as Chat/Feeds).
       className="gap-1 px-0 py-1"
-      header={<ScreenHeader title={t("settings.you_title")} />}
+      header={<ScreenHeader title={t("settings.you_title")} action={bell} />}
     >
       <Pressable
         role="button"

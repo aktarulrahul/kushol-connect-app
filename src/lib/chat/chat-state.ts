@@ -35,6 +35,12 @@ type ChatState = {
   reactions: ReactionMap;
   /** userId → online for DM presence dots. */
   presence: Record<string, boolean>;
+  /** groupId → unsent composer text; the chat list shows it as "Draft: …" (Spartens). */
+  drafts: Record<string, string>;
+  /** Chats pinned to the top of the list, most recent pin first (max MAX_PINNED_CHATS). */
+  pinnedChats: string[];
+  /** groupId → per-chat notification level; absent = "all". */
+  chatNotify: Record<string, ChatNotifyLevel>;
 
   setConnection: (state: ConnectionState) => void;
   markTyping: (groupId: string, userId: string, state: "start" | "stop") => void;
@@ -48,7 +54,18 @@ type ChatState = {
   clearReads: (groupId: string) => void;
   toggleReaction: (messageId: string, emoji: string, userId?: string) => void;
   setPresence: (userId: string, online: boolean) => void;
+  setDraft: (groupId: string, text: string) => void;
+  /** false when pinning would exceed MAX_PINNED_CHATS (nothing changes). */
+  togglePinChat: (groupId: string) => boolean;
+  setChatNotify: (groupId: string, level: ChatNotifyLevel) => void;
 };
+
+/** Per-chat notification level — memory-only like reactions until the 06 preferences contract
+ * carries it (05 `08-gaps.md` G-7). */
+export type ChatNotifyLevel = "all" | "none";
+
+/** Spartens rule: up to five pinned chats. */
+export const MAX_PINNED_CHATS = 5;
 
 const TYPING_TTL_MS = 4_000;
 
@@ -66,6 +83,9 @@ export const useChatState = create<ChatState>((set, get) => ({
   presence: {
     user_demo_karim: true,
   },
+  drafts: {},
+  pinnedChats: [],
+  chatNotify: {},
 
   setConnection: (connection) => {
     set({ connection });
@@ -152,22 +172,48 @@ export const useChatState = create<ChatState>((set, get) => ({
 
   toggleReaction: (messageId, emoji, userId = DEMO_ME.userId) => {
     set((s) => {
-      const byEmoji = { ...(s.reactions[messageId] ?? {}) };
-      const users = [...(byEmoji[emoji] ?? [])];
-      const idx = users.indexOf(userId);
-      if (idx >= 0) users.splice(idx, 1);
-      else users.push(userId);
-      if (users.length === 0) delete byEmoji[emoji];
-      else byEmoji[emoji] = users;
-      const reactions = { ...s.reactions };
-      if (Object.keys(byEmoji).length === 0) delete reactions[messageId];
-      else reactions[messageId] = byEmoji;
-      return { reactions };
+      const current = s.reactions[messageId] ?? {};
+      const users = current[emoji] ?? [];
+      const nextUsers = users.includes(userId)
+        ? users.filter((u) => u !== userId)
+        : [...users, userId];
+      const byEmoji = Object.fromEntries(
+        Object.entries({ ...current, [emoji]: nextUsers }).filter(([, list]) => list.length > 0),
+      );
+      const others = Object.entries(s.reactions).filter(([key]) => key !== messageId);
+      return {
+        reactions: Object.fromEntries(
+          Object.keys(byEmoji).length > 0 ? [...others, [messageId, byEmoji]] : others,
+        ),
+      };
     });
   },
 
   setPresence: (userId, online) => {
     set((s) => ({ presence: { ...s.presence, [userId]: online } }));
+  },
+
+  setDraft: (groupId, text) => {
+    set((s) => {
+      if ((s.drafts[groupId] ?? "") === text) return s;
+      const others = Object.entries(s.drafts).filter(([key]) => key !== groupId);
+      return { drafts: Object.fromEntries(text ? [...others, [groupId, text]] : others) };
+    });
+  },
+
+  togglePinChat: (groupId) => {
+    const pinned = get().pinnedChats;
+    if (pinned.includes(groupId)) {
+      set({ pinnedChats: pinned.filter((id) => id !== groupId) });
+      return true;
+    }
+    if (pinned.length >= MAX_PINNED_CHATS) return false;
+    set({ pinnedChats: [groupId, ...pinned] });
+    return true;
+  },
+
+  setChatNotify: (groupId, level) => {
+    set((s) => ({ chatNotify: { ...s.chatNotify, [groupId]: level } }));
   },
 }));
 

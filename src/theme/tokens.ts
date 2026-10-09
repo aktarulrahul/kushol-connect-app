@@ -273,7 +273,7 @@ function rgbaFromHex(hex: string, alpha: number): string {
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
-  return `rgba(${r},${g},${b},${alpha})`;
+  return `rgba(${String(r)},${String(g)},${String(b)},${String(alpha)})`;
 }
 
 /** iOS expo-blur companion overlays (teal shell unchanged on Android/web). */
@@ -368,6 +368,9 @@ export const layout = {
   tabletMax: 600,
   /** Header wash height, teal-50 → paper (design-reference §6.1). */
   headerWash: 180,
+  /** Floating tab bar (64pt tab + 2 × 10pt padding + border ≈ 86pt) plus 14pt of air — a
+   * screen FAB sits this far above the safe bottom edge (chat list, Spartens FAB). */
+  tabBarClearance: 100,
 } as const;
 
 // ─── Motion (DSN-BR-007: every animation has a reduced-motion form) ───────────────────────

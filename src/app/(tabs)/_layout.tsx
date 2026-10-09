@@ -1,7 +1,7 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Redirect, Slot, usePathname, useRouter } from "expo-router";
 import {
-  Bell,
+  Compass,
   MessageCircle,
   Newspaper,
   ShoppingBag,
@@ -17,7 +17,6 @@ import { NativeOnlyAnimatedView } from "@/components/ui/native-only-animated-vie
 import { Skeleton } from "@/components/ui/skeleton";
 import { Screen } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
-import { listNotices } from "@/fixtures/notices";
 import { useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import { useChatGroups, useMessageRequests } from "@/lib/chat/use-chat";
@@ -27,12 +26,14 @@ import { useChatGroups, useMessageRequests } from "@/lib/chat/use-chat";
 // interval and on foreground so a mid-session verify opens the tabs without re-login (fade of
 // gate → tabs, opacity only under reduced motion — 05 §5). Owner shell 2026-10-02: Feeds · Shop ·
 // Chat · Notifications · You/Users (floating pill). Settings reachable from You only — no Chat
-// avatar / gear FAB.
+// avatar / gear FAB. Owner 2026-10-09: Shop hidden; Explore added; first tab relabelled Home.
+// Owner 2026-10-09 (rev 2): final shell = Home · Explore · Chat · Store · Profile — notifications
+// move OFF the bar into the Home header bell (Spartens-style, badge → /notifications).
 const TABS = [
-  { key: "feeds", labelKey: "notifications.tab", icon: Newspaper, href: "/feeds" },
-  { key: "shop", labelKey: "marketplace.tab", icon: ShoppingBag, href: "/shop" },
+  { key: "feeds", labelKey: "common.home_tab", icon: Newspaper, href: "/feeds" },
+  { key: "explore", labelKey: "common.explore_tab", icon: Compass, href: "/explore" },
   { key: "chat", labelKey: "chat.tab", icon: MessageCircle, href: "/chat" },
-  { key: "notifications", labelKey: "notices.tab", icon: Bell, href: "/notifications" },
+  { key: "store", labelKey: "common.store_tab", icon: ShoppingBag, href: "/shop" },
   { key: "you", labelKey: "settings.you_tab", icon: UserRound, href: "/you" },
 ] as const;
 
@@ -45,10 +46,9 @@ function GateSkeleton() {
   );
 }
 
-function useTabBadges(): { chat: number; feeds: number; notifications: number } {
+function useTabBadges(): { chat: number; feeds: number } {
   const groups = useChatGroups();
   const requests = useMessageRequests();
-  const notices = useQuery({ queryKey: ["notices", "board"], queryFn: () => listNotices() });
   return useMemo(() => {
     const chat =
       groups.data
@@ -56,9 +56,8 @@ function useTabBadges(): { chat: number; feeds: number; notifications: number } 
         .reduce((sum, g) => sum + (g.unreadCount || 0), 0) ?? 0;
     const feeds =
       requests.data?.received.filter((r) => r.status === "pending").length ?? 0;
-    const notifications = notices.data?.length ?? 0;
-    return { chat, feeds, notifications };
-  }, [groups.data, requests.data, notices.data]);
+    return { chat, feeds };
+  }, [groups.data, requests.data]);
 }
 
 export default function TabsLayout() {
@@ -120,8 +119,9 @@ export default function TabsLayout() {
     );
   }
 
+  // The notice board (+ detail pages) lives off the bar now — no tab lights up for /notices*.
   const active = pathname.startsWith("/notices")
-    ? "notifications"
+    ? ""
     : (TABS.find((tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`))?.key ??
       "chat");
 
@@ -144,9 +144,7 @@ export default function TabsLayout() {
               ? badges.chat
               : tab.key === "feeds"
                 ? badges.feeds
-                : tab.key === "notifications"
-                  ? badges.notifications
-                  : undefined,
+                : undefined,
           avatar: tab.key === "you" ? { name: me.fullName } : undefined,
         }))}
         active={active}

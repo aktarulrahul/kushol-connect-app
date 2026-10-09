@@ -1,45 +1,92 @@
-// Group / DM chat screen (COM-AP-003..005, 010, 011, 016): WhatsApp-dense message list, reply,
-// reactions, stickers, message info, media viewers, inline voice. Shared by /groups/[id] and
-// /messages/[peerId] (05 §2.2).
+// Group / DM conversation (COM-AP-003..005, 010, 011, 016) in the Spartens channel language
+// (owner 2026-10-09): channel header (back · avatar + name · info), pinned-message bar, inverted
+// message list with day pills and the "N new unread" pill captured on open, swipe-to-reply,
+// long-press focus menu (reactions · reply · edit · pin · info · delete), reply/edit banners,
+// typing pill, jump-to-latest button. Shared by /groups/[id] and /messages/[peerId] (05 §2.2).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from "react-native";
 import { router } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
+import { CircleAlert, Info, Pencil, Pin, PinOff, Reply, Trash2 } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReducedMotion } from "react-native-reanimated";
 
-import { Composer, VoiceRecorderSheet } from "@/components/chat/composer";
-import { DateSeparator, OfflineBanner, TypingIndicator } from "@/components/chat/chrome";
+import { ChannelHeader, ChatInfoSheet, PinnedBar } from "@/components/chat/channel-header";
+import type { ChatAvatarKind } from "@/components/chat/chat-avatar";
 import {
-  MessageInfoSheet,
-  MessageLongPressSheet,
-  StickerPickerSheet,
-} from "@/components/chat/message-actions";
-import { MessageBubble, type BubbleSendState } from "@/components/chat/message-bubble";
-import { chatFixtureFlags, DEMO_STICKERS, type ChatMessage } from "@/fixtures/chat";
-import { DEMO_MAGIC } from "@/fixtures/media";
-import { GlassSurface } from "@/components/ui/glass-surface";
-import { CircleAction } from "@/components/ui/screen-header";
-import { Screen } from "@/components/ui/screen";
+  DateSeparator,
+  EmptyConversation,
+  OfflineBanner,
+  ScrollToBottomButton,
+  TypingIndicator,
+  UnreadPill,
+} from "@/components/chat/chrome";
+import { AttachSheet, Composer, VoiceRecorderSheet } from "@/components/chat/composer";
+import type { Anchor } from "@/components/chat/focus-overlay";
+import { MessageInfoSheet, StickerPickerSheet } from "@/components/chat/message-actions";
+import {
+  MessageBubble,
+  type BubbleAnchor,
+  type BubbleSendState,
+} from "@/components/chat/message-bubble";
+import { MessageFocusMenu, type MessageMenuAction } from "@/components/chat/message-menu";
+import { SwipeToReply } from "@/components/chat/swipe-to-reply";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { ChatAvatar, type ChatAvatarKind } from "@/components/chat/chat-avatar";
-import { EMPTY_TYPING, useChatState } from "@/lib/chat/chat-state";
+import {
+  chatFixtureFlags,
+  DEMO_ME,
+  DEMO_STICKERS,
+  MAX_PINNED_MESSAGES,
+  type ChatGroup,
+  type ChatMessage,
+} from "@/fixtures/chat";
+import { DEMO_MAGIC } from "@/fixtures/media";
+import { useT } from "@/i18n/locale-provider";
+import { EMPTY_TYPING, reactionChips, useChatState } from "@/lib/chat/chat-state";
 import { uploadMedia, type MediaPick } from "@/lib/chat/media-pipeline";
+import {
+  firstUnreadId,
+  isSameDay,
+  messagePreview,
+  sortMessagesAsc,
+} from "@/lib/chat/message-utils";
 import {
   useChatHistory,
   useDeleteMessage,
+  useEditMessage,
   useMarkRead,
+  usePinMessage,
   useSendMessage,
 } from "@/lib/chat/use-chat";
-import { useT } from "@/i18n/locale-provider";
 import { cn } from "@/lib/utils";
+import { motion } from "@/theme/tokens";
 
-const ME = "user_demo_teacher";
+const ME = DEMO_ME.userId;
+/** Show the jump-to-latest button once the reader is this far (pt) above the newest message. */
+const JUMP_AFTER = 300;
+const HIGHLIGHT_MS = 2_000;
+
+type SendInput = {
+  kind: "text" | "image" | "pdf" | "voice" | "sticker";
+  body?: string;
+  mediaAssetId?: string;
+  stickerId?: string;
+};
+
+type Row = { message: ChatMessage; sendState?: BubbleSendState; optimistic: boolean };
+
+/** Opens a sheet once the focus menu's modal is gone — iOS presents one modal at a time. */
+function afterMenu(action: () => void): void {
+  setTimeout(action, motion.duration.slow);
+}
 
 export function GroupChatScreen({
   groupId,
   title,
+  group,
   subtitle,
   memberCount,
   avatarKind = "group",
@@ -47,6 +94,8 @@ export function GroupChatScreen({
 }: {
   groupId: string;
   title: string;
+  /** The cached list row — role, status and the unread count at open. */
+  group?: ChatGroup;
   subtitle?: string;
   memberCount?: number;
   /** DM vs group/official silhouette when there is no photo. */
@@ -56,81 +105,182 @@ export function GroupChatScreen({
 }) {
   const t = useT();
   const toast = useToast();
+  const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const history = useChatHistory(groupId);
   const sendMessage = useSendMessage(groupId);
   const markRead = useMarkRead(groupId);
   const deleteMessage = useDeleteMessage(groupId);
-  const typingByUser = useChatState((s) => s.typing[groupId]);
-  const typing = typingByUser ?? EMPTY_TYPING;
+  const editMessage = useEditMessage(groupId);
+  const pinMessage = usePinMessage(groupId);
+  const typing = useChatState((s) => s.typing[groupId]) ?? EMPTY_TYPING;
   const outgoing = useChatState((s) => s.outgoing);
   const connection = useChatState((s) => s.connection);
+  const reactions = useChatState((s) => s.reactions);
+  const presence = useChatState((s) => s.presence);
   const toggleReaction = useChatState((s) => s.toggleReaction);
-  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const [voiceOpen, setVoiceOpen] = useState(false);
-  const [stickerOpen, setStickerOpen] = useState(false);
-  const [actionMessage, setActionMessage] = useState<ChatMessage | null>(null);
-  const [infoMessage, setInfoMessage] = useState<ChatMessage | null>(null);
-  const listRef = useRef<ScrollView>(null);
+  const dropSend = useChatState((s) => s.dropSend);
+  const draft = useChatState((s) => s.drafts[groupId]) ?? "";
+  const setDraft = useChatState((s) => s.setDraft);
 
-  const messages = history.data?.data ?? [];
-  const typingNames = useMemo(
-    () => Object.keys(typing).filter((id) => id !== ME),
-    [typing],
+  const listRef = useRef<FlatList<Row>>(null);
+  const [focusKey, setFocusKey] = useState(0);
+  // The unread pill is captured once, when the room opens; reading clears the row's count.
+  const [unreadAtOpen] = useState(() => group?.unreadCount ?? 0);
+  const [showUnread, setShowUnread] = useState(true);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [focus, setFocus] = useState<{ message: ChatMessage; anchor: Anchor } | null>(null);
+  const [infoMessage, setInfoMessage] = useState<ChatMessage | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const [activePin, setActivePin] = useState(0);
+  const [showJump, setShowJump] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [stickerOpen, setStickerOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+
+  const isGroup = avatarKind !== "dm";
+  const moderator = isGroup && group !== undefined && group.myRole !== "member";
+  const readOnly = group?.status === "archived" || group?.status === "pending_approval";
+
+  const messages = useMemo(() => sortMessagesAsc(history.data?.data ?? []), [history.data]);
+  const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  const unreadMarker = useMemo(
+    () => (showUnread ? firstUnreadId(messages, unreadAtOpen, ME) : null),
+    [messages, unreadAtOpen, showUnread],
   );
 
-  // First unread separator: messages after the group's last-read cursor (fixture lastRead on row).
-  const firstUnreadId = useMemo(() => {
-    const unreadIncoming = messages.find((m) => m.senderId !== ME);
-    // Stage-2: treat the first non-own message in a room with unreadCount>0 path as marker when
-    // the newest message is from a peer — approximate WhatsApp "unread" bar on open.
-    if (!unreadIncoming) return null;
-    const newest = messages[messages.length - 1];
-    if (newest && newest.senderId !== ME) {
-      // Find first peer message after the last own message, or first peer message overall.
-      let lastOwn = -1;
-      messages.forEach((m, i) => {
-        if (m.senderId === ME) lastOwn = i;
-      });
-      const idx = messages.findIndex((m, i) => i > lastOwn && m.senderId !== ME);
-      return idx >= 0 ? messages[idx]?.id ?? null : unreadIncoming.id;
-    }
-    return null;
-  }, [messages]);
-
-  const newest = messages[messages.length - 1];
-  useEffect(() => {
-    if (newest && newest.senderId === ME) return;
-    if (newest) markRead.mutate(newest.id);
+  // History rows + optimistic sends not yet in history, newest first for the inverted list.
+  const rows = useMemo<Row[]>(() => {
+    const tracked = new Map(
+      outgoing.filter((o) => o.groupId === groupId).map((o) => [o.clientMsgId, o]),
+    );
+    const seen = new Set(messages.map((m) => m.clientMsgId));
+    const fromHistory: Row[] = messages.map((message) => ({
+      message,
+      optimistic: false,
+      sendState:
+        message.senderId !== ME ? undefined : (tracked.get(message.clientMsgId)?.state ?? "seen"),
+    }));
+    const pending: Row[] = [...tracked.values()]
+      .filter((o) => !seen.has(o.clientMsgId))
+      .map((o) => ({
+        optimistic: true,
+        sendState: o.state,
+        message: {
+          id: o.clientMsgId,
+          groupId,
+          senderId: ME,
+          senderName: DEMO_ME.name,
+          kind: o.input.kind,
+          ...(o.input.kind === "text" ? { body: o.input.body } : {}),
+          ...(o.input.kind === "sticker" ? { stickerId: o.input.stickerId } : {}),
+          ...(o.input.replyTo
+            ? {
+                replyTo: o.input.replyTo,
+                replyPreview: previewOf(byId.get(o.input.replyTo)),
+              }
+            : {}),
+          clientMsgId: o.clientMsgId,
+          createdAt: new Date().toISOString(),
+        },
+      }));
+    return [...fromHistory, ...pending].reverse();
+    // previewOf is stable per locale via t; byId covers quoted messages.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newest?.id]);
+  }, [messages, outgoing, groupId, byId]);
+
+  const pins = useMemo(
+    () =>
+      messages
+        .filter((m) => m.pinnedAt && !m.deletedAt)
+        .sort((a, b) => Date.parse(b.pinnedAt ?? "") - Date.parse(a.pinnedAt ?? "")),
+    [messages],
+  );
+
+  const typers = useMemo(() => {
+    const names = new Map(messages.map((m) => [m.senderId, m.senderName]));
+    return Object.keys(typing)
+      .filter((id) => id !== ME)
+      .map((userId) => ({ userId, name: names.get(userId) ?? title }));
+  }, [typing, messages, title]);
+
+  function previewOf(message: ChatMessage | undefined): string {
+    if (!message) return "…";
+    if (message.deletedAt) return t("chat.deleted");
+    return messagePreview(message, {
+      image: t("chat.preview.image"),
+      pdf: t("chat.composer.attach_pdf"),
+      voice: t("chat.preview.voice"),
+      sticker: t("chat.preview.sticker"),
+    });
+  }
+
+  function authorOf(message: ChatMessage | undefined): string | undefined {
+    if (!message) return undefined;
+    return message.senderId === ME ? t("chat.you") : message.senderName;
+  }
+
+  // Read pointer follows the newest incoming message while the room is open (US-006).
+  const newestIncoming = [...messages].reverse().find((m) => m.senderId !== ME);
+  useEffect(() => {
+    if (newestIncoming) markRead.mutate(newestIncoming.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newestIncoming?.id]);
 
   useEffect(() => {
-    listRef.current?.scrollToEnd({ animated: !reducedMotion });
-  }, [messages.length, reducedMotion]);
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => {
+        setKeyboardOpen(true);
+      },
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardOpen(false);
+      },
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
-  const sendStateFor = (message: ChatMessage): BubbleSendState | undefined => {
-    if (message.senderId !== ME) return undefined;
-    if (message.clientMsgId && outgoing.some((o) => o.clientMsgId === message.clientMsgId)) {
-      return outgoing.find((o) => o.clientMsgId === message.clientMsgId)?.state;
-    }
-    return "seen";
+  useEffect(() => {
+    if (!highlighted) return;
+    const timer = setTimeout(() => {
+      setHighlighted(null);
+    }, HIGHLIGHT_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [highlighted]);
+
+  const scrollToLatest = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: !reducedMotion });
   };
 
-  const doSend = (input: {
-    kind: "text" | "image" | "pdf" | "voice" | "sticker";
-    body?: string;
-    mediaAssetId?: string;
-    stickerId?: string;
-  }) => {
-    sendMessage.mutate(replyTo ? { ...input, replyTo: replyTo.id } : input, {
+  const jumpTo = (messageId: string) => {
+    const index = rows.findIndex((row) => row.message.id === messageId);
+    if (index === -1) return;
+    setHighlighted(messageId);
+    listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: !reducedMotion });
+  };
+
+  const doSend = (input: SendInput) => {
+    const quoted = replyTo;
+    sendMessage.mutate(quoted ? { ...input, replyTo: quoted.id } : input, {
       onError: () => {
         toast({ title: t("chat.bubble.failed"), variant: "error" });
       },
-      onSettled: () => {
-        setReplyTo(null);
-      },
     });
+    setReplyTo(null);
+    setShowUnread(false);
+    scrollToLatest();
   };
 
   const pickMedia = (pick: MediaPick) => {
@@ -143,137 +293,375 @@ export function GroupChatScreen({
       });
   };
 
+  const submitText = (body: string) => {
+    if (editing) {
+      const target = editing.id;
+      setEditing(null);
+      editMessage.mutate(
+        { messageId: target, body },
+        {
+          onError: () => {
+            toast({ title: t("common.state.error_title"), variant: "error" });
+          },
+        },
+      );
+      return;
+    }
+    setDraft(groupId, "");
+    doSend({ kind: "text", body });
+  };
+
+  const startReply = (message: ChatMessage) => {
+    setEditing(null);
+    setReplyTo(message);
+    afterMenu(() => {
+      setFocusKey((n) => n + 1);
+    });
+  };
+
+  const togglePin = (message: ChatMessage) => {
+    const pinned = Boolean(message.pinnedAt);
+    if (!pinned && pins.length >= MAX_PINNED_MESSAGES) {
+      toast({ title: t("chat.pinned.limit", { count: MAX_PINNED_MESSAGES }), variant: "info" });
+      return;
+    }
+    pinMessage.mutate(
+      { messageId: message.id, pinned: !pinned },
+      {
+        onError: () => {
+          toast({ title: t("chat.errors.forbidden"), variant: "error" });
+        },
+      },
+    );
+  };
+
+  // A failed bubble resends its own input (reply included) without touching the composer.
+  const retry = (message: ChatMessage) => {
+    const failed = outgoing.find((o) => o.clientMsgId === message.clientMsgId);
+    if (!failed) return;
+    dropSend(failed.clientMsgId);
+    sendMessage.mutate(failed.input, {
+      onError: () => {
+        toast({ title: t("chat.bubble.failed"), variant: "error" });
+      },
+    });
+  };
+
+  const actionsFor = (message: ChatMessage, optimistic: boolean): MessageMenuAction[] => {
+    if (message.deletedAt || optimistic) return [];
+    const own = message.senderId === ME;
+    const list: MessageMenuAction[] = [
+      {
+        key: "reply",
+        label: t("chat.actions.reply"),
+        icon: Reply,
+        onPress: () => {
+          startReply(message);
+        },
+      },
+    ];
+    if (own && message.kind === "text") {
+      list.push({
+        key: "edit",
+        label: t("chat.actions.edit"),
+        icon: Pencil,
+        onPress: () => {
+          setReplyTo(null);
+          setEditing({ id: message.id, text: message.body ?? "" });
+          afterMenu(() => {
+            setFocusKey((n) => n + 1);
+          });
+        },
+      });
+    }
+    if (moderator) {
+      const pinned = Boolean(message.pinnedAt);
+      list.push({
+        key: pinned ? "unpin" : "pin",
+        label: pinned ? t("chat.actions.unpin") : t("chat.actions.pin"),
+        icon: pinned ? PinOff : Pin,
+        onPress: () => {
+          togglePin(message);
+        },
+      });
+    }
+    if (own) {
+      list.push({
+        key: "info",
+        label: t("chat.actions.message_info"),
+        icon: Info,
+        onPress: () => {
+          afterMenu(() => {
+            setInfoMessage(message);
+          });
+        },
+      });
+    }
+    if (own || moderator) {
+      list.push({
+        key: "delete",
+        label: t("chat.actions.delete_message"),
+        icon: Trash2,
+        destructive: true,
+        onPress: () => {
+          afterMenu(() => {
+            setDeleteTarget(message);
+          });
+        },
+      });
+    }
+    return list;
+  };
+
   const offline = connection === "offline" || chatFixtureFlags.mode === "offline";
+  const peerOnline = !isGroup && peerId ? presence[peerId] === true : false;
   const headerSubtitle =
-    typingNames.length > 0
+    typers.length > 0
       ? t("chat.group.typing")
       : (subtitle ??
-        (memberCount ? t("chat.group.members_count", { count: memberCount }) : undefined));
+        (peerOnline
+          ? t("chat.group.online")
+          : memberCount
+            ? t("chat.group.members_count", { count: memberCount })
+            : undefined));
+
+  const infoDetails = [
+    avatarKind === "dm"
+      ? t("chat.header.kind_dm")
+      : avatarKind === "official"
+        ? t("chat.header.kind_official")
+        : t("chat.header.kind_custom"),
+    ...(memberCount ? [t("chat.group.members_count", { count: memberCount })] : []),
+    ...(peerOnline ? [t("chat.group.online")] : []),
+  ];
+
+  const focusRow = focus ? rows.find((row) => row.message.id === focus.message.id) : undefined;
+  const focusMessage = focusRow?.message ?? focus?.message;
+  const replyQuote = replyTo
+    ? { author: authorOf(replyTo) ?? "", preview: previewOf(replyTo) }
+    : null;
+
+  const renderBubble = (row: Row, preview: boolean) => {
+    const message = row.message;
+    const own = message.senderId === ME;
+    return (
+      <MessageBubble
+        message={message}
+        isOwn={own}
+        showSender={!own}
+        isGroup={isGroup}
+        sendState={row.sendState}
+        replyAuthor={message.replyTo ? authorOf(byId.get(message.replyTo)) : undefined}
+        preview={preview}
+        onLongPress={
+          preview
+            ? undefined
+            : (m: ChatMessage, anchor: BubbleAnchor, remeasure) => {
+                if (!keyboardOpen) {
+                  setFocus({ message: m, anchor });
+                  return;
+                }
+                // The bubble moves when the keyboard drops — lift it from where it lands.
+                Keyboard.dismiss();
+                setTimeout(() => {
+                  remeasure((settled) => {
+                    setFocus({ message: m, anchor: settled });
+                  });
+                }, motion.duration.slow + motion.duration.fast);
+              }
+        }
+        onOpenMedia={(m) => {
+          router.push({
+            pathname: "/(modals)/media-viewer",
+            params: {
+              assetId: m.media?.assetId ?? "",
+              title: m.media?.fileName ?? "",
+              kind: m.kind,
+            },
+          });
+        }}
+        onToggleReaction={(m, emoji) => {
+          toggleReaction(m.id, emoji);
+        }}
+        onPressReply={jumpTo}
+        onRetry={retry}
+      />
+    );
+  };
+
+  const renderRow = ({ item, index }: { item: Row; index: number }) => {
+    const message = item.message;
+    const own = message.senderId === ME;
+    // rows are newest-first: the chronologically previous message is the next row.
+    const previous = rows[index + 1]?.message;
+    const newDay = !previous || !isSameDay(previous.createdAt, message.createdAt);
+    return (
+      <View className="px-4 py-1.5">
+        {newDay ? <DateSeparator iso={message.createdAt} /> : null}
+        {message.id === unreadMarker ? <UnreadPill count={unreadAtOpen} /> : null}
+        <View
+          className={cn(
+            "rounded-xl",
+            newDay || message.id === unreadMarker ? "mt-2" : undefined,
+            highlighted === message.id && "bg-primary-soft",
+          )}
+        >
+          <SwipeToReply
+            direction={own ? "left" : "right"}
+            enabled={!message.deletedAt && !item.optimistic && !readOnly}
+            onReply={() => {
+              startReply(message);
+            }}
+          >
+            {renderBubble(item, false)}
+          </SwipeToReply>
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <Screen
-      scroll={false}
-      className="flex-1"
-      header={
-        <ScreenHeaderForChat
-          title={title}
-          subtitle={headerSubtitle}
-          avatarKind={avatarKind}
-          avatarId={peerId ?? groupId}
-        />
-      }
-    >
+    <View className="flex-1 bg-background">
+      <ChannelHeader
+        title={title}
+        subtitle={headerSubtitle}
+        subtitleActive={typers.length > 0 || peerOnline}
+        avatarKind={avatarKind}
+        avatarId={peerId ?? groupId}
+        onBack={() => {
+          router.back();
+        }}
+        onOpenInfo={() => {
+          setInfoOpen(true);
+        }}
+      />
       <OfflineBanner visible={offline} />
-      {history.isLoading ? (
-        <View className="flex-1 gap-2 p-3">
-          {["w-4/5", "w-3/5", "w-2/3"].map((w, i) => (
-            <Skeleton
-              key={i}
-              className={cn("h-10 rounded-2xl", w, i % 2 ? "self-end" : "self-start")}
-            />
-          ))}
-        </View>
-      ) : history.isError ? (
-        <View className="flex-1 items-center justify-center gap-2 p-6">
-          <Text variant="muted">{t("chat.group.not_member")}</Text>
-        </View>
-      ) : (
-        <ScrollView
-          ref={listRef}
-          className="flex-1"
-          onContentSizeChange={() => {
-            listRef.current?.scrollToEnd({ animated: false });
-          }}
-        >
-          <View className="gap-0.5 px-2 py-1">
-            {messages.map((message: ChatMessage, index) => {
-              const previous = messages[index - 1];
-              const needsSeparator =
-                !previous ||
-                new Date(previous.createdAt).toDateString() !==
-                  new Date(message.createdAt).toDateString();
-              const isOwn = message.senderId === ME;
-              const showSender =
-                !isOwn &&
-                (needsSeparator || !previous || previous.senderId !== message.senderId);
-              // Children as an array — avoids JSX whitespace RCTRawText under this View
-              // (Fabric logs that as a blank ERROR pointing here).
-              return (
-                <View key={message.id}>
-                  {[
-                    needsSeparator ? (
-                      <DateSeparator key={`${message.id}-sep`} iso={message.createdAt} />
-                    ) : null,
-                    message.id === firstUnreadId ? (
-                      <View key={`${message.id}-unread`} className="my-1 items-center py-1">
-                        <Text className="rounded-full bg-primary/15 px-3 py-0.5 text-[11px] font-semibold text-primary">
-                          {t("chat.unread.separator")}
-                        </Text>
-                      </View>
-                    ) : null,
-                    <MessageBubble
-                      key={`${message.id}-bubble`}
-                      message={message}
-                      isOwn={isOwn}
-                      showSender={showSender}
-                      sendState={sendStateFor(message)}
-                      onLongPress={(m) => {
-                        setActionMessage(m);
-                      }}
-                      onOpenMedia={(m) => {
-                        router.push({
-                          pathname: "/(modals)/media-viewer",
-                          params: {
-                            assetId: m.media?.assetId ?? "",
-                            title: m.media?.fileName ?? "",
-                            kind: m.kind,
-                          },
-                        });
-                      }}
-                      onToggleReaction={(m, emoji) => {
-                        toggleReaction(m.id, emoji);
-                      }}
-                    />,
-                  ]}
-                </View>
-              );
-            })}
-            {outgoing
-              .filter((o) => o.groupId === groupId)
-              .map((o) => (
-                <MessageBubble
-                  key={o.clientMsgId}
-                  isOwn
-                  showSender={false}
-                  sendState={o.state}
-                  message={{
-                    id: o.clientMsgId,
-                    groupId,
-                    senderId: ME,
-                    senderName: "ডেমো শিক্ষক",
-                    kind: o.input.kind,
-                    ...(o.input.kind === "text" ? { body: o.input.body } : {}),
-                    ...(o.input.kind === "sticker" ? { stickerId: o.input.stickerId } : {}),
-                    clientMsgId: o.clientMsgId,
-                    createdAt: new Date().toISOString(),
-                  }}
+      <PinnedBar
+        previews={pins.map((m) => previewOf(m))}
+        activeIndex={activePin}
+        onPress={() => {
+          const pin = pins[activePin % Math.max(pins.length, 1)];
+          if (pin) jumpTo(pin.id);
+          if (pins.length > 1) setActivePin((i) => (i + 1) % pins.length);
+        }}
+      />
+      {/* Overlap-based padding: safe whether or not Android resizes the window (edge-to-edge). */}
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
+        <View className="flex-1 bg-muted">
+          {history.isLoading ? (
+            <View className="flex-1 justify-end gap-3 p-4">
+              {["w-3/5", "w-4/5", "w-2/3", "w-1/2"].map((w, i) => (
+                <Skeleton
+                  key={w}
+                  className={cn("h-12 rounded-xl", w, i % 2 ? "self-end" : "self-start")}
                 />
               ))}
-          </View>
-        </ScrollView>
-      )}
+            </View>
+          ) : history.isError ? (
+            <View className="flex-1 items-center justify-center gap-2 p-6">
+              <Icon as={CircleAlert} size={28} className="text-muted-foreground" />
+              <Text variant="muted" className="text-center">
+                {t("chat.group.not_member")}
+              </Text>
+            </View>
+          ) : rows.length === 0 ? (
+            <EmptyConversation />
+          ) : (
+            <FlatList
+              ref={listRef}
+              inverted
+              data={rows}
+              keyExtractor={(row) => row.message.id}
+              renderItem={renderRow}
+              extraData={{ highlighted, unreadMarker, reactions }}
+              contentContainerClassName="py-2"
+              keyboardDismissMode="interactive"
+              keyboardShouldPersistTaps="handled"
+              scrollEventThrottle={64}
+              onScroll={(event) => {
+                const away = event.nativeEvent.contentOffset.y > JUMP_AFTER;
+                setShowJump((prev) => (prev === away ? prev : away));
+              }}
+              onScrollToIndexFailed={(info) => {
+                listRef.current?.scrollToOffset({
+                  offset: info.averageItemLength * info.index,
+                  animated: false,
+                });
+                setTimeout(() => {
+                  listRef.current?.scrollToIndex({
+                    index: info.index,
+                    viewPosition: 0.5,
+                    animated: !reducedMotion,
+                  });
+                }, 100);
+              }}
+            />
+          )}
+          <ScrollToBottomButton visible={showJump} onPress={scrollToLatest} />
+        </View>
 
-      <TypingIndicator names={typingNames} reducedMotion={reducedMotion} />
+        <View className="bg-muted">
+          <TypingIndicator typers={typers} showAvatars={isGroup} />
+        </View>
+        <Composer
+          focusKey={focusKey}
+          value={editing ? editing.text : draft}
+          onChangeText={(text) => {
+            if (editing) setEditing({ ...editing, text });
+            else setDraft(groupId, text);
+          }}
+          onSend={submitText}
+          disabled={readOnly}
+          disabledNotice={
+            group?.status === "pending_approval" ? t("chat.group.pending_badge") : undefined
+          }
+          reply={replyQuote}
+          onCancelReply={() => {
+            setReplyTo(null);
+          }}
+          editing={editing !== null}
+          onCancelEdit={() => {
+            setEditing(null);
+          }}
+          onOpenAttach={() => {
+            Keyboard.dismiss();
+            setAttachOpen(true);
+          }}
+          onOpenStickers={() => {
+            Keyboard.dismiss();
+            setStickerOpen(true);
+          }}
+          onStartVoice={() => {
+            Keyboard.dismiss();
+            setVoiceOpen(true);
+          }}
+          bottomInset={keyboardOpen ? 0 : insets.bottom}
+        />
+      </KeyboardAvoidingView>
 
-      <Composer
-        disabled={false}
-        replyPreview={replyTo ? (replyTo.body ?? replyTo.media?.fileName ?? replyTo.stickerId ?? "…") : null}
-        onCancelReply={() => {
-          setReplyTo(null);
+      <MessageFocusMenu
+        anchor={focus?.anchor ?? null}
+        align={focusMessage?.senderId === ME ? "end" : "start"}
+        preview={focusRow ? renderBubble(focusRow, true) : null}
+        actions={focusMessage ? actionsFor(focusMessage, focusRow?.optimistic ?? false) : []}
+        reactions={Boolean(focusMessage && !focusMessage.deletedAt && !focusRow?.optimistic)}
+        selectedEmojis={
+          focusMessage
+            ? reactionChips(reactions, focusMessage.id)
+                .filter((chip) => chip.mine)
+                .map((chip) => chip.emoji)
+            : []
+        }
+        onReact={(emoji) => {
+          if (focusMessage) toggleReaction(focusMessage.id, emoji);
         }}
-        onSendText={(body) => {
-          doSend({ kind: "text", body });
+        onClose={() => {
+          setFocus(null);
         }}
+      />
+      <AttachSheet
+        open={attachOpen}
+        onOpenChange={setAttachOpen}
         onPickImage={() => {
           pickMedia({
             kind: "image",
@@ -293,10 +681,17 @@ export function GroupChatScreen({
           });
         }}
         onPickSticker={() => {
-          setStickerOpen(true);
+          afterMenu(() => {
+            setStickerOpen(true);
+          });
         }}
-        onStartVoice={() => {
-          setVoiceOpen(true);
+      />
+      <StickerPickerSheet
+        open={stickerOpen}
+        onOpenChange={setStickerOpen}
+        stickers={DEMO_STICKERS}
+        onPick={(stickerId) => {
+          doSend({ kind: "sticker", stickerId });
         }}
       />
       <VoiceRecorderSheet
@@ -318,41 +713,6 @@ export function GroupChatScreen({
           });
         }}
       />
-      <StickerPickerSheet
-        open={stickerOpen}
-        onOpenChange={setStickerOpen}
-        stickers={DEMO_STICKERS}
-        onPick={(stickerId) => {
-          doSend({ kind: "sticker", stickerId });
-        }}
-      />
-      <MessageLongPressSheet
-        message={actionMessage}
-        open={Boolean(actionMessage)}
-        onOpenChange={(open) => {
-          if (!open) setActionMessage(null);
-        }}
-        handlers={{
-          onReply: (m) => {
-            setReplyTo(m);
-          },
-          onReact: (m, emoji) => {
-            toggleReaction(m.id, emoji);
-          },
-          onInfo: (m) => {
-            setInfoMessage(m);
-          },
-          onDelete: (m) => {
-            if (m.senderId !== ME && m.groupId.startsWith("grp_dm")) return;
-            deleteMessage.mutate(m.id, {
-              onError: () => {
-                toast({ title: t("chat.bubble.failed"), variant: "error" });
-              },
-            });
-          },
-          canDelete: Boolean(actionMessage && (actionMessage.senderId === ME || !actionMessage.groupId.startsWith("grp_dm"))),
-        }}
-      />
       <MessageInfoSheet
         message={infoMessage}
         open={Boolean(infoMessage)}
@@ -360,44 +720,35 @@ export function GroupChatScreen({
           if (!open) setInfoMessage(null);
         }}
       />
-    </Screen>
-  );
-}
-
-function ScreenHeaderForChat({
-  title,
-  subtitle,
-  avatarKind,
-  avatarId,
-}: {
-  title: string;
-  subtitle?: string;
-  avatarKind: ChatAvatarKind;
-  avatarId: string;
-}) {
-  const t = useT();
-  return (
-    <GlassSurface variant="light" className="border-b border-border pb-1.5 pt-12">
-      <View className="flex-row items-center gap-2 px-2">
-        <CircleAction
-          icon={ChevronLeft}
-          accessibilityLabel={t("common.actions.back")}
-          onPress={() => {
-            router.back();
-          }}
-        />
-        <ChatAvatar kind={avatarKind} id={avatarId} name={title} size="sm" />
-        <View className="min-w-0 flex-1">
-          <Text numberOfLines={1} className="font-semibold text-foreground">
-            {title}
-          </Text>
-          {subtitle ? (
-            <Text numberOfLines={1} className="text-[11px] text-muted-foreground">
-              {subtitle}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-    </GlassSurface>
+      <ChatInfoSheet
+        open={infoOpen}
+        onOpenChange={setInfoOpen}
+        title={title}
+        avatarKind={avatarKind}
+        avatarId={peerId ?? groupId}
+        details={infoDetails}
+      />
+      <ConfirmModal
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        destructive
+        icon={Trash2}
+        title={t("chat.delete.confirm_title")}
+        description={t("chat.delete.confirm_body")}
+        confirmLabel={t("chat.delete.action")}
+        onConfirm={() => {
+          const target = deleteTarget;
+          setDeleteTarget(null);
+          if (!target) return;
+          deleteMessage.mutate(target.id, {
+            onError: () => {
+              toast({ title: t("chat.errors.forbidden"), variant: "error" });
+            },
+          });
+        }}
+      />
+    </View>
   );
 }

@@ -11,12 +11,14 @@ import {
   createMessageRequest,
   declineMessageRequest,
   deleteChatMessage,
+  editChatMessage,
   listChatGroups,
   listChatMessages,
   listMessageRequests,
   markChatRead,
   openDm,
   sendChatMessage,
+  setChatMessagePinned,
   type ChatMessage,
 } from "@/fixtures/chat";
 import { useChatState, type OutgoingMessage } from "@/lib/chat/chat-state";
@@ -47,10 +49,7 @@ export function useChatHistory(groupId: string) {
 }
 
 /** Older-page fetch for infinite scroll — appends to the cached page set (COM-US-001). */
-export async function fetchOlderMessages(
-  groupId: string,
-  before: string,
-): Promise<HistoryPage> {
+export async function fetchOlderMessages(groupId: string, before: string): Promise<HistoryPage> {
   return listChatMessages(groupId, before);
 }
 
@@ -126,7 +125,9 @@ function dropLater(
 ): void {
   setTimeout(() => {
     setSendState(clientMsgId, "seen"); // fixture: demo peers read promptly
-    setTimeout(() => { dropSend(clientMsgId); }, 400);
+    setTimeout(() => {
+      dropSend(clientMsgId);
+    }, 400);
   }, 1_200);
 }
 
@@ -147,6 +148,31 @@ export function useDeleteMessage(groupId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) });
       void queryClient.invalidateQueries({ queryKey: chatKeys.groups });
+    },
+  });
+}
+
+/** Fixture-only edit of an own text message (Spartens parity — 08-gaps G-7). */
+export function useEditMessage(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, body }: { messageId: string; body: string }) =>
+      editChatMessage(messageId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) });
+      void queryClient.invalidateQueries({ queryKey: chatKeys.groups });
+    },
+  });
+}
+
+/** Fixture-only pin/unpin for room moderators (Spartens parity — 08-gaps G-7). */
+export function usePinMessage(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, pinned }: { messageId: string; pinned: boolean }) =>
+      setChatMessagePinned(messageId, pinned),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) });
     },
   });
 }

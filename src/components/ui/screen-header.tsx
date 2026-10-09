@@ -39,25 +39,54 @@ function CircleAction({
   icon,
   accessibilityLabel,
   onPress,
+  badge,
 }: {
   icon: LucideIcon;
   accessibilityLabel: string;
   onPress: () => void;
+  /** Optional unread count bubble over the circle (e.g. the Home header notification bell). */
+  badge?: number;
 }) {
+  const count = badge && badge > 0 ? (badge > 99 ? "99+" : String(badge)) : null;
   return (
     <Pressable
       role="button"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={count ? `${accessibilityLabel}, ${count}` : accessibilityLabel}
       onPress={onPress}
       hitSlop={2}
       className="size-10 items-center justify-center rounded-full border border-input bg-card active:bg-muted"
     >
       <Icon as={icon} size={20} className="text-foreground" />
+      {count ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          className="absolute -right-1 -top-1 z-10 h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-primary px-1"
+        >
+          <Text
+            className="text-center text-[10px] font-semibold text-primary-foreground"
+            style={{
+              // Match glyph box to pill height so bn/en digits sit true-center
+              // (same treatment as the tab-bar badge).
+              lineHeight: 14,
+              includeFontPadding: false,
+              textAlignVertical: "center",
+            }}
+          >
+            {count}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }
 
-type HeaderAction = { icon: LucideIcon; accessibilityLabel: string; onPress: () => void };
+type HeaderAction = {
+  icon: LucideIcon;
+  accessibilityLabel: string;
+  onPress: () => void;
+  badge?: number;
+};
 
 function ScreenHeader({
   title,

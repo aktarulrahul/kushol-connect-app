@@ -6,17 +6,25 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import {
-  subscribeChatEvents,
-  type ChatMessage,
-} from "@/fixtures/chat";
+import { subscribeChatEvents, type ChatMessage } from "@/fixtures/chat";
 import { useChatState } from "@/lib/chat/chat-state";
 import { chatKeys } from "@/lib/chat/use-chat";
 
 function appendMessage(queryClient: ReturnType<typeof useQueryClient>, message: ChatMessage): void {
+  // A send lands twice — `message.ack` (canonical id) then `message.new` (full row, with the
+  // reply preview): merge by id so the bubble never doubles.
   queryClient.setQueryData<{ data: ChatMessage[]; nextBefore?: string }>(
     chatKeys.history(message.groupId),
-    (page) => (page ? { ...page, data: [...page.data, message] } : { data: [message] }),
+    (page) => {
+      if (!page) return { data: [message] };
+      const exists = page.data.some((m) => m.id === message.id);
+      return {
+        ...page,
+        data: exists
+          ? page.data.map((m) => (m.id === message.id ? { ...m, ...message } : m))
+          : [...page.data, message],
+      };
+    },
   );
   void queryClient.invalidateQueries({ queryKey: chatKeys.groups });
 }
@@ -55,9 +63,7 @@ export function useChatRealtime(): void {
               senderName: "ডেমো শিক্ষক",
               kind: tracked.input.kind,
               ...(tracked.input.kind === "text" ? { body: tracked.input.body } : {}),
-              ...(tracked.input.kind === "sticker"
-                ? { stickerId: tracked.input.stickerId }
-                : {}),
+              ...(tracked.input.kind === "sticker" ? { stickerId: tracked.input.stickerId } : {}),
               clientMsgId: event.clientMsgId,
               ...(tracked.input.replyTo
                 ? { replyTo: tracked.input.replyTo, replyPreview: undefined }
@@ -94,7 +100,11 @@ export function useChatRealtime(): void {
 
   // Typing TTL sweep — stale "start" events vanish after 4 s (COM-US-007).
   useEffect(() => {
-    const timer = setInterval(() => { useChatState.getState().sweepTyping(); }, 1_000);
-    return () => { clearInterval(timer); };
+    const timer = setInterval(() => {
+      useChatState.getState().sweepTyping();
+    }, 1_000);
+    return () => {
+      clearInterval(timer);
+    };
   }, []);
 }

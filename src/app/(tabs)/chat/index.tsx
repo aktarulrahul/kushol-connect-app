@@ -1,89 +1,117 @@
-// Chat home (COM-AP-001): dense WhatsApp list + header-inline All/Official/Community/DMs filter,
-// always-visible search under header, unread teal badges. Message requests live under Feeds.
-import { useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+// Chat home (COM-AP-001) in the Spartens chat-list language (owner 2026-10-09): search pill +
+// bell header, filter chips (All · Unread · Official · Community · DMs), pinned chats first,
+// "Draft: …" rows, long-press row menu (pin, notification settings), pull to refresh and a
+// floating new-club button. Message requests live under Feeds.
+import { useCallback, useMemo, useState } from "react";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { Link, router } from "expo-router";
-import { Archive, Inbox, Plus } from "lucide-react-native";
+import { Archive, ChevronLeft, Inbox, Plus } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { GroupRow } from "@/components/chat/group-row";
+import { ChatListHeader, FilterChips } from "@/components/chat/chat-list-header";
+import { ChatRowMenu, NotifySettingsSheet } from "@/components/chat/chat-row-menu";
 import { OfflineBanner } from "@/components/chat/chrome";
-import { chatFixtureFlags, type ChatGroup } from "@/fixtures/chat";
+import type { Anchor } from "@/components/chat/focus-overlay";
+import { GroupRow } from "@/components/chat/group-row";
+import { useNotificationBellAction } from "@/components/notifications/notification-bell";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Fab } from "@/components/ui/floating-tab-bar";
 import { Icon } from "@/components/ui/icon";
-import { Input } from "@/components/ui/input";
 import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
-import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useAuthStore } from "@/lib/auth/auth-store";
-import { useChatRealtime } from "@/lib/chat/realtime";
-import { useChatState } from "@/lib/chat/chat-state";
-import { useChatGroups } from "@/lib/chat/use-chat";
+import { useToast } from "@/components/ui/toast";
+import { chatFixtureFlags, type ChatGroup } from "@/fixtures/chat";
+import type { CatalogKey } from "@/i18n";
 import { useT } from "@/i18n/locale-provider";
+import { useAuthStore } from "@/lib/auth/auth-store";
+import { archivedDmCount, filterChatList, type ChatFilter } from "@/lib/chat/chat-list";
+import { MAX_PINNED_CHATS, useChatState } from "@/lib/chat/chat-state";
+import { useChatRealtime } from "@/lib/chat/realtime";
+import { useChatGroups } from "@/lib/chat/use-chat";
+import { color, layout, motion } from "@/theme/tokens";
 
-const SEGMENTS = [
+const FILTERS: { value: ChatFilter; labelKey: CatalogKey }[] = [
   { value: "all", labelKey: "chat.segment.all" },
+  { value: "unread", labelKey: "chat.segment.unread" },
   { value: "official", labelKey: "chat.segment.official" },
   { value: "custom", labelKey: "chat.segment.community" },
   { value: "dm", labelKey: "chat.segment.dms" },
-] as const;
-type SegmentValue = (typeof SEGMENTS)[number]["value"];
+];
 
-function groupTitle(group: ChatGroup): string {
-  return group.kind === "dm" ? (group.peer?.name ?? "") : (group.name ?? "");
+const EMPTY_KEY: Record<ChatFilter, CatalogKey> = {
+  all: "chat.list.empty_all",
+  unread: "chat.list.empty_all",
+  official: "chat.list.empty_official",
+  custom: "chat.list.empty_clubs",
+  dm: "chat.list.empty_dms",
+};
+
+function openChat(group: ChatGroup): void {
+  if (group.kind === "dm") {
+    router.push({ pathname: "/messages/[peerId]", params: { peerId: group.peer?.userId ?? "" } });
+  } else {
+    router.push({ pathname: "/groups/[id]", params: { id: group.id } });
+  }
 }
 
 export default function ChatScreen() {
   const t = useT();
+  const toast = useToast();
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.me);
-  const [segment, setSegment] = useState<SegmentValue>("all");
+  const [filter, setFilter] = useState<ChatFilter>("all");
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [menu, setMenu] = useState<{ group: ChatGroup; anchor: Anchor } | null>(null);
+  const [notifyFor, setNotifyFor] = useState<string | null>(null);
   const groups = useChatGroups();
   const presence = useChatState((s) => s.presence);
+  const drafts = useChatState((s) => s.drafts);
+  const pinnedChats = useChatState((s) => s.pinnedChats);
+  const chatNotify = useChatState((s) => s.chatNotify);
+  const togglePinChat = useChatState((s) => s.togglePinChat);
+  const setChatNotify = useChatState((s) => s.setChatNotify);
+  const bell = useNotificationBellAction();
 
   useChatRealtime();
 
-  const filtered = useMemo(() => {
-    const list = groups.data ?? [];
-    const q = query.trim().toLowerCase();
-
-    let bySeg: ChatGroup[];
-    if (showArchived && segment === "dm") {
-      bySeg = list.filter((g) => g.kind === "dm" && g.status === "archived");
-    } else if (segment === "all") {
-      bySeg = list.filter((g) => g.status !== "archived");
-    } else if (segment === "dm") {
-      bySeg = list.filter((g) => g.kind === "dm" && g.status !== "archived");
-    } else {
-      bySeg = list.filter((g) => g.kind === segment && g.status !== "archived");
-    }
-
-    const searched = q
-      ? bySeg.filter((g) => {
-          const title = groupTitle(g).toLowerCase();
-          const preview = (g.lastMessagePreview ?? "").toLowerCase();
-          return title.includes(q) || preview.includes(q);
-        })
-      : bySeg;
-
-    return [...searched].sort((a, b) => {
-      const at = a.lastMessageAt ? Date.parse(a.lastMessageAt) : 0;
-      const bt = b.lastMessageAt ? Date.parse(b.lastMessageAt) : 0;
-      return bt - at;
-    });
-  }, [groups.data, segment, showArchived, query]);
-
-  const archivedCount = useMemo(
-    () => (groups.data ?? []).filter((g) => g.kind === "dm" && g.status === "archived").length,
-    [groups.data],
+  const all = groups.data;
+  const visible = useMemo(
+    () =>
+      filterChatList(all ?? [], {
+        filter,
+        query,
+        pinned: pinnedChats,
+        archived: showArchived,
+      }),
+    [all, filter, query, pinnedChats, showArchived],
   );
+  const archivedCount = useMemo(() => archivedDmCount(all ?? []), [all]);
 
-  const onSegmentChange = (next: SegmentValue) => {
-    setSegment(next);
-    if (next !== "dm") setShowArchived(false);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void groups.refetch().finally(() => {
+      setRefreshing(false);
+    });
+  }, [groups]);
+
+  const onTogglePin = (group: ChatGroup) => {
+    const wasPinned = pinnedChats.includes(group.id);
+    if (!togglePinChat(group.id)) {
+      toast({
+        title: t("chat.list.pin_limit", { count: MAX_PINNED_CHATS }),
+        variant: "info",
+      });
+      return;
+    }
+    toast({
+      title: wasPinned ? t("chat.list.unpinned") : t("chat.list.pinned"),
+      variant: "success",
+    });
   };
 
   if (user?.status === "PENDING") {
@@ -94,67 +122,9 @@ export default function ChatScreen() {
     );
   }
 
-  return (
-    <Screen
-      // Dense WhatsApp list: override Screen's default gap-4 / py-4 / px-4.
-      className="gap-1 px-0 py-1"
-      header={
-        <ScreenHeader
-          title={showArchived ? t("chat.archived.title") : t("chat.tab")}
-          middle={
-            showArchived ? undefined : (
-              <SegmentedPill
-                size="compact"
-                className="max-w-full self-center"
-                segments={SEGMENTS.map((s) => ({ value: s.value, label: t(s.labelKey) }))}
-                value={segment}
-                onChange={onSegmentChange}
-                accessibilityLabel={t("chat.tab")}
-              />
-            )
-          }
-          action={{
-            icon: Plus,
-            accessibilityLabel: t("chat.club.new_title"),
-            onPress: () => {
-              router.push("/(modals)/group-new");
-            },
-          }}
-        />
-      }
-    >
-      <View className="px-3 pb-1.5 pt-0.5">
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t("chat.search.placeholder")}
-          accessibilityLabel={t("common.actions.search")}
-          returnKeyType="search"
-          className="min-h-10 rounded-full px-4 py-2 text-sm"
-        />
-      </View>
-
+  const listHeader = (
+    <View>
       <OfflineBanner visible={chatFixtureFlags.mode === "offline"} />
-
-      {segment === "dm" && !showArchived && archivedCount > 0 && !query.trim() ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("chat.archived.entry")}
-          onPress={() => {
-            setShowArchived(true);
-          }}
-          className="mx-3 mb-0.5 flex-row items-center gap-3 rounded-xl px-2 py-2.5 active:bg-muted"
-        >
-          <View className="size-12 items-center justify-center rounded-full bg-muted">
-            <Icon as={Archive} size={22} className="text-muted-foreground" />
-          </View>
-          <Text className="flex-1 text-[15px] font-medium text-foreground">
-            {t("chat.archived.entry")}
-          </Text>
-          <Text className="text-xs text-muted-foreground">{archivedCount}</Text>
-        </Pressable>
-      ) : null}
-
       {showArchived ? (
         <Pressable
           accessibilityRole="button"
@@ -162,86 +132,166 @@ export default function ChatScreen() {
           onPress={() => {
             setShowArchived(false);
           }}
-          className="mx-3 mb-1"
+          className="flex-row items-center gap-1 px-4 py-3"
         >
-          <Text className="text-sm font-medium text-primary">{`← ${t("common.actions.back")}`}</Text>
+          <Icon as={ChevronLeft} size={18} className="text-primary" />
+          <Text className="text-sm font-medium text-primary">{t("chat.archived.title")}</Text>
+        </Pressable>
+      ) : (
+        <FilterChips
+          options={FILTERS.map((f) => ({ value: f.value, label: t(f.labelKey) }))}
+          value={filter}
+          onChange={setFilter}
+          accessibilityLabel={t("chat.tab")}
+        />
+      )}
+      {filter === "dm" && !showArchived && archivedCount > 0 && !query.trim() ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("chat.archived.entry")}
+          onPress={() => {
+            setShowArchived(true);
+          }}
+          className="flex-row items-center gap-3 px-4 py-2.5 active:bg-muted"
+        >
+          <View className="size-12 items-center justify-center rounded-full bg-muted">
+            <Icon as={Archive} size={22} className="text-muted-foreground" />
+          </View>
+          <Text className="flex-1 text-base font-medium text-foreground">
+            {t("chat.archived.entry")}
+          </Text>
+          <Text className="text-xs text-muted-foreground">{archivedCount}</Text>
         </Pressable>
       ) : null}
+    </View>
+  );
 
-      {groups.isLoading ? (
-        <View className="gap-1 px-3 pt-0.5">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <View key={i} className="flex-row items-center gap-2.5 py-1.5">
-              <Skeleton className="size-12 rounded-full" />
-              <View className="flex-1 gap-1">
-                <Skeleton className="h-3.5 w-2/3" />
-                <Skeleton className="h-3 w-1/2" />
-              </View>
-            </View>
-          ))}
+  const empty = groups.isLoading ? (
+    <View className="gap-1 px-4 pt-1">
+      {Array.from({ length: 7 }).map((_, i) => (
+        <View key={i} className="flex-row items-center gap-3 py-2.5">
+          <Skeleton className="size-12 rounded-full" />
+          <View className="flex-1 gap-1.5">
+            <Skeleton className="h-3.5 w-2/3" />
+            <Skeleton className="h-3 w-1/2" />
+          </View>
         </View>
-      ) : groups.isError ? (
-        <EmptyState
-          icon={Inbox}
-          title={t("chat.state.error")}
-          description={t("common.state.error_body")}
-          className="py-4"
-          action={
-            <Button variant="outline" onPress={() => void groups.refetch()}>
-              <Text>{t("common.actions.retry")}</Text>
-            </Button>
-          }
+      ))}
+    </View>
+  ) : groups.isError ? (
+    <EmptyState
+      icon={Inbox}
+      title={t("chat.state.error")}
+      description={t("common.state.error_body")}
+      className="py-6"
+      action={
+        <Button variant="outline" onPress={() => void groups.refetch()}>
+          <Text>{t("common.actions.retry")}</Text>
+        </Button>
+      }
+    />
+  ) : (
+    <EmptyState
+      title={
+        query.trim()
+          ? t("chat.list.no_search_results")
+          : showArchived
+            ? t("chat.archived.empty")
+            : t(EMPTY_KEY[filter])
+      }
+      className="py-6"
+      action={
+        filter === "custom" && !query.trim() && !showArchived ? (
+          <Button
+            onPress={() => {
+              router.push("/(modals)/group-new");
+            }}
+          >
+            <Text>{t("chat.club.new_title")}</Text>
+          </Button>
+        ) : undefined
+      }
+    />
+  );
+
+  const menuGroup = menu?.group;
+  const notifyLevel = notifyFor ? (chatNotify[notifyFor] ?? "all") : "all";
+
+  return (
+    <View className="flex-1 bg-background">
+      <ChatListHeader query={query} onQueryChange={setQuery} actions={[bell]} />
+      <FlatList
+        data={visible}
+        keyExtractor={(group) => group.id}
+        renderItem={({ item }) => (
+          <GroupRow
+            group={item}
+            online={item.kind === "dm" ? presence[item.peer?.userId ?? ""] : undefined}
+            draft={drafts[item.id]}
+            pinned={pinnedChats.includes(item.id)}
+            muted={chatNotify[item.id] === "none"}
+            onPress={openChat}
+            onLongPress={(group, anchor) => {
+              setMenu({ group, anchor });
+            }}
+          />
+        )}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={empty}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingBottom: insets.bottom + layout.tabBarClearance + 72 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={color.primary}
+            colors={[color.primary]}
+          />
+        }
+      />
+      <View
+        className="absolute right-4"
+        style={{ bottom: Math.max(insets.bottom, 12) + layout.tabBarClearance }}
+        pointerEvents="box-none"
+      >
+        <Fab
+          icon={Plus}
+          accessibilityLabel={t("chat.club.new_title")}
+          onPress={() => {
+            router.push("/(modals)/group-new");
+          }}
         />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          title={
-            query.trim()
-              ? t("chat.list.no_search_results")
-              : showArchived
-                ? t("chat.archived.empty")
-                : segment === "official"
-                  ? t("chat.list.empty_official")
-                  : segment === "custom"
-                    ? t("chat.list.empty_clubs")
-                    : segment === "dm"
-                      ? t("chat.list.empty_dms")
-                      : t("chat.list.empty_all")
-          }
-          className="py-4"
-          action={
-            segment === "custom" && !query.trim() && !showArchived ? (
-              <Button
-                onPress={() => {
-                  router.push("/(modals)/group-new");
-                }}
-              >
-                <Text>{t("chat.club.new_title")}</Text>
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <View className="flex-1">
-          {filtered.map((group: ChatGroup) => (
-            <GroupRow
-              key={group.id}
-              group={group}
-              online={group.kind === "dm" ? presence[group.peer?.userId ?? ""] : undefined}
-              onPress={(g) => {
-                if (g.kind === "dm") {
-                  router.push({
-                    pathname: "/messages/[peerId]",
-                    params: { peerId: g.peer?.userId ?? "" },
-                  });
-                } else {
-                  router.push({ pathname: "/groups/[id]", params: { id: g.id } });
-                }
-              }}
-            />
-          ))}
-        </View>
-      )}
-    </Screen>
+      </View>
+      <ChatRowMenu
+        anchor={menu?.anchor ?? null}
+        pinned={menuGroup ? pinnedChats.includes(menuGroup.id) : false}
+        muted={menuGroup ? chatNotify[menuGroup.id] === "none" : false}
+        onClose={() => {
+          setMenu(null);
+        }}
+        onTogglePin={() => {
+          if (menuGroup) onTogglePin(menuGroup);
+        }}
+        onOpenNotify={() => {
+          if (!menuGroup) return;
+          // Let the menu's modal finish closing — iOS presents one modal at a time.
+          setTimeout(() => {
+            setNotifyFor(menuGroup.id);
+          }, motion.duration.slow);
+        }}
+      />
+      <NotifySettingsSheet
+        open={notifyFor !== null}
+        level={notifyLevel}
+        onOpenChange={(open) => {
+          if (!open) setNotifyFor(null);
+        }}
+        onSelect={(level) => {
+          if (notifyFor) setChatNotify(notifyFor, level);
+        }}
+      />
+    </View>
   );
 }
 

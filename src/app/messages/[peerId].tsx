@@ -14,6 +14,7 @@ export default function DmScreen() {
   return (
     <GroupChatScreen
       groupId={room?.id ?? `grp_dm_${peerId}`}
+      group={room}
       title={room?.peer?.name ?? peerId}
       avatarKind="dm"
       peerId={peerId}

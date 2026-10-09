@@ -1,83 +1,12 @@
-// Long-press sheet: reactions + Reply / Info / Delete; sticker picker; message-info seen-by.
+// Sticker picker and message-info seen-by sheets (the long-press menu is message-menu.tsx).
 import { Pressable, View } from "react-native";
 
 import { toBnDigits } from "@/components/chat/group-row";
 import { Sheet } from "@/components/ui/sheet";
 import { Text } from "@/components/ui/text";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import {
-  listMessageSeenBy,
-  REACTION_EMOJIS,
-  type ChatMessage,
-  type MessageReceipt,
-} from "@/fixtures/chat";
+import { listMessageSeenBy, type ChatMessage, type MessageReceipt } from "@/fixtures/chat";
 import { useT } from "@/i18n/locale-provider";
-
-export type MessageActionsHandlers = {
-  onReply: (message: ChatMessage) => void;
-  onReact: (message: ChatMessage, emoji: string) => void;
-  onInfo: (message: ChatMessage) => void;
-  onDelete: (message: ChatMessage) => void;
-  canDelete: boolean;
-};
-
-export function MessageLongPressSheet({
-  message,
-  open,
-  onOpenChange,
-  handlers,
-}: {
-  message: ChatMessage | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  handlers: MessageActionsHandlers;
-}) {
-  const t = useT();
-  if (!message) return null;
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange} title={t("chat.actions.title")}>
-      <View className="mb-3 flex-row justify-between gap-1">
-        {REACTION_EMOJIS.map((emoji) => (
-          <Pressable
-            key={emoji}
-            accessibilityRole="button"
-            accessibilityLabel={emoji}
-            onPress={() => {
-              handlers.onReact(message, emoji);
-              onOpenChange(false);
-            }}
-            className="size-10 items-center justify-center rounded-full bg-muted active:opacity-80"
-          >
-            <Text className="text-xl">{emoji}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <ActionRow
-        label={t("chat.actions.reply")}
-        onPress={() => {
-          handlers.onReply(message);
-          onOpenChange(false);
-        }}
-      />
-      <ActionRow
-        label={t("chat.actions.info")}
-        onPress={() => {
-          onOpenChange(false);
-          handlers.onInfo(message);
-        }}
-      />
-      {handlers.canDelete ? (
-        <ActionRow
-          label={t("chat.actions.delete")}
-          onPress={() => {
-            handlers.onDelete(message);
-            onOpenChange(false);
-          }}
-        />
-      ) : null}
-    </Sheet>
-  );
-}
 
 export function MessageInfoSheet({
   message,
@@ -165,18 +94,6 @@ function ReceiptRow({ row }: { row: MessageReceipt }) {
         <Text className="text-xs text-muted-foreground">{formatReceiptTime(row.at)}</Text>
       </View>
     </View>
-  );
-}
-
-function ActionRow({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      className="border-b border-border py-3 active:opacity-70"
-    >
-      <Text className="text-base text-foreground">{label}</Text>
-    </Pressable>
   );
 }
 

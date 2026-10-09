@@ -1,5 +1,6 @@
-// Feeds tab — banner / ads / message requests (owner 2026-10-02). Official school notices live
-// on the Notifications tab. Badge count = pending received requests from chat fixtures.
+// Home tab — banner / ads / message requests (owner 2026-10-02; relabelled Home, 2026-10-09).
+// The header bell (every main screen, Spartens-style) opens the notice board; badge on the tab =
+// pending received requests from chat fixtures.
 import { ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { Newspaper } from "lucide-react-native";
@@ -7,6 +8,7 @@ import { Newspaper } from "lucide-react-native";
 import { RequestCard } from "@/components/chat/request-card";
 import { OfflineBanner } from "@/components/chat/chrome";
 import { chatFixtureFlags, type MessageRequest } from "@/fixtures/chat";
+import { useNotificationBellAction } from "@/components/notifications/notification-bell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
@@ -23,6 +25,7 @@ export default function FeedsScreen() {
   const decline = useDeclineRequest();
   const toast = useToast();
   const offline = chatFixtureFlags.mode === "offline";
+  const bell = useNotificationBellAction();
 
   const refuseOffline = (): boolean => {
     if (offline) {
@@ -40,7 +43,7 @@ export default function FeedsScreen() {
     <Screen
       // Dense list: override Screen's default gap-4 / py-4 / px-4 (same pattern as Chat).
       className="flex-1 gap-1 px-0 py-1"
-      header={<ScreenHeader title={t("notifications.title")} />}
+      header={<ScreenHeader title={t("common.home_tab")} action={bell} />}
     >
       <OfflineBanner visible={offline} />
       {requests.isLoading ? (
