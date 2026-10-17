@@ -2,7 +2,13 @@ import type { ChatGroup } from "@/fixtures/chat";
 import { forwardTargets } from "@/components/chat/forward-sheet";
 
 import { mapEvent, toReceipt } from "./live-chat";
-import { forwardLabelKey, forwardLimit, isoAtOrBefore, receiptState } from "./receipts";
+import {
+  forwardLabelKey,
+  forwardLimit,
+  isoAtOrBefore,
+  raiseHorizons,
+  receiptState,
+} from "./receipts";
 
 // 05 · 2026-10-17 — WhatsApp receipts (sent → delivered → seen), forward rules, the live
 // receipt / delivered mapping and the forward target list.
@@ -14,6 +20,30 @@ describe("isoAtOrBefore", () => {
     expect(isoAtOrBefore("2026-10-17T09:00:00.123457Z", "2026-10-17T09:00:00.123456Z")).toBe(false);
     expect(isoAtOrBefore("2026-10-17T15:00:00+06:00", "2026-10-17T09:00:00Z")).toBe(true);
     expect(isoAtOrBefore("garbage", "2026-10-17T09:00:00Z")).toBe(false);
+  });
+});
+
+describe("raiseHorizons (receipts.updated)", () => {
+  const page = {
+    data: [],
+    readUpTo: "2026-10-17T09:00:00Z",
+    deliveredUpTo: "2026-10-17T09:05:00Z",
+  };
+  it("moves the cached horizons forward to the event's", () => {
+    expect(raiseHorizons(page, "2026-10-17T09:05:00Z", "2026-10-17T09:06:00Z")).toEqual({
+      data: [],
+      readUpTo: "2026-10-17T09:05:00Z",
+      deliveredUpTo: "2026-10-17T09:06:00Z",
+    });
+    const fresh: { data: never[]; readUpTo?: string; deliveredUpTo?: string } = { data: [] };
+    expect(raiseHorizons(fresh, undefined, "2026-10-17T09:06:00Z")).toEqual({
+      data: [],
+      deliveredUpTo: "2026-10-17T09:06:00Z",
+    });
+  });
+  it("never moves a horizon backward and keeps the page when nothing changed", () => {
+    expect(raiseHorizons(page, "2026-10-17T08:00:00Z", undefined)).toBe(page);
+    expect(raiseHorizons(page)).toBe(page);
   });
 });
 
@@ -76,20 +106,26 @@ describe("live receipts mapping", () => {
     expect(toReceipt({ userId: "u3", name: "Mitu", status: "delivered" }).at).toBe("");
   });
 
-  it("parses message.delivered frames and forward / quote fields on messages", () => {
+  it("parses receipts.updated frames and forward / quote fields on messages", () => {
     expect(
       mapEvent({
-        type: "message.delivered",
+        type: "receipts.updated",
         groupId: "g1",
-        userId: "u2",
-        lastDeliveredMessageId: "m9",
+        readUpTo: "2026-10-17T09:00:00Z",
+        deliveredUpTo: "2026-10-17T09:05:00Z",
       }),
     ).toEqual({
-      type: "message.delivered",
+      type: "receipts.updated",
       groupId: "g1",
-      userId: "u2",
-      lastDeliveredMessageId: "m9",
+      readUpTo: "2026-10-17T09:00:00Z",
+      deliveredUpTo: "2026-10-17T09:05:00Z",
     });
+    expect(mapEvent({ type: "receipts.updated", groupId: "g1" })).toEqual({
+      type: "receipts.updated",
+      groupId: "g1",
+    });
+    // The per-member frames are gone from the protocol (05 G-20).
+    expect(mapEvent({ type: "message.delivered", groupId: "g1", userId: "u2" })).toBeNull();
     const mapped = mapEvent({
       type: "message.new",
       message: {

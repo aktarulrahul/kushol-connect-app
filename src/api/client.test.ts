@@ -1,4 +1,4 @@
-import { createApiClient, isProblem } from "./client";
+import { clientMiddleware, createApiClient, isProblem } from "./client";
 
 function fakeFetch(status: number, body: unknown) {
   return jest.fn<Promise<Response>, [Request]>(() =>
@@ -42,6 +42,25 @@ describe("generated api client", () => {
     expect(data).toBeUndefined();
     expect(response.status).toBe(503);
     expect(isProblem(error)).toBe(true);
+  });
+
+  it("identifies native builds as the mobile app (phone OTP is app-only)", async () => {
+    const fetch = fakeFetch(200, { status: "ok" });
+    const api = createApiClient({ baseUrl: "http://api.test", fetch });
+    await api.GET("/healthz");
+    expect(fetch.mock.calls[0]?.[0].headers.get("X-Kushol-Client")).toBe("mobile");
+  });
+
+  it.each([
+    ["android", "mobile"],
+    ["ios", "mobile"],
+    ["web", null],
+  ] as const)("marks %s requests with X-Kushol-Client=%s", async (os, expected) => {
+    const onRequest = clientMiddleware(os).onRequest;
+    if (!onRequest) throw new Error("middleware has no onRequest");
+    const request = new Request("http://api.test/healthz");
+    const out = await onRequest({ request } as Parameters<typeof onRequest>[0]);
+    expect((out as Request).headers.get("X-Kushol-Client")).toBe(expected);
   });
 
   it("isProblem rejects non-problem bodies", () => {

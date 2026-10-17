@@ -493,9 +493,11 @@ const REQUESTS: DemoRequest[] = [
 export type ChatRealtimeEvent =
   | { type: "message.new"; message: ChatMessage }
   | { type: "message.ack"; clientMsgId: string; id: string; createdAt: string }
-  | { type: "message.read"; groupId: string; userId: string; lastReadMessageId: string }
-  /** Grey double ticks (05 · 2026-10-17): a member's device received up to this message. */
-  | { type: "message.delivered"; groupId: string; userId: string; lastDeliveredMessageId: string }
+  /**
+   * Another member's delivered/read ack moved the ticks on my messages (05 G-20 — sent only to
+   * that sender): my horizons, as on the history page (absent = not reached by everyone yet).
+   */
+  | { type: "receipts.updated"; groupId: string; readUpTo?: string; deliveredUpTo?: string }
   | { type: "message.deleted"; groupId: string; id: string; deletedAt: string }
   | { type: "typing"; groupId: string; userId: string; state: "start" | "stop" }
   | { type: "presence.update"; groupId: string; userId: string; online: boolean }
@@ -773,7 +775,10 @@ export async function forwardChatMessage(
   return forwarded;
 }
 
-/** PATCH /chat/groups/{id}/read — idempotent read report; WS `message.read` fans out. */
+/**
+ * PATCH /chat/groups/{id}/read — idempotent read report; senders whose ticks moved get WS
+ * `receipts.updated` (the demo has no other readers, so nothing is emitted).
+ */
 export async function markChatRead(groupId: string, lastReadMessageId: string): Promise<void> {
   if (await chatLiveActive()) return liveChat.markChatRead(groupId, lastReadMessageId);
   await Promise.resolve();
@@ -782,7 +787,6 @@ export async function markChatRead(groupId: string, lastReadMessageId: string): 
   if (reportedRead.has(lastReadMessageId)) return;
   reportedRead.add(lastReadMessageId);
   READ_STATE.set(groupId, lastReadMessageId);
-  emit({ type: "message.read", groupId, userId: DEMO_ME.userId, lastReadMessageId });
 }
 
 /**

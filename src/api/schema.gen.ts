@@ -551,9 +551,11 @@ export interface paths {
      *     lastDeliveredMessageId} (send on receiving another member's message.new) · typing
      *     {groupId, state start|stop} · ping.
      *     x-ws-events (server→client): message.new (full ChatMessage) · message.ack
-     *     {clientMsgId, id, createdAt} · message.read {groupId, userId, lastReadMessageId} ·
-     *     message.delivered {groupId, userId, lastDeliveredMessageId} (receipt pointers only move
-     *     forward; read implies delivered — receivers refresh their ticks) ·
+     *     {clientMsgId, id, createdAt} · receipts.updated {groupId, readUpTo?, deliveredUpTo?}
+     *     (sent only to the private room of a sender whose ticks another member's delivered/read
+     *     ack just moved — never to the group room; the values are that sender's own horizons,
+     *     exactly as the history page's readUpTo/deliveredUpTo, absent = not reached by every
+     *     other member yet; receipt pointers only move forward and read implies delivered) ·
      *     message.deleted {groupId, id, deletedAt} · message.updated {groupId, message} (edit, pin,
      *     reaction, poll vote — receivers refetch per-viewer fields) · group.updated {groupId}
      *     (rename, description, roster; also sent to an added/removed user's private room) ·
@@ -1041,6 +1043,26 @@ export interface paths {
     head?: never;
     /** Toggle the pin (author or School Admin; the only edit path — BR-006) */
     patch: operations["toggleNoticePin"];
+    trace?: never;
+  };
+  "/api/v1/media/upload": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Upload an attachment through the api (the api streams it to R2)
+     * @description Owner decision 2026-10-17 — clients send the file to the api and never talk to storage (no R2 URL, credential id or bucket CORS reaches a browser). The body is the raw file with an exact Content-Length; kind + cap are checked on that length and the magic bytes are sniffed before anything is stored (INV-6), then the api streams the bytes to R2 through a server-side presigned PUT and returns the confirmed asset. Caps image 10 MB, PDF / Office 20 MB, CSV 10 MB, voice 5 MB and 5 min.
+     */
+    post: operations["uploadMedia"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/api/v1/media/upload-url": {
@@ -6185,7 +6207,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description The effective read pointer; WS `message.read` fans out when it advanced */
+      /** @description The effective read pointer; when it advanced, senders whose ticks moved get WS `receipts.updated` */
       200: {
         headers: {
           "X-Request-Id": components["headers"]["XRequestId"];
@@ -6216,7 +6238,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description The effective delivered pointer; WS `message.delivered` fans out when it advanced */
+      /** @description The effective delivered pointer; when it advanced, senders whose ticks moved get WS `receipts.updated` */
       200: {
         headers: {
           "X-Request-Id": components["headers"]["XRequestId"];
@@ -6886,6 +6908,42 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Notice"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  uploadMedia: {
+    parameters: {
+      query: {
+        kind: "image" | "pdf" | "voice" | "doc" | "slides" | "sheet" | "csv";
+        /** @description Display name for document bubbles (sanitised; never part of the object key) */
+        fileName?: string;
+        width?: number;
+        height?: number;
+        durationMs?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/octet-stream": string;
+      };
+    };
+    responses: {
+      /** @description Stored and confirmed with the sniffed mime */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaAsset"];
         };
       };
       default: components["responses"]["Problem"];

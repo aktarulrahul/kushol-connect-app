@@ -15,14 +15,16 @@ import { useLocale, useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import { requestOtpLive } from "@/lib/auth/live-otp";
 import { color } from "@/theme/tokens";
-import { FixtureError, type OtpVerifyResult, type User } from "@/fixtures/auth";
+import { FixtureError, type OtpSendResult, type OtpVerifyResult, type User } from "@/fixtures/auth";
 import { isBdPhone, normalizePhone } from "@/schemas/register";
 import { z } from "zod";
 
 // Returning users (IDT-US-003/-004/-005): phone OTP by default, email OTP for staff — login is
-// passwordless (owner decision 2026-10-02) — plus the SSO row. After a successful login the route
-// depends on status — PENDING opens the friendly pending screen (PendingNotice routing), VERIFIED
-// goes straight to the tabs.
+// passwordless (owner decision 2026-10-02) — plus the SSO row. Phone (SMS) OTP exists only here in
+// the app; the api refuses it for web clients (owner rule 2026-10-17). The send button makes the
+// first request, and its result starts OtpVerify's resend cooldown. After a successful login the
+// route depends on status — PENDING opens the friendly pending screen (PendingNotice routing),
+// VERIFIED goes straight to the tabs.
 type LoginTab = "phone" | "email";
 
 function routeFor(router: ReturnType<typeof useRouter>, user: User): void {
@@ -44,7 +46,9 @@ function LoginScreen() {
   const [tab, setTab] = useState<LoginTab>("phone");
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState(false);
-  const [otpStage, setOtpStage] = useState(false);
+  // The first send's result; null while the user is still entering the phone or email.
+  const [sent, setSent] = useState<OtpSendResult | null>(null);
+  const [sending, setSending] = useState(false);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState(false);
 
@@ -52,7 +56,13 @@ function LoginScreen() {
 
   const validEmail = () => z.email().safeParse(normalizedEmail()).success;
 
+  const switchTab = (next: LoginTab) => {
+    setTab(next);
+    setSent(null); // a code belongs to one target — the other tab starts from entry
+  };
+
   const sendLoginCode = async () => {
+    if (sending) return;
     if (tab === "phone" && !isBdPhone(phone)) {
       setPhoneError(true);
       return;
@@ -63,13 +73,13 @@ function LoginScreen() {
     }
     setPhoneError(false);
     setEmailError(false);
+    setSending(true);
     try {
-      if (tab === "phone") {
-        await requestOtpLive({ phone: normalizePhone(phone), purpose: "login" }, locale);
-      } else {
-        await requestOtpLive({ email: normalizedEmail(), purpose: "login" }, locale);
-      }
-      setOtpStage(true);
+      const result =
+        tab === "phone"
+          ? await requestOtpLive({ phone: normalizePhone(phone), purpose: "login" }, locale)
+          : await requestOtpLive({ email: normalizedEmail(), purpose: "login" }, locale);
+      setSent(result);
     } catch (error) {
       if (error instanceof FixtureError && error.code === "OFFLINE") {
         toast({ title: t("auth.otp.needs_internet"), variant: "error" });
@@ -83,6 +93,8 @@ function LoginScreen() {
         return;
       }
       toast({ title: t("errors.network"), variant: "error" });
+    } finally {
+      setSending(false);
     }
   };
 
@@ -94,7 +106,7 @@ function LoginScreen() {
         ),
         variant: "warning",
       });
-      setOtpStage(false);
+      setSent(null);
       return;
     }
     signIn(result.user, {
@@ -125,20 +137,34 @@ function LoginScreen() {
       <SegmentedPill
         accessibilityLabel={t("auth.login.title")}
         value={tab}
-        onChange={setTab}
+        onChange={switchTab}
         segments={[
           { value: "phone", label: t("auth.login.tab_phone") },
           { value: "email", label: t("auth.login.tab_email") },
         ]}
       />
 
-      {otpStage ? (
-        <OtpVerify
-          {...(tab === "phone" ? { phone: normalizePhone(phone) } : { email: normalizedEmail() })}
-          purpose="login"
-          autoSend={false}
-          onVerified={onVerified}
-        />
+      {sent ? (
+        <View className="gap-2">
+          <OtpVerify
+            key={tab === "phone" ? normalizePhone(phone) : normalizedEmail()}
+            {...(tab === "phone" ? { phone: normalizePhone(phone) } : { email: normalizedEmail() })}
+            purpose="login"
+            autoSend={false}
+            initialSend={sent}
+            onVerified={onVerified}
+          />
+          <Button
+            variant="link"
+            className="self-center"
+            onPress={() => {
+              setSent(null);
+            }}
+            testID="login-change-target"
+          >
+            <Text>{t(tab === "phone" ? "auth.otp.change_phone" : "auth.otp.change_email")}</Text>
+          </Button>
+        </View>
       ) : (
         <View className="gap-4">
           {tab === "phone" ? (
@@ -171,7 +197,13 @@ function LoginScreen() {
               textContentType="emailAddress"
             />
           )}
-          <Button size="lg" className="self-stretch" onPress={() => void sendLoginCode()}>
+          <Button
+            size="lg"
+            className="self-stretch"
+            loading={sending}
+            onPress={() => void sendLoginCode()}
+            testID="login-send-code"
+          >
             <Text>{t("auth.login.send_code")}</Text>
           </Button>
         </View>

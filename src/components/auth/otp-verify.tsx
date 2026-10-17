@@ -9,7 +9,7 @@ import { OtpInput } from "@/components/ui/otp-input";
 import { Text } from "@/components/ui/text";
 import type { TFunction } from "@/i18n";
 import { useLocale, useT } from "@/i18n/locale-provider";
-import { FixtureError, type OtpVerifyResult } from "@/fixtures/auth";
+import { FixtureError, type OtpSendResult, type OtpVerifyResult } from "@/fixtures/auth";
 import { requestOtpLive, resendOtpLive, verifyOtpLive } from "@/lib/auth/live-otp";
 import {
   canResend,
@@ -19,6 +19,7 @@ import {
   isSmsDelayed,
   otpReducer,
   rateLimitSecondsLeft,
+  type OtpState,
 } from "@/lib/auth/otp-state";
 
 // Shared OTP send/verify UI (IDT-AP-006, used by onboarding + login): 6 boxes with auto-advance;
@@ -52,11 +53,24 @@ function errorNotice(error: unknown, t: TFunction): string {
   return t("errors.network");
 }
 
+/** A send the caller already made counts as this screen's first send (cooldown + delay clock). */
+function stateAfter(initialSend: Pick<OtpSendResult, "cooldownSeconds"> | undefined): OtpState {
+  if (!initialSend) return initialOtpState;
+  const now = Date.now();
+  const sent = otpReducer(initialOtpState, {
+    type: "send_succeeded",
+    now,
+    cooldownSeconds: initialSend.cooldownSeconds,
+  });
+  return otpReducer(sent, { type: "tick", now });
+}
+
 function OtpVerify({
   phone,
   email,
   purpose,
   autoSend = false,
+  initialSend,
   onVerified,
 }: {
   /** Normalized E.164 phone — exactly one of phone/email. */
@@ -67,6 +81,9 @@ function OtpVerify({
   purpose: "login" | "register";
   /** Send the first code on mount (onboarding flow). Login sends from its own button. */
   autoSend?: boolean;
+  /** The send the caller already made (login): starts the resend cooldown and the delayed-SMS
+   * notice clock, and makes the next send a resend. */
+  initialSend?: Pick<OtpSendResult, "cooldownSeconds">;
   /** Called after verify succeeds — `unknown_phone`/`unknown_email` arrive here for login routing.
    * The second argument is the code, so registration can prove it on POST /auth/register. */
   onVerified: (result: OtpVerifyResult, otpCode: string) => void;
@@ -74,11 +91,11 @@ function OtpVerify({
   const t = useT();
   const { locale } = useLocale();
   const router = useRouter();
-  const [state, dispatch] = useReducer(otpReducer, initialOtpState);
+  const [state, dispatch] = useReducer(otpReducer, initialSend, stateAfter);
   const [code, setCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const sentOnce = useRef(false);
-  const delivered = useRef(false);
+  const sentOnce = useRef(initialSend !== undefined);
+  const delivered = useRef(initialSend !== undefined);
 
   const send = useCallback(async () => {
     dispatch({ type: "send_started" });

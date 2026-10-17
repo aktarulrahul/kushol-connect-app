@@ -35,6 +35,33 @@ export function receiptState(
   return "sent";
 }
 
+/** The later of two optional ISO instants (absent = not reached yet). */
+function laterIso(a: string | undefined, b: string | undefined): string | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return isoAtOrBefore(a, b) ? b : a;
+}
+
+/**
+ * Applies a `receipts.updated` event (my own horizons — the api sends it only to the sender whose
+ * ticks moved) to the cached history page. Horizons only move forward here, so a late event never
+ * un-reads; a history refetch stays the truth. Returns the same page when nothing changed.
+ */
+export function raiseHorizons<P extends { readUpTo?: string; deliveredUpTo?: string }>(
+  page: P,
+  readUpTo?: string,
+  deliveredUpTo?: string,
+): P {
+  const read = laterIso(page.readUpTo, readUpTo);
+  const delivered = laterIso(page.deliveredUpTo, deliveredUpTo);
+  if (read === page.readUpTo && delivered === page.deliveredUpTo) return page;
+  return {
+    ...page,
+    ...(read !== undefined ? { readUpTo: read } : {}),
+    ...(delivered !== undefined ? { deliveredUpTo: delivered } : {}),
+  };
+}
+
 /** i18n key of the bubble's forward label, or null for an original message. */
 export function forwardLabelKey(
   forwardCount: number | undefined,

@@ -165,6 +165,8 @@
   "auth.otp.unknown_email": "No account uses this email — create one below.",
   "auth.otp.prompt_email": "Enter the 6-digit code we sent to your email",
   "auth.otp.sent_to_email": "Code sent to {email}",
+  "auth.otp.change_phone": "Use a different number",
+  "auth.otp.change_email": "Use a different email",
   "auth.email_delayed": "The email may be delayed. Check your spam folder or resend the code.",
   "auth.suspended": "Your account has been suspended. Please contact your school admin.",
   "auth.login.title": "Sign in",

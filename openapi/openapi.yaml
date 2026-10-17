@@ -892,9 +892,11 @@ paths:
         lastDeliveredMessageId} (send on receiving another member's message.new) · typing
         {groupId, state start|stop} · ping.
         x-ws-events (server→client): message.new (full ChatMessage) · message.ack
-        {clientMsgId, id, createdAt} · message.read {groupId, userId, lastReadMessageId} ·
-        message.delivered {groupId, userId, lastDeliveredMessageId} (receipt pointers only move
-        forward; read implies delivered — receivers refresh their ticks) ·
+        {clientMsgId, id, createdAt} · receipts.updated {groupId, readUpTo?, deliveredUpTo?}
+        (sent only to the private room of a sender whose ticks another member's delivered/read
+        ack just moved — never to the group room; the values are that sender's own horizons,
+        exactly as the history page's readUpTo/deliveredUpTo, absent = not reached by every
+        other member yet; receipt pointers only move forward and read implies delivered) ·
         message.deleted {groupId, id, deletedAt} · message.updated {groupId, message} (edit, pin,
         reaction, poll vote — receivers refetch per-viewer fields) · group.updated {groupId}
         (rename, description, roster; also sent to an added/removed user's private room) ·
@@ -1161,7 +1163,8 @@ paths:
               $ref: '#/components/schemas/ChatReadInput'
       responses:
         '200':
-          description: The effective read pointer; WS `message.read` fans out when it advanced
+          description: The effective read pointer; when it advanced, senders whose ticks moved get
+            WS `receipts.updated`
           headers:
             X-Request-Id:
               $ref: '#/components/headers/XRequestId'
@@ -1197,8 +1200,8 @@ paths:
               $ref: '#/components/schemas/ChatDeliveredInput'
       responses:
         '200':
-          description: The effective delivered pointer; WS `message.delivered` fans out when it
-            advanced
+          description: The effective delivered pointer; when it advanced, senders whose ticks
+            moved get WS `receipts.updated`
           headers:
             X-Request-Id:
               $ref: '#/components/headers/XRequestId'
@@ -1921,6 +1924,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Notice'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/media/upload:
+    post:
+      operationId: uploadMedia
+      tags: [media]
+      summary: Upload an attachment through the api (the api streams it to R2)
+      description: Owner decision 2026-10-17 — clients send the file to the api and never talk to
+        storage (no R2 URL, credential id or bucket CORS reaches a browser). The body is the raw
+        file with an exact Content-Length; kind + cap are checked on that length and the magic
+        bytes are sniffed before anything is stored (INV-6), then the api streams the bytes to R2
+        through a server-side presigned PUT and returns the confirmed asset. Caps image 10 MB,
+        PDF / Office 20 MB, CSV 10 MB, voice 5 MB and 5 min.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: kind
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [image, pdf, voice, doc, slides, sheet, csv]
+        - name: fileName
+          in: query
+          required: false
+          description: Display name for document bubbles (sanitised; never part of the object key)
+          schema:
+            type: string
+            maxLength: 255
+        - name: width
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: height
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+        - name: durationMs
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: Stored and confirmed with the sniffed mime
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/media/upload-url:

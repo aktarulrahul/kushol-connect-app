@@ -1,8 +1,9 @@
 // Realtime binding (COM-AP-002/004/010/011): subscribes to the chat event stream (fixture bus
 // today, the real WS gateway in Stage 5 through the same ChatRealtimeEvent shapes) and lands
 // each event where the app state lives — `message.new` appends to the Query cache, `message.ack`
-// swaps the temp bubble by `clientMsgId`, read/typing/presence patch zustand slices, tombstones
-// invalidate the history (05 `05-app-tasks.md` §4).
+// swaps the temp bubble by `clientMsgId`, `receipts.updated` raises the cached page's tick
+// horizons, typing/presence patch zustand slices, tombstones invalidate the history (05
+// `05-app-tasks.md` §4).
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -15,10 +16,8 @@ import {
 } from "@/lib/chat/live-chat";
 import { subscribeChatEvents, type ChatMessage } from "@/fixtures/chat";
 import { useChatState } from "@/lib/chat/chat-state";
-import { chatKeys } from "@/lib/chat/use-chat";
-
-/** Receipt frames arrive in bursts (one per member) — refresh a room's ticks at most this often. */
-const RECEIPT_COALESCE_MS = 800;
+import { raiseHorizons } from "@/lib/chat/receipts";
+import { chatKeys, type HistoryPage } from "@/lib/chat/use-chat";
 
 function appendMessage(queryClient: ReturnType<typeof useQueryClient>, message: ChatMessage): void {
   // A send lands twice — `message.ack` (canonical id) then `message.new` (full row, with the
@@ -53,18 +52,6 @@ export function useChatRealtime(): void {
     setChatConnectionSink(setConnection); // live socket state lands in the same store slice
     // Reconnect catch-up (COM-INT-010): after a live socket re-dials, refetch every cached room
     // from the server cursor (the WS replay heals the rest). Fixture sessions never fire this.
-    // Ticks only: one history refetch per room per burst of read/delivered frames.
-    const receiptTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    const refreshTicks = (groupId: string) => {
-      if (receiptTimers.has(groupId)) return;
-      receiptTimers.set(
-        groupId,
-        setTimeout(() => {
-          receiptTimers.delete(groupId);
-          void queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) });
-        }, RECEIPT_COALESCE_MS),
-      );
-    };
     const offReconnect = onChatReconnected(() => {
       void queryClient.invalidateQueries({ queryKey: chatKeys.groups });
       void queryClient.invalidateQueries({ queryKey: ["chat", "messages"] });
@@ -111,10 +98,11 @@ export function useChatRealtime(): void {
           }
           break;
         }
-        case "message.read":
-        case "message.delivered":
-          // Someone else's receipt moves my ticks; own reads mutate via the mutation.
-          if (event.userId !== chatMeNow().userId) refreshTicks(event.groupId);
+        case "receipts.updated":
+          // The ticks on my messages moved (sent to me only, with my horizons): no refetch.
+          queryClient.setQueryData<HistoryPage>(chatKeys.history(event.groupId), (page) =>
+            page ? raiseHorizons(page, event.readUpTo, event.deliveredUpTo) : page,
+          );
           break;
         case "message.deleted":
           void queryClient.invalidateQueries({
@@ -135,7 +123,6 @@ export function useChatRealtime(): void {
       }
     });
     return () => {
-      for (const timer of receiptTimers.values()) clearTimeout(timer);
       offReconnect();
       unsubscribe();
     };

@@ -382,19 +382,12 @@ export function mapEvent(raw: WsServerEvent): ChatRealtimeEvent | null {
         id: str(raw.id),
         createdAt: str(raw.createdAt, new Date().toISOString()),
       };
-    case "message.read":
+    case "receipts.updated":
       return {
-        type: "message.read",
+        type: "receipts.updated",
         groupId: str(raw.groupId),
-        userId: str(raw.userId),
-        lastReadMessageId: str(raw.lastReadMessageId),
-      };
-    case "message.delivered":
-      return {
-        type: "message.delivered",
-        groupId: str(raw.groupId),
-        userId: str(raw.userId),
-        lastDeliveredMessageId: str(raw.lastDeliveredMessageId),
+        ...(typeof raw.readUpTo === "string" ? { readUpTo: raw.readUpTo } : {}),
+        ...(typeof raw.deliveredUpTo === "string" ? { deliveredUpTo: raw.deliveredUpTo } : {}),
       };
     case "message.deleted":
       return {

@@ -1,4 +1,5 @@
 import createClient, { type Middleware } from "openapi-fetch";
+import { Platform } from "react-native";
 
 import { env } from "@/env";
 
@@ -31,6 +32,20 @@ export function localeMiddleware(locale: Locale): Middleware {
   };
 }
 
+/**
+ * Marks native builds as the mobile app (`X-Kushol-Client: mobile`). The api serves phone (SMS)
+ * OTP only to the app and answers web callers with email OTP (owner rule 2026-10-17). A product
+ * rule, not a security boundary: any caller can set the header, and the api's OTP caps still apply.
+ */
+export function clientMiddleware(os: typeof Platform.OS = Platform.OS): Middleware {
+  return {
+    onRequest({ request }) {
+      if (os === "ios" || os === "android") request.headers.set("X-Kushol-Client", "mobile");
+      return request;
+    },
+  };
+}
+
 export function createApiClient(
   options: {
     baseUrl?: string;
@@ -43,6 +58,7 @@ export function createApiClient(
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
   client.use(localeMiddleware(options.locale ?? "bn"));
+  client.use(clientMiddleware());
   return client;
 }
 
