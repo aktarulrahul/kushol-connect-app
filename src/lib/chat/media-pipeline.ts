@@ -1,7 +1,9 @@
 // Media pipeline (COM-AP-006..009): compress → presign → client PUT → confirm. In Stage 2 the
 // compress/PUT steps are simulated (fixtures carry magic-byte headers instead of real bytes);
 // the flow's shape, caps and error paths are the real contract, so Stage 5 only swaps the
-// `expo-image-manipulator`/`expo-av` steps in — no screen changes (05 §3/§4).
+// `expo-image-manipulator`/`expo-av` steps in — no screen changes (05 §3/§4). Live sessions
+// (owner 2026-10-17) upload the file to the api in one call (`uploadMediaLive`); the api sniffs it
+// and stores it in R2, so the app never talks to storage.
 import { ChatFixtureError } from "@/fixtures/chat-error";
 import { mediaFixtures, type ChatMediaRef } from "@/fixtures/media";
 import { chatLiveActive, openMediaUrlLive, uploadMediaLive } from "@/lib/chat/live-chat";
@@ -16,7 +18,7 @@ export type MediaPick = {
   width?: number;
   height?: number;
   durationMs?: number;
-  /** Live sessions: the local file (picker/recorder) streamed to the presigned R2 URL. */
+  /** Live sessions: the local file (picker/recorder), streamed to the api (it stores it in R2). */
   uri?: string;
   /** Live sessions without a file URI (tests): the full bytes. Fixtures simulate instead. */
   bytes?: Uint8Array;

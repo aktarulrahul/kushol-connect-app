@@ -3,13 +3,13 @@
 // generated client via `liveAuth()` (bearer + single-flight 401 rotate); realtime through the
 // plain WS gateway (`ws-client`) — the server subscribes every room at connect. Every error maps
 // onto the shared fixture codes so screens keep their exact states. Attachments stream from the
-// device file straight to the presigned Cloudflare R2 URL (owner 2026-10-17).
-import { FileSystemUploadType, getInfoAsync, uploadAsync } from "expo-file-system/legacy";
+// device file to the api, which sniffs them and stores them in Cloudflare R2 — the app never
+// talks to storage (owner 2026-10-17).
+import { FileSystemUploadType, uploadAsync } from "expo-file-system/legacy";
 
 import { isProblem, type Schemas } from "@/api/client";
-import { platformFetch } from "@/api/platform-fetch";
 import { env } from "@/env";
-import { isFixtureAccessToken } from "@/lib/auth/session-restore";
+import { accessTokenNeedsRefresh, isFixtureAccessToken } from "@/lib/auth/session-restore";
 import { liveAuth } from "@/lib/auth/live-session";
 import { tokenStore } from "@/lib/auth/token-store";
 import { createChatSocket, type WsServerEvent } from "@/lib/chat/ws-client";
@@ -525,68 +525,104 @@ export function subscribeLiveChatEvents(listener: EventListener): () => void {
   };
 }
 
-// ─── Media (presign → client PUT → confirm; download URL for the viewer) ─────────────────────
+// ─── Media (upload through the api; download URL for the viewer) ─────────────────────────────
 
-/** PUT one file to the presigned R2 URL: a device file streams from disk (React Native's Blob
- * cannot be built from bytes); raw bytes (tests) go through fetch. */
-async function putToR2(url: string, pick: MediaPick, mime: string): Promise<boolean> {
-  if (pick.uri) {
-    const result = await uploadAsync(url, pick.uri, {
-      httpMethod: "PUT",
-      uploadType: FileSystemUploadType.BINARY_CONTENT,
-      headers: { "Content-Type": mime },
-    });
-    return result.status >= 200 && result.status < 300;
-  }
-  if (!pick.bytes) return false;
-  const blob = new Blob([pick.bytes as BlobPart], { type: mime });
-  const put = await platformFetch(
-    new Request(url, { method: "PUT", body: blob, headers: { "Content-Type": mime } }),
-  );
-  return put.ok;
+type UploadQuery = {
+  kind: "image" | "pdf" | "voice" | "doc" | "slides" | "sheet" | "csv";
+  fileName?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+};
+
+/** Query of `POST /media/upload` for one pick (pure — unit-pinned). */
+export function uploadQuery(pick: MediaPick): UploadQuery {
+  return {
+    kind: pick.kind,
+    ...(pick.fileName ? { fileName: pick.fileName } : {}),
+    ...(pick.width ? { width: pick.width } : {}),
+    ...(pick.height ? { height: pick.height } : {}),
+    ...(pick.durationMs ? { durationMs: pick.durationMs } : {}),
+  };
 }
 
-/** Real upload flow: presign → PUT (file URI or bytes) → confirm (the server sniff decides). */
+/** Maps a non-2xx upload answer onto the fixture codes (same table as every other call). */
+function uploadFailure(status: number, body: string): ChatFixtureError {
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    // not JSON — fall through to the status mapping
+  }
+  if (isProblem(parsed)) {
+    return new ChatFixtureError(codeFor(parsed.code, "VALIDATION_FAILED"), problemDetail(parsed));
+  }
+  return new ChatFixtureError(status >= 500 ? "OFFLINE" : "SEND_FAILED", "upload");
+}
+
+/**
+ * A device file streams from disk to the api (React Native's Blob cannot be built from bytes).
+ * uploadAsync is outside the generated client, so it carries the bearer itself: a token about to
+ * expire is rotated first, and a 401 rotates once and retries — the same single flight liveAuth
+ * uses.
+ */
+async function uploadFileToApi(uri: string, query: UploadQuery): Promise<Schemas["MediaAsset"]> {
+  const auth = liveAuth();
+  const params = new URLSearchParams(
+    Object.entries(query).map(([key, value]) => [key, String(value)]),
+  );
+  const url = `${env.EXPO_PUBLIC_API_URL}/api/v1/media/upload?${params.toString()}`;
+  const send = async () => {
+    const tokens = await tokenStore.get();
+    return uploadAsync(url, uri, {
+      httpMethod: "POST",
+      uploadType: FileSystemUploadType.BINARY_CONTENT,
+      headers: {
+        Authorization: `Bearer ${tokens?.accessToken ?? ""}`,
+        "Content-Type": "application/octet-stream",
+        "X-Kushol-Client": "mobile",
+      },
+    });
+  };
+  const current = await tokenStore.get();
+  if (current && accessTokenNeedsRefresh(current.accessToken, Date.now())) await auth.rotate();
+  let result = await send();
+  if (result.status === 401) {
+    await auth.rotate();
+    result = await send();
+  }
+  if (result.status < 200 || result.status >= 300) throw uploadFailure(result.status, result.body);
+  return JSON.parse(result.body) as Schemas["MediaAsset"];
+}
+
+/** Real upload: the bytes go to the api, which checks the cap, sniffs the magic bytes, streams
+ * them to R2 and answers with the confirmed asset. */
 export async function uploadMediaLive(pick: MediaPick & { mime?: string }): Promise<ChatMediaRef> {
   if (!pick.uri && !pick.bytes) {
     throw new ChatFixtureError("VALIDATION_FAILED", "real_file_required");
   }
-  const client = liveAuth();
-  const mime = pick.mime ?? "application/octet-stream";
-  // Pickers/recorders do not always report a size — measure the file the PUT will stream.
-  let sizeBytes = pick.sizeBytes;
+  const query = uploadQuery(pick);
+  let asset: Schemas["MediaAsset"];
   if (pick.uri) {
-    const info = await getInfoAsync(pick.uri).catch(() => null);
-    if (info?.exists && info.size > 0) sizeBytes = info.size;
+    const uri = pick.uri;
+    asset = await uploadFileToApi(uri, query).catch((cause: unknown) => {
+      if (cause instanceof ChatFixtureError) throw cause;
+      throw new ChatFixtureError("OFFLINE"); // transport failure — the retry paths apply
+    });
+  } else {
+    const bytes = pick.bytes;
+    asset = await call(
+      () =>
+        liveAuth().POST("/api/v1/media/upload", {
+          params: { query },
+          body: bytes as unknown as string,
+          bodySerializer: (body: unknown) =>
+            new Blob([body as BlobPart], { type: "application/octet-stream" }),
+          headers: { "Content-Type": "application/octet-stream" },
+        }),
+      "VALIDATION_FAILED",
+    );
   }
-  const presign = await call(
-    () =>
-      client.POST("/api/v1/media/upload-url", {
-        body: {
-          kind: pick.kind,
-          sizeBytes,
-          mime,
-          ...(pick.fileName ? { fileName: pick.fileName } : {}),
-        },
-      }),
-    "VALIDATION_FAILED",
-  );
-
-  const uploaded = await putToR2(presign.data.uploadUrl, pick, mime).catch(() => false);
-  if (!uploaded) throw new ChatFixtureError("SEND_FAILED", "upload_put");
-
-  const asset = await call(
-    () =>
-      client.POST("/api/v1/media/{assetId}/confirm", {
-        params: { path: { assetId: presign.data.assetId } },
-        body: {
-          ...(pick.width ? { width: pick.width } : {}),
-          ...(pick.height ? { height: pick.height } : {}),
-          ...(pick.durationMs ? { durationMs: pick.durationMs } : {}),
-        },
-      }),
-    "VALIDATION_FAILED",
-  );
   return {
     assetId: asset.id,
     kind: asset.kind,
