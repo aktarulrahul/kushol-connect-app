@@ -10,6 +10,7 @@ import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { bnTaka } from "@/components/commerce/bits";
 import { useT } from "@/i18n/locale-provider";
 import { useInitiate, useInvoice } from "@/lib/payments/use-payments";
@@ -91,7 +92,9 @@ export default function PayScreen() {
         ) : (
           <>
             <View className="rounded-2xl border border-border p-4">
-              <Text className="mb-2 text-sm font-medium text-foreground">{t("payments.amount_breakdown")}</Text>
+              <Text className="mb-2 text-sm font-medium text-foreground">
+                {t("payments.amount_breakdown")}
+              </Text>
               <View className="flex-row justify-between">
                 <Text className="text-muted-foreground">{t("payments.fee_line")}</Text>
                 <Text className="tabular-nums text-foreground">{bnTaka(fee)}</Text>
@@ -104,7 +107,9 @@ export default function PayScreen() {
             </View>
 
             <View className="gap-2">
-              <Text className="text-sm font-medium text-foreground">{t("payments.gateway_label")}</Text>
+              <Text className="text-sm font-medium text-foreground">
+                {t("payments.gateway_label")}
+              </Text>
               {GATEWAYS.filter((g) => hidden !== g).map((g, i) => (
                 <Pressable
                   key={g}
@@ -118,7 +123,9 @@ export default function PayScreen() {
                     gateway === g ? "border-primary bg-primary-soft" : "border-border bg-background"
                   }`}
                 >
-                  <View className={`h-4 w-4 rounded-full border ${gateway === g ? "border-primary bg-primary" : "border-border"}`} />
+                  <View
+                    className={`h-4 w-4 rounded-full border ${gateway === g ? "border-primary bg-primary" : "border-border"}`}
+                  />
                   <Text className="flex-1 text-sm font-medium text-foreground">
                     {t(`payments.gateway.${g}` as Parameters<typeof t>[0])}
                   </Text>
@@ -132,11 +139,13 @@ export default function PayScreen() {
       </View>
 
       {!paid && !voided ? (
-        <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background p-4">
+        <BottomActionBar>
           <Button size="lg" disabled={initiate.isPending} onPress={pay}>
-            <Text>{t("payments.pay_now")} — {bnTaka(total)}</Text>
+            <Text>
+              {t("payments.pay_now")} — {bnTaka(total)}
+            </Text>
           </Button>
-        </View>
+        </BottomActionBar>
       ) : null}
     </Screen>
   );

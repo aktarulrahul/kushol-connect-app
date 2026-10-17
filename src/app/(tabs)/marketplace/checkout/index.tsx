@@ -10,6 +10,7 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { useT } from "@/i18n/locale-provider";
 import { queueOrder, usePlaceOrder } from "@/lib/commerce/use-commerce";
 import { checkoutAddress, type CheckoutAddress } from "@/schemas/commerce";
@@ -17,12 +18,21 @@ import { checkoutAddress, type CheckoutAddress } from "@/schemas/commerce";
 export default function CheckoutScreen() {
   const t = useT();
   const toast = useToast();
-  const params = useLocalSearchParams<{ productId?: string; variantId?: string; qty?: string; storefrontId?: string }>();
+  const params = useLocalSearchParams<{
+    productId?: string;
+    variantId?: string;
+    qty?: string;
+    storefrontId?: string;
+  }>();
   const place = usePlaceOrder();
 
   const [fulfilment, setFulfilment] = useState<"pickup" | "courier">("pickup");
   const [address, setAddress] = useState<CheckoutAddress>({
-    recipientName: "", recipientPhone: "", city: "", area: "", addressLine: "",
+    recipientName: "",
+    recipientPhone: "",
+    city: "",
+    area: "",
+    addressLine: "",
   });
   const [errorKey, setErrorKey] = useState<string | null>(null);
   const [placedNotice, setPlacedNotice] = useState(false);
@@ -51,12 +61,17 @@ export default function CheckoutScreen() {
       {
         onSuccess: (order) => {
           setPlacedNotice(true);
-          setTimeout(() => { router.replace(`/marketplace/orders/${order.id}`); }, 900);
+          setTimeout(() => {
+            router.replace(`/marketplace/orders/${order.id}`);
+          }, 900);
         },
         onError: (e) => {
           const fe = e as { code?: string; detail?: string };
           if (fe.code === "OUT_OF_STOCK") {
-            toast({ title: `${t("commerce.out_of_stock_toast")}: ${fe.detail ?? ""}`, variant: "error" });
+            toast({
+              title: `${t("commerce.out_of_stock_toast")}: ${fe.detail ?? ""}`,
+              variant: "error",
+            });
             return;
           }
           if (fe.detail === "validation.commerce.cod_limit") {
@@ -67,7 +82,9 @@ export default function CheckoutScreen() {
             // §8: queue exactly once with a loud banner — replay verdicts surface later.
             queueOrder({
               storefrontId,
-              items: [{ productId, ...(params.variantId ? { variantId: params.variantId } : {}), qty }],
+              items: [
+                { productId, ...(params.variantId ? { variantId: params.variantId } : {}), qty },
+              ],
               fulfilment,
               ...(fulfilment === "courier" ? { fulfilmentAddress: address } : {}),
             });
@@ -84,7 +101,10 @@ export default function CheckoutScreen() {
     <Screen header={<ScreenHeader title={t("commerce.checkout_title")} />}>
       <View className="gap-4 px-4 pb-8 pt-2">
         {placedNotice ? (
-          <Text role="status" className="rounded-xl border border-primary/40 bg-primary-soft p-3 text-sm text-primary">
+          <Text
+            role="status"
+            className="rounded-xl border border-primary/40 bg-primary-soft p-3 text-sm text-primary"
+          >
             {t("commerce.order_placed")}
           </Text>
         ) : null}
@@ -98,12 +118,16 @@ export default function CheckoutScreen() {
         <View className="rounded-2xl border border-border p-4">
           <View className="flex-row justify-between">
             <Text className="text-muted-foreground">{t("commerce.summary_qty", { n: qty })}</Text>
-            <Text className="tabular-nums font-medium text-foreground">{t("commerce.summary_live_note")}</Text>
+            <Text className="tabular-nums font-medium text-foreground">
+              {t("commerce.summary_live_note")}
+            </Text>
           </View>
         </View>
 
         <View className="gap-2">
-          <Text className="text-sm font-medium text-foreground">{t("commerce.fulfilment_label")}</Text>
+          <Text className="text-sm font-medium text-foreground">
+            {t("commerce.fulfilment_label")}
+          </Text>
           <SegmentedPill
             segments={[
               { value: "pickup", label: t("commerce.fulfilment.pickup") },
@@ -134,7 +158,9 @@ export default function CheckoutScreen() {
                 <Text className="text-xs text-muted-foreground">{label}</Text>
                 <TextInput
                   value={address[key]}
-                  onChangeText={(text) => { setAddress((prev) => ({ ...prev, [key]: text })); }}
+                  onChangeText={(text) => {
+                    setAddress((prev) => ({ ...prev, [key]: text }));
+                  }}
                   accessibilityLabel={label}
                   keyboardType={key === "recipientPhone" ? "phone-pad" : "default"}
                   multiline={key === "addressLine"}
@@ -147,15 +173,17 @@ export default function CheckoutScreen() {
 
         <View className="rounded-2xl border border-border bg-muted/30 p-4">
           <Text className="text-sm font-medium text-foreground">{t("commerce.cod_note")}</Text>
-          <Text className="mt-1 text-xs text-muted-foreground">{t("validation.commerce.cod_limit")}</Text>
+          <Text className="mt-1 text-xs text-muted-foreground">
+            {t("validation.commerce.cod_limit")}
+          </Text>
         </View>
       </View>
 
-      <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background p-4">
+      <BottomActionBar>
         <Button size="lg" disabled={place.isPending || placedNotice} onPress={submit}>
           <Text>{t("commerce.place_order")}</Text>
         </Button>
-      </View>
+      </BottomActionBar>
     </Screen>
   );
 }

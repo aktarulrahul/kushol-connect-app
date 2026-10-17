@@ -10,6 +10,7 @@ import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { ApprovedBadge, StockStateLine, bnTaka } from "@/components/commerce/bits";
 import { useT } from "@/i18n/locale-provider";
 import { useProduct } from "@/lib/commerce/use-commerce";
@@ -24,7 +25,9 @@ export default function ProductDetailScreen() {
   const [qty, setQty] = useState(1);
 
   const selected = useMemo(
-    () => variants.find((v) => v.id === variantId) ?? variants.find((v) => v.stockState !== "out_of_stock"),
+    () =>
+      variants.find((v) => v.id === variantId) ??
+      variants.find((v) => v.stockState !== "out_of_stock"),
     [variants, variantId],
   );
   const unitPrice = (product.data?.priceBdt ?? 0) + (selected?.priceDelta ?? 0);
@@ -65,14 +68,20 @@ export default function ProductDetailScreen() {
             <ApprovedBadge />
           </View>
           {p.nameEn ? <Text className="text-xs text-muted-foreground">{p.nameEn}</Text> : null}
-          <Text className="text-lg font-semibold tabular-nums text-foreground">{bnTaka(unitPrice)}</Text>
+          <Text className="text-lg font-semibold tabular-nums text-foreground">
+            {bnTaka(unitPrice)}
+          </Text>
           <StockStateLine state={p.stockState} />
-          {p.deliveryNote ? <Text className="text-xs text-muted-foreground">{p.deliveryNote}</Text> : null}
+          {p.deliveryNote ? (
+            <Text className="text-xs text-muted-foreground">{p.deliveryNote}</Text>
+          ) : null}
         </View>
 
         {variants.length > 0 ? (
           <View className="gap-2">
-            <Text className="text-sm font-medium text-foreground">{t("commerce.variant_label")}</Text>
+            <Text className="text-sm font-medium text-foreground">
+              {t("commerce.variant_label")}
+            </Text>
             <View className="flex-row flex-wrap gap-2">
               {variants.map((v) => {
                 const isOut = v.stockState === "out_of_stock";
@@ -97,7 +106,11 @@ export default function ProductDetailScreen() {
                   >
                     <Text
                       className={`text-sm ${
-                        isOut ? "text-muted-foreground" : active ? "font-semibold text-primary-foreground" : "text-foreground"
+                        isOut
+                          ? "text-muted-foreground"
+                          : active
+                            ? "font-semibold text-primary-foreground"
+                            : "text-foreground"
                       }`}
                     >
                       {v.name}
@@ -142,7 +155,7 @@ export default function ProductDetailScreen() {
         </View>
       </View>
 
-      <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background p-4">
+      <BottomActionBar>
         <Button
           size="lg"
           disabled={outOfStock}
@@ -164,7 +177,7 @@ export default function ProductDetailScreen() {
               : `${t("commerce.order_cta")} — ${bnTaka(unitPrice * qty)}`}
           </Text>
         </Button>
-      </View>
+      </BottomActionBar>
     </Screen>
   );
 }

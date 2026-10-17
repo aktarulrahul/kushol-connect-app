@@ -21,6 +21,7 @@ import {
 import type { LucideIcon } from "lucide-react-native";
 
 import { toBnDigits } from "@/components/chat/group-row";
+import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { Icon } from "@/components/ui/icon";
 import { Sheet } from "@/components/ui/sheet";
 import { Text } from "@/components/ui/text";
@@ -226,7 +227,8 @@ export function AttachSheet({
   const t = useT();
   const tiles: { key: string; label: string; icon: LucideIcon; onPress: () => void }[] = [
     { key: "image", label: t("chat.composer.attach_image"), icon: ImageIcon, onPress: onPickImage },
-    { key: "pdf", label: t("chat.composer.attach_pdf"), icon: FileText, onPress: onPickPdf },
+    // PDF, Word, Excel and CSV (owner 2026-10-17) — one document tile, same sheet layout.
+    { key: "pdf", label: t("chat.composer.attach_document"), icon: FileText, onPress: onPickPdf },
     ...(onPickSticker
       ? [
           {
@@ -277,8 +279,8 @@ export function VoiceRecorderSheet({
   const [seconds, setSeconds] = useState(0);
   if (!visible) return null;
   return (
-    <View
-      className="absolute inset-x-0 bottom-0 border-t border-border bg-background p-4"
+    // Clears the iOS home indicator / Android gesture bar (edge-to-edge on both platforms).
+    <BottomActionBar
       accessibilityLiveRegion="polite"
       accessibilityLabel={t("chat.voice.record_a11y")}
     >
@@ -320,7 +322,7 @@ export function VoiceRecorderSheet({
           </Text>
         </Pressable>
       </View>
-    </View>
+    </BottomActionBar>
   );
 }
 

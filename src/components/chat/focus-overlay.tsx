@@ -1,14 +1,16 @@
 // Focus overlay for long-press menus (Spartens ChatItemMenu / MessageMenu, owner 2026-10-09): a
-// full-window modal with a frosted (iOS, when expo-blur is linked) or dimmed backdrop, plus the
+// full-window overlay (the root portal layer — same window and coordinates as the anchor's
+// `measureInWindow`) with a frosted (iOS, when expo-blur is linked) or dimmed backdrop, plus the
 // menu card + rows and the placement maths that keeps a menu on screen next to its anchor.
 import { BlurView } from "expo-blur";
 import type { LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, ReduceMotion, ZoomIn } from "react-native-reanimated";
 
 import { Icon } from "@/components/ui/icon";
 import { isExpoBlurNativeAvailable } from "@/components/ui/glass-surface";
+import { OverlayPortal } from "@/components/ui/overlay-portal";
 import { Text } from "@/components/ui/text";
 import { useT } from "@/i18n/locale-provider";
 import { cn } from "@/lib/utils";
@@ -68,14 +70,7 @@ export function FocusOverlay({
   const t = useT();
   const blur = isExpoBlurNativeAvailable();
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={onClose}
-    >
+    <OverlayPortal visible={visible} onRequestClose={onClose}>
       <Animated.View
         entering={FadeIn.duration(motion.duration.base).reduceMotion(ReduceMotion.System)}
         style={StyleSheet.absoluteFill}
@@ -98,7 +93,7 @@ export function FocusOverlay({
       >
         {children}
       </View>
-    </Modal>
+    </OverlayPortal>
   );
 }
 

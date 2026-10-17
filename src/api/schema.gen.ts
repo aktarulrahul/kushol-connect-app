@@ -547,12 +547,22 @@ export interface paths {
      *     presence keys TTL 60 s.
      *     x-ws-events (client→server): subscribe {rooms[]} · unsubscribe {rooms[]} ·
      *     message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?} ·
-     *     message.read {groupId, lastReadMessageId} · typing {groupId, state start|stop} · ping.
+     *     message.read {groupId, lastReadMessageId} · message.delivered {groupId,
+     *     lastDeliveredMessageId} (send on receiving another member's message.new) · typing
+     *     {groupId, state start|stop} · ping.
      *     x-ws-events (server→client): message.new (full ChatMessage) · message.ack
      *     {clientMsgId, id, createdAt} · message.read {groupId, userId, lastReadMessageId} ·
-     *     message.deleted {groupId, id, deletedAt} · presence.update {groupId, userId, online} ·
-     *     typing {groupId, userId, state} · notice.new (Notice summary) · error (RFC-7807-shaped
-     *     {type, title, status}). Reconnect: backoff 1 s → 30 s cap with jitter → re-auth →
+     *     message.delivered {groupId, userId, lastDeliveredMessageId} (receipt pointers only move
+     *     forward; read implies delivered — receivers refresh their ticks) ·
+     *     message.deleted {groupId, id, deletedAt} · message.updated {groupId, message} (edit, pin,
+     *     reaction, poll vote — receivers refetch per-viewer fields) · group.updated {groupId}
+     *     (rename, description, roster; also sent to an added/removed user's private room) ·
+     *     presence.update {groupId, userId, online} (a snapshot of who is online is sent on each
+     *     subscribe) · typing {groupId, userId, state} · notice.new (Notice summary) · error
+     *     (RFC-7807-shaped {type, title, status}). Every room the user may read is subscribed
+     *     automatically at connect and when membership changes; `subscribe` remains for clients
+     *     that re-subscribe explicitly. Browsers authenticate with the session cookie (same-origin
+     *     upgrade through the site's `/api/v1` proxy); the Origin must match the site host. Reconnect: backoff 1 s → 30 s cap with jitter → re-auth →
      *     re-subscribe → REST catch-up from the latest local cursor → offline queue replay
      *     (dedupe by clientMsgId).
      */
@@ -613,7 +623,8 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /** Group participants (members only) — group info roster */
+    get: operations["listChatGroupMembers"];
     put?: never;
     /** Add a member (owner/moderator/School Admin) */
     post: operations["addChatGroupMember"];
@@ -633,7 +644,10 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    /** Remove a member (moderator+) */
+    /**
+     * Remove a member (moderator+), or leave the group when userId is the caller
+     * @description Self-removal is "Exit group" — custom, unmanaged groups only; a leaving owner hands ownership to the longest-standing moderator (else member). Official and managed groups follow enrollment/role and answer CONFLICT.
+     */
     delete: operations["removeChatGroupMember"];
     options?: never;
     head?: never;
@@ -654,8 +668,51 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    /** Set the caller's last_read_message_id (drives seen counts) */
+    /**
+     * Advance the caller's read pointer (blue ticks, seen counts, Message info "Read")
+     * @description The pointer only moves forward (a stale id answers with the current pointer) and implies delivery. A message from another group is VALIDATION_FAILED.
+     */
     patch: operations["markChatRead"];
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}/delivered": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Advance the caller's delivered pointer (grey double ticks, Message info "Delivered")
+     * @description Clients send this (or the WS `message.delivered` frame) when another member's message reaches the device. The pointer only moves forward; listing groups and loading history advance it too. A message from another group is VALIDATION_FAILED.
+     */
+    patch: operations["markChatDelivered"];
+    trace?: never;
+  };
+  "/api/v1/chat/contacts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * People picker — who the caller can add to a group or message directly
+     * @description Verified users of the caller's school; Kushol super admins also see every super admin and institution admin, institution admins also see the super admins. Name + role only (no phone/email).
+     */
+    get: operations["listChatContacts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/api/v1/chat/dm/{peerId}": {
@@ -759,6 +816,173 @@ export interface paths {
     post?: never;
     /** Tombstone a message (author ≤ 15 min; moderator/owner/School Admin anytime) */
     delete: operations["deleteChatMessage"];
+    options?: never;
+    head?: never;
+    /** Edit a text message (author only; polls are not editable) */
+    patch: operations["editChatMessage"];
+    trace?: never;
+  };
+  "/api/v1/chat/messages/{messageId}/pin": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Pin or unpin a message (group owner/moderator; School Admin anytime) */
+    post: operations["pinChatMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/messages/{messageId}/seen-by": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Message info receipts — who it was delivered to and read by, and when
+     * @description Every member except the sender whose delivered or read pointer covers the message (read first, then delivered), with the time each pointer first passed it; `pending` counts members it has not reached yet.
+     */
+    get: operations["listChatMessageSeenBy"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/messages/{messageId}/reactions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Who reacted with what (Message info, the reactions sheet) — newest first */
+    get: operations["listChatMessageReactions"];
+    /**
+     * React to a message — one reaction per person (WhatsApp)
+     * @description A new emoji sets or replaces my reaction; sending my current emoji again removes it.
+     */
+    put: operations["toggleChatMessageReaction"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/messages/{messageId}/poll/vote": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Cast, change or withdraw my poll vote (single-choice polls toggle off on repeat) */
+    post: operations["voteChatMessagePoll"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/messages/{messageId}/forward": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Forward a message into chats I am a member of
+     * @description Caller must be able to read the source message. Copies keep the text, caption, attachment or poll (fresh votes) but not the quote, and carry `forwardCount` (source + 1). WhatsApp limits — up to 5 chats per forward; a message already forwarded 5+ times ("Forwarded many times") goes to 1 chat at a time.
+     */
+    post: operations["forwardChatMessage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Edit group info — rename a custom club and/or set the description
+     * @description Name — custom, unmanaged groups (owner/moderator; School Admin anytime). Description — any non-dm group (owner/moderator; School Admin anytime); an empty string clears it. `group.updated` fans out on the WS.
+     */
+    patch: operations["renameChatGroup"];
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}/assets": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Confirmed attachments from the group's live messages (gallery backing) */
+    get: operations["listChatGroupAssets"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/groups/explore": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Active public clubs in my school I have not joined */
+    get: operations["listExploreChatGroups"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/groups/{groupId}/join": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Join an active public club in my school */
+    post: operations["joinChatGroup"];
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -1780,6 +2004,354 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/payments/callback/{gateway}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * GATEWAY BROWSER RETURN (PAY-BE-006, 12 §2 I-9) — UX only, never authoritative (the
+     *     webhook stays the source of truth): verify the reference belongs to this gateway, ONE
+     *     FetchStatus confirm, apply the terminal state if the webhook hasn't already, then always
+     *     302 to the status screen. Callback errors surface in the redirect state, not as API errors.
+     */
+    post: operations["redirectGatewayCallback"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Own campaigns (account-scoped) */
+    get: operations["listMyAdCampaigns"];
+    put?: never;
+    /** Create a draft campaign (approved vendor; demographic-only targeting) */
+    post: operations["createAdCampaign"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Edit while draft/rejected (review states immutable — CONFLICT) */
+    patch: operations["updateAdCampaign"];
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/submit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Submit for moderation (unmodified rejected → CAMPAIGN_REJECTED) */
+    post: operations["submitAdCampaign"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/analytics": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Daily aggregates (ads_daily only — aggregate-only rule) */
+    get: operations["getAdCampaignAnalytics"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/pause": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** running → paused (budget exhaustion mirrors this) */
+    post: operations["pauseAdCampaign"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** paused → running (inside the window) */
+    post: operations["resumeAdCampaign"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/audience-estimate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Aggregate verified-user count from 04 (unknown on 04 failure — never invented) */
+    get: operations["getAudienceEstimate"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Own events with ticket totals */
+    get: operations["listMyVendorEvents"];
+    put?: never;
+    /** List an event (draft; ticket_price null = free) */
+    post: operations["createVendorEvent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/events/{id}/submit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Submit an event for moderation */
+    post: operations["submitVendorEvent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/moderation/queue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Pending campaigns + events with the moderation checklist (Super Admin) */
+    get: operations["getModerationQueue"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/campaigns/{id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Approve (checklist version audited) — concurrent decision → CONFLICT */
+    post: operations["approveAdCampaign"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/campaigns/{id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reject — reason mandatory; audit-logged */
+    post: operations["rejectAdCampaign"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/events/{id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Publish an event (busts `events:city:{id}`) */
+    post: operations["approveAdEvent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/events/{id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reject an event — reason mandatory; audit-logged */
+    post: operations["rejectAdEvent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/ads/overview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Platform totals — campaigns by status, spend, events, tickets, gross/commission/net */
+    get: operations["getAdsOverview"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Published, upcoming events by city (BR-012 — drafts never leak) */
+    get: operations["listPublicEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/events/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Public event detail (published only) */
+    get: operations["getPublicEvent"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/events/{id}/tickets": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Organizer ticket list + totals (gross/commission/net; cancelled counted separately) */
+    get: operations["listEventTickets"];
+    put?: never;
+    /** Reserve/buy tickets (VERIFIED; row-locked capacity; free → paid instantly) */
+    post: operations["reserveEventTickets"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/event-tickets/{id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Buyer/Super-Admin cancel before starts_at (capacity freed) */
+    post: operations["cancelEventTicket"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/leads": {
     parameters: {
       query?: never;
@@ -1979,6 +2551,333 @@ export interface paths {
     };
     /** Read-only audit viewer over 01's append-only log (Super Admin) */
     get: operations["listAdminAuditLog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/roster/template": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Portal-generated roster template CSV (LMS-US-001)
+     * @description Fixed English machine header set (LMS-BR-008) plus bn/en instruction rows and the institution's ACTIVE sections pre-filled. Licence-gated (LMS-BR-014). Streamed, no-store.
+     */
+    get: operations["getRosterTemplate"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/roster/imports": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Import history (LMS-US-003) */
+    get: operations["listRosterImports"];
+    put?: never;
+    /**
+     * Upload a roster file (dry-run first, content-hash idempotent — LMS-US-002)
+     * @description multipart file (csv; xlsx P1) <= 20 MB, <= 10,000 data rows (LMS-BR-007). Identical re-upload returns the original import with 200 (LMS-BR-002). Stored via 05 media; the process job is enqueued. 10 uploads/hour/institution.
+     */
+    post: operations["createRosterImport"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/roster/imports/{importId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Import detail with totals (LMS-US-003/004) */
+    get: operations["getRosterImport"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/roster/imports/{importId}/rows": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Row-level report (default the error rows; LMS-US-003) */
+    get: operations["listRosterImportRows"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/roster/imports/{importId}/commit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Commit a clean import (status must be ready — LMS-BR-003/INV-004)
+     * @description 202 with status committing; the commit job applies chunks of 500 (phone-match update / PENDING create via 03, enrollments via 04). 5/hour/institution.
+     */
+    post: operations["commitRosterImport"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/roster/reconciliation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Baseline vs platform counts with drift flags (LMS-US-012) */
+    get: operations["getRosterReconciliation"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/erp/endpoints": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Endpoints (never the secret) */
+    get: operations["listErpEndpoints"];
+    put?: never;
+    /** Register an ERP webhook endpoint (raw secret shown exactly once — LMS-US-005) */
+    post: operations["createErpEndpoint"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/erp/endpoints/{endpointId}/rotate-secret": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Versioned rotation with overlap (LMS-US-010) */
+    post: operations["rotateErpEndpointSecret"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/erp/endpoints/{endpointId}/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Send a signed test event (LMS-US-006) */
+    post: operations["testErpEndpoint"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/erp/endpoints/{endpointId}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Delivery log (LMS-US-011) */
+    get: operations["listErpEndpointEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/erp/endpoints/{endpointId}/events/{eventId}/redrive": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Re-apply a failed event (LMS-US-011) */
+    post: operations["redriveErpEvent"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/erp/endpoints/{endpointId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke (terminal — events thereafter rejected; LMS-BR-013) */
+    delete: operations["revokeErpEndpoint"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/webhooks/erp/{schoolId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * SIGNATURE-VERIFIED EXCEPTION (documented, module 12 pattern) — unauthenticated-but-HMAC-
+     *     signed ERP events: constant-time HMAC-SHA256 over {timestamp}.{rawBody} against the
+     *     institution's versioned secret, ±5-min timestamp window, UUID event id, body <= 1 MB,
+     *     60 events/min/institution. Applied via 03/04 in one per-event transaction.
+     */
+    post: operations["erpWebhook"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/lms/connections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Connections (credential redacted) */
+    get: operations["listLmsConnections"];
+    put?: never;
+    /**
+     * Create the LMS pull connection (LMS-US-013; plan §6.1)
+     * @description HTTPS base URL + bearer/api-key credential (write-only, AES-256-GCM at rest), schedule preset, optional resource path overrides. One connection per institution.
+     */
+    post: operations["createLmsConnection"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/lms/connections/{connectionId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke the connection (schedule stops) */
+    delete: operations["deleteLmsConnection"];
+    options?: never;
+    head?: never;
+    /** Update config (credential optional — only rewritten when provided) */
+    patch: operations["updateLmsConnection"];
+    trace?: never;
+  };
+  "/api/v1/school/lms/connections/{connectionId}/test": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Probe GET /teachers?limit=1 for auth sanity (plan §2.1) */
+    post: operations["testLmsConnection"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/lms/connections/{connectionId}/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Sync now (202; one running sync per institution — 409 otherwise) */
+    post: operations["syncLmsConnection"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/school/lms/sync-runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Sync-run history (newest first) */
+    get: operations["listLmsSyncRuns"];
     put?: never;
     post?: never;
     delete?: never;
@@ -2337,6 +3236,14 @@ export interface components {
       lastMessagePreview?: string;
       /** Format: date-time */
       lastMessageAt?: string;
+      /** @description Kind of the latest message (text|image|pdf|voice|doc|sheet|csv|poll|system), or `deleted` for a tombstone — clients render attachment/tombstone previews from it */
+      lastMessageKind?: string;
+      lastMessageSenderId?: string;
+      /** @description Author of the latest message (group list rows show "Name - preview") */
+      lastMessageSenderName?: string;
+      description?: string;
+      /** @description Server-created group kept in sync automatically (Kushol Admin, institution staff) — no rename, leave or manual roster edits */
+      managed?: boolean;
       /** Format: date-time */
       createdAt: string;
     };
@@ -2345,6 +3252,7 @@ export interface components {
     };
     ChatGroupCreateInput: {
       name: string;
+      description?: string;
     };
     ChatGroupMember: {
       userId: string;
@@ -2353,6 +3261,19 @@ export interface components {
       lastReadMessageId?: string;
       /** Format: date-time */
       joinedAt: string;
+    };
+    ChatGroupMemberPage: {
+      data: components["schemas"]["ChatGroupMember"][];
+    };
+    /** @description Someone the caller may add to a group or message directly (name + role only) */
+    ChatContact: {
+      userId: string;
+      name: string;
+      /** @enum {string} */
+      role: "super_admin" | "school_admin" | "teacher" | "student" | "guardian" | "vendor";
+    };
+    ChatContactPage: {
+      data: components["schemas"]["ChatContact"][];
     };
     ChatGroupMemberInput: {
       userId: string;
@@ -2368,8 +3289,104 @@ export interface components {
         removed: boolean;
       };
     };
+    ChatReactionSummary: {
+      emoji: string;
+      count: number;
+      /** @description The viewer reacted with this emoji (REST reads only — WS fan-outs carry the actor's view, so receivers refetch) */
+      mine?: boolean;
+    };
+    ChatPollOption: {
+      text: string;
+      votes: number;
+    };
+    ChatPoll: {
+      question: string;
+      options: components["schemas"]["ChatPollOption"][];
+      allowMultiple?: boolean;
+      /** @description Option indexes the viewer voted for (REST reads only) */
+      userVoted?: number[];
+    };
+    ChatSeenByEntry: {
+      userId: string;
+      name: string;
+      /** @enum {string} */
+      status: "read" | "delivered";
+      /**
+       * Format: date-time
+       * @description When the member read it (absent for delivered-only or a pre-receipts read)
+       */
+      readAt?: string;
+      /**
+       * Format: date-time
+       * @description When it reached the member (absent when the time is unknown)
+       */
+      deliveredAt?: string;
+    };
+    ChatSeenByPage: {
+      data: components["schemas"]["ChatSeenByEntry"][];
+      /** @description Members (sender excluded) the message has not reached yet */
+      pending: number;
+    };
+    ChatReactor: {
+      userId: string;
+      name: string;
+      emoji: string;
+      /** Format: date-time */
+      reactedAt: string;
+    };
+    ChatReactorPage: {
+      data: components["schemas"]["ChatReactor"][];
+    };
+    ChatDeliveredInput: {
+      lastDeliveredMessageId: string;
+    };
+    ChatDeliveredResult: {
+      data: {
+        groupId: string;
+        lastDeliveredMessageId: string;
+      };
+    };
+    ChatForwardResult: {
+      data: {
+        forwarded: number;
+      };
+    };
+    ChatGroupAssetImage: {
+      assetId: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    ChatGroupAssetFile: {
+      assetId: string;
+      kind?: components["schemas"]["MediaKind"];
+      mime?: string;
+      /** Format: int64 */
+      sizeBytes?: number;
+      fileName?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    ChatGroupAssets: {
+      data: {
+        images: components["schemas"]["ChatGroupAssetImage"][];
+        files: components["schemas"]["ChatGroupAssetFile"][];
+      };
+    };
+    ChatExploreGroup: {
+      id: string;
+      name: string;
+      kind: string;
+      status: string;
+      memberCount: number;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    ChatExploreGroupPage: {
+      data: components["schemas"]["ChatExploreGroup"][];
+    };
     /** @enum {string} */
-    ChatMessageKind: "text" | "image" | "pdf" | "voice" | "system";
+    ChatMessageKind:
+      "text" | "image" | "pdf" | "voice" | "doc" | "sheet" | "csv" | "system" | "poll";
     /** @description The referenced confirmed asset (message render data) */
     ChatMediaRef: {
       assetId: string;
@@ -2397,11 +3414,31 @@ export interface components {
       replyTo?: string;
       /** @description Server-rendered one-line preview of the quoted message */
       replyPreview?: string;
+      /** @description Author of the quoted message (WhatsApp quote header) */
+      replySenderName?: string;
+      /** @description Kind of the quoted message (text, image, pdf, voice, doc, sheet, csv, poll) or `deleted` once it was deleted — its preview is then empty */
+      replyKind?: string;
+      /** @description Forward hops — absent/0 for an original; ≥ 1 shows "Forwarded", ≥ 5 "Forwarded many times" */
+      forwardCount?: number;
       /**
        * Format: date-time
        * @description Set ⇒ tombstone ("Message deleted")
        */
       deletedAt?: string;
+      /**
+       * Format: date-time
+       * @description Set ⇒ the author edited the body
+       */
+      editedAt?: string;
+      /**
+       * Format: date-time
+       * @description Set ⇒ pinned (moderator/owner/School Admin)
+       */
+      pinnedAt?: string;
+      pinnedBy?: string;
+      /** @description Aggregated emoji reactions */
+      reactions?: components["schemas"]["ChatReactionSummary"][];
+      poll?: components["schemas"]["ChatPoll"];
       /** Format: date-time */
       createdAt: string;
     };
@@ -2409,17 +3446,34 @@ export interface components {
       data: components["schemas"]["ChatMessage"][];
       /** @description Opaque cursor for the next (older) page; absent when exhausted */
       nextBefore?: string;
+      /**
+       * Format: date-time
+       * @description Every other member has read messages created at or before this instant (blue ticks); absent while someone has read nothing yet
+       */
+      readUpTo?: string;
+      /**
+       * Format: date-time
+       * @description Every other member has received messages created at or before this instant (grey double ticks); absent while someone has received nothing yet
+       */
+      deliveredUpTo?: string;
     };
     ChatMessageSendInput: {
       groupId: string;
       /** @enum {string} */
-      kind: "text" | "image" | "pdf" | "voice";
+      kind: "text" | "image" | "pdf" | "voice" | "doc" | "sheet" | "csv" | "poll";
+      /** @description Text messages — the text; attachments (image|pdf|doc|sheet|csv) — an optional caption; voice and poll carry none */
       body?: string;
-      /** @description Required for image|pdf|voice; asset must be `confirmed` + owned */
+      /** @description Required for image|pdf|doc|sheet|csv|voice; the asset must be `confirmed` and its kind must equal the message kind */
       mediaAssetId?: string;
       /** Format: uuid */
       clientMsgId: string;
       replyTo?: string;
+      /** @description Required for kind=poll */
+      poll?: {
+        question: string;
+        options: string[];
+        allowMultiple?: boolean;
+      };
     };
     ChatReadInput: {
       lastReadMessageId: string;
@@ -2482,8 +3536,11 @@ export interface components {
     };
     /** @enum {string} */
     MediaStatus: "pending" | "confirmed" | "archived";
-    /** @enum {string} */
-    MediaKind: "image" | "pdf" | "voice";
+    /**
+     * @description Cloudflare R2 attachment kinds — image (jpeg/png/heic, 10 MB), pdf (20 MB), voice (aac/m4a, 5 min), doc (Word .docx/.doc, 20 MB), slides (.pptx), sheet (Excel .xlsx/.xls, 20 MB), csv (UTF-8 text, 10 MB). The magic-byte sniff at confirm decides.
+     * @enum {string}
+     */
+    MediaKind: "image" | "pdf" | "voice" | "doc" | "slides" | "sheet" | "csv";
     /** @description Attachment summary embedded in notices/messages */
     MediaAssetSummary: {
       assetId: string;
@@ -2534,6 +3591,8 @@ export interface components {
       sizeBytes: number;
       /** @description Client-declared; the sniff at confirm is authoritative */
       mime?: string;
+      /** @description Original file name for document bubbles (base name kept, trimmed to 120) */
+      fileName?: string;
     };
     MediaPresignResult: {
       data: {
@@ -2559,6 +3618,7 @@ export interface components {
       width?: number;
       height?: number;
       durationMs?: number;
+      fileName?: string;
       status: components["schemas"]["MediaStatus"];
       /** Format: date-time */
       createdAt: string;
@@ -2824,6 +3884,14 @@ export interface components {
       action: string;
       entityType: string;
       entityId: string;
+      /** @description Human-readable narrative describing the action */
+      message?: string;
+      /** @description Key diffs and property mutations recorded with the audit row */
+      changes?: string[];
+      /** @description Display name of the user or system actor */
+      actorName?: string;
+      /** @description Correlation request ID */
+      requestId?: string;
       /** Format: date-time */
       createdAt: string;
     };
@@ -3585,6 +4653,491 @@ export interface components {
       processed: boolean;
       /** @description DUPLICATE_WEBHOOK etc. — always 2xx for valid signatures */
       reason?: string;
+    };
+    /**
+     * CampaignStatus
+     * @enum {string}
+     */
+    AdsCampaignStatus:
+      | "draft"
+      | "pending_review"
+      | "approved"
+      | "rejected"
+      | "scheduled"
+      | "running"
+      | "completed"
+      | "paused";
+    /**
+     * Objective
+     * @enum {string}
+     */
+    AdsObjective: "awareness" | "event_promo";
+    /**
+     * CreativeKind
+     * @enum {string}
+     */
+    AdsCreativeKind: "push" | "native_banner";
+    /**
+     * EventStatus
+     * @enum {string}
+     */
+    AdsEventStatus: "draft" | "pending_review" | "published" | "rejected" | "cancelled";
+    /**
+     * TicketStatus
+     * @enum {string}
+     */
+    AdsTicketStatus: "reserved" | "paid" | "cancelled";
+    /** @description Demographic keys only (ADS-BR-003) — nothing user-level exists */
+    AdsTargeting: {
+      cityId: string;
+      grade?: string;
+      sectionIds?: string[];
+    };
+    AdsCreativeInput: {
+      kind: components["schemas"]["AdsCreativeKind"];
+      titleBn: string;
+      titleEn: string;
+      bodyBn: string;
+      bodyEn: string;
+      imageMediaId?: string;
+      ctaLabel: string;
+      ctaUrl: string;
+    };
+    AdsCampaignInput: {
+      name: string;
+      objective: components["schemas"]["AdsObjective"];
+      targeting: components["schemas"]["AdsTargeting"];
+      /** Format: date-time */
+      scheduleStart: string;
+      /** Format: date-time */
+      scheduleEnd: string;
+      /** Format: double */
+      budgetBdt: number;
+      creative: components["schemas"]["AdsCreativeInput"];
+    };
+    AdsCampaign: {
+      id: string;
+      name: string;
+      objective: components["schemas"]["AdsObjective"];
+      status: components["schemas"]["AdsCampaignStatus"];
+      rejectionReason?: string;
+      /** Format: date-time */
+      scheduleStart?: string;
+      /** Format: date-time */
+      scheduleEnd?: string;
+      /** Format: double */
+      budgetBdt: number;
+      /** Format: double */
+      spendBdt: number;
+      creative?: components["schemas"]["AdsCreativeInput"];
+      /** Format: date-time */
+      createdAt: string;
+    };
+    AdsCampaignResult: {
+      data: components["schemas"]["AdsCampaign"];
+    };
+    AdsCampaignList: {
+      data: components["schemas"]["AdsCampaign"][];
+    };
+    AdsAnalyticsDay: {
+      /** Format: date */
+      day: string;
+      impressions: number;
+      clicks: number;
+      /** Format: double */
+      spendBdt: number;
+    };
+    AdsAnalyticsResult: {
+      data: {
+        days: components["schemas"]["AdsAnalyticsDay"][];
+        totals: {
+          impressions?: number;
+          clicks?: number;
+          ctr?: number;
+          /** Format: double */
+          spendBdt?: number;
+          /** Format: double */
+          budgetBdt?: number;
+        };
+      };
+    };
+    AdsEstimateResult: {
+      data: {
+        count?: number;
+        unknown?: boolean;
+      };
+    };
+    AdsEventInput: {
+      cityId: string;
+      titleBn: string;
+      titleEn: string;
+      descriptionBn: string;
+      descriptionEn: string;
+      venue: string;
+      /** Format: date-time */
+      startsAt: string;
+      /** Format: date-time */
+      endsAt: string;
+      /**
+       * Format: double
+       * @description null/absent = free event
+       */
+      ticketPriceBdt?: number;
+      capacity: number;
+    };
+    AdsEvent: {
+      id: string;
+      cityId: string;
+      titleBn: string;
+      titleEn?: string;
+      descriptionBn?: string;
+      descriptionEn?: string;
+      venue: string;
+      /** Format: date-time */
+      startsAt: string;
+      /** Format: date-time */
+      endsAt: string;
+      /** Format: double */
+      ticketPriceBdt?: number;
+      capacity: number;
+      ticketsSold: number;
+      status: components["schemas"]["AdsEventStatus"];
+      rejectionReason?: string;
+      /** Format: double */
+      grossBdt: number;
+      /** Format: double */
+      commissionBdt: number;
+      /** Format: double */
+      netBdt: number;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    AdsEventResult: {
+      data: components["schemas"]["AdsEvent"];
+    };
+    AdsEventList: {
+      data: components["schemas"]["AdsEvent"][];
+    };
+    AdsTicketInput: {
+      qty: number;
+    };
+    AdsTicket: {
+      id: string;
+      eventId: string;
+      buyerUserId?: string;
+      qty: number;
+      /** Format: double */
+      amountBdt: number;
+      /** Format: double */
+      commissionBdt: number;
+      status: components["schemas"]["AdsTicketStatus"];
+      paymentTransactionId?: string;
+      /** Format: date-time */
+      reservedAt: string;
+    };
+    AdsTicketResult: {
+      data: components["schemas"]["AdsTicket"];
+    };
+    AdsTicketList: {
+      data: components["schemas"]["AdsTicket"][];
+      totals: {
+        /** Format: double */
+        grossBdt: number;
+        /** Format: double */
+        commissionBdt: number;
+        /** Format: double */
+        netBdt: number;
+        cancelledCount: number;
+      };
+    };
+    AdsModerationQueue: {
+      data: {
+        campaigns: components["schemas"]["AdsCampaign"][];
+        events: components["schemas"]["AdsEvent"][];
+        /** @description Moderation checklist items (banned categories; version audited) */
+        checklist: string[];
+      };
+    };
+    AdsOverview: {
+      campaignsByStatus: {
+        [key: string]: number;
+      };
+      /** Format: double */
+      spendBdt: number;
+      publishedEvents: number;
+      ticketsSold: number;
+      /** Format: double */
+      grossBdt: number;
+      /** Format: double */
+      commissionBdt: number;
+      /** Format: double */
+      netBdt: number;
+    };
+    AdsOverviewResult: {
+      data: components["schemas"]["AdsOverview"];
+    };
+    AdsRejectInput: {
+      reason: string;
+    };
+    /** @enum {string} */
+    LmsImportStatus:
+      | "uploaded"
+      | "validating"
+      | "validated_with_errors"
+      | "ready"
+      | "committing"
+      | "committed"
+      | "failed"
+      | "cancelled";
+    /** @enum {string} */
+    LmsRowResult: "created" | "updated" | "skipped" | "error";
+    LmsImportUpload: {
+      /**
+       * Format: binary
+       * @description CSV (xlsx P1); <= 20 MB, <= 10,000 data rows
+       */
+      file: string;
+      /** @default true */
+      dryRun: boolean;
+    };
+    LmsImportTotals: {
+      totalRows: number;
+      createdCount: number;
+      updatedCount: number;
+      skippedCount: number;
+      erroredCount: number;
+    };
+    LmsImport: {
+      /** Format: uuid */
+      id: string;
+      /** @enum {string} */
+      format: "csv" | "xlsx";
+      status: components["schemas"]["LmsImportStatus"];
+      dryRun: boolean;
+      totals: components["schemas"]["LmsImportTotals"];
+      failReasonKey?: string | null;
+      /** Format: date-time */
+      committedAt?: string | null;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    LmsImportEnvelope: {
+      data: components["schemas"]["LmsImport"];
+    };
+    LmsImportList: {
+      data: components["schemas"]["LmsImport"][];
+      page: number;
+      pageSize: number;
+      total: number;
+    };
+    LmsImportRow: {
+      rowNo: number;
+      /** @description Parsed source row (name, phone, role, classLevel, sectionName, sessionYear) */
+      payload: Record<string, never>;
+      result?: components["schemas"]["LmsRowResult"];
+      errorKey?: string | null;
+      message?: string | null;
+    };
+    LmsImportRowList: {
+      data: components["schemas"]["LmsImportRow"][];
+      page: number;
+      pageSize: number;
+      total: number;
+    };
+    LmsReconciliationSection: {
+      /** Format: uuid */
+      sectionId: string;
+      classLevel: number;
+      name: string;
+      /** @description null when no baseline import exists */
+      baselineStudents: number | null;
+      activeStudents: number;
+      /** @enum {string} */
+      drift: "none" | "extra" | "missing" | "mismatch";
+      delta?: number;
+    };
+    LmsReconciliation: {
+      baseline: components["schemas"]["LmsImport"] | null;
+      platformTotal?: number;
+      sections: components["schemas"]["LmsReconciliationSection"][];
+    };
+    LmsEndpointInput: {
+      name: string;
+      /** Format: uri */
+      url: string;
+    };
+    LmsEndpoint: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      url: string;
+      /** @enum {string} */
+      status: "active" | "revoked";
+      secretVersion: number;
+      /** Format: date-time */
+      overlapUntil?: string | null;
+      /** Format: date-time */
+      lastSuccessAt?: string | null;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    LmsEndpointEnvelope: {
+      data: components["schemas"]["LmsEndpoint"];
+    };
+    LmsEndpointList: {
+      data: components["schemas"]["LmsEndpoint"][];
+      page: number;
+      pageSize: number;
+      total: number;
+    };
+    LmsEndpointSecretEnvelope: {
+      data: components["schemas"]["LmsEndpoint"];
+      /** @description Raw HMAC secret — returned exactly once (LMS-INV-005) */
+      secret: string;
+      /** Format: date-time */
+      overlapUntil?: string | null;
+    };
+    LmsRotateInput: {
+      /** @default 24 */
+      overlapHours: number;
+    };
+    LmsEndpointTestResult: {
+      ok: boolean;
+      httpStatus?: number | null;
+      latencyMs?: number | null;
+      errorKey?: string | null;
+    };
+    /** @enum {string} */
+    LmsEventStatus: "applied" | "rejected" | "duplicate" | "error";
+    /** @enum {string} */
+    LmsEventType: "student.upserted" | "enrollment.changed" | "staff.upserted";
+    LmsEvent: {
+      /** Format: uuid */
+      eventId: string;
+      type: components["schemas"]["LmsEventType"];
+      status: components["schemas"]["LmsEventStatus"];
+      signatureValid: boolean;
+      rejectReasonKey?: string | null;
+      /** Format: date-time */
+      receivedAt: string;
+    };
+    LmsEventEnvelope: {
+      data: components["schemas"]["LmsEvent"];
+    };
+    LmsEventList: {
+      data: components["schemas"]["LmsEvent"][];
+      page: number;
+      pageSize: number;
+      total: number;
+    };
+    LmsErpEventPayload: {
+      type: components["schemas"]["LmsEventType"];
+      /** @description student.upserted / staff.upserted: { fullName, phone, sectionExternalId? }; enrollment.changed: { phone, sectionExternalId, sessionYear, active } */
+      data: {
+        fullName?: string;
+        phone?: string;
+        sectionExternalId?: string;
+        sessionYear?: number;
+        active?: boolean;
+      };
+    };
+    LmsWebhookResult: {
+      status: components["schemas"]["LmsEventStatus"];
+      /** Format: uuid */
+      eventId: string;
+    };
+    /** @enum {string} */
+    LmsSchedulePreset: "off" | "hourly" | "daily" | "weekly";
+    LmsConnectionInput: {
+      name: string;
+      /** Format: uri */
+      baseUrl: string;
+      /** @enum {string} */
+      authType: "bearer" | "api_key";
+      credential: string;
+      /** @default X-Api-Key */
+      apiKeyHeader: string;
+      schedule?: components["schemas"]["LmsSchedulePreset"];
+      /** @default false */
+      syncNotices: boolean;
+      sessionYearOverride?: number | null;
+      /** @description Optional per-resource path overrides (teachers/students/sections/notices) */
+      resourceOverrides?: {
+        [key: string]: string;
+      };
+    };
+    LmsConnectionPatch: {
+      name?: string;
+      /** Format: uri */
+      baseUrl?: string;
+      /** @enum {string} */
+      authType?: "bearer" | "api_key";
+      /** @description Omitted = keep existing */
+      credential?: string;
+      apiKeyHeader?: string;
+      schedule?: components["schemas"]["LmsSchedulePreset"];
+      enabled?: boolean;
+      syncNotices?: boolean;
+      sessionYearOverride?: number | null;
+      resourceOverrides?: {
+        [key: string]: string;
+      };
+    };
+    LmsConnection: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      baseUrl: string;
+      /** @enum {string} */
+      authType: "bearer" | "api_key";
+      /** @description e.g. "••••" — the credential itself is never returned */
+      credentialMask?: string;
+      apiKeyHeader?: string;
+      enabled: boolean;
+      schedule: components["schemas"]["LmsSchedulePreset"];
+      syncNotices?: boolean;
+      /** Format: date-time */
+      lastRunAt?: string | null;
+      /** @enum {string|null} */
+      lastStatus?: "ok" | "error" | null;
+      lastErrorKey?: string | null;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    LmsConnectionEnvelope: {
+      data: components["schemas"]["LmsConnection"];
+    };
+    LmsConnectionList: {
+      data: components["schemas"]["LmsConnection"][];
+    };
+    /** @enum {string} */
+    LmsSyncRunStatus: "running" | "ok" | "error";
+    LmsSyncRun: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      connectionId: string;
+      /** @enum {string} */
+      trigger?: "manual" | "schedule";
+      status: components["schemas"]["LmsSyncRunStatus"];
+      sectionsUpserted?: number;
+      peopleUpserted?: number;
+      enrollmentsChanged?: number;
+      errorRows?: number;
+      errorKey?: string | null;
+      /** Format: date-time */
+      startedAt: string;
+      /** Format: date-time */
+      finishedAt?: string | null;
+    };
+    LmsSyncRunEnvelope: {
+      data: components["schemas"]["LmsSyncRun"];
+    };
+    LmsSyncRunList: {
+      data: components["schemas"]["LmsSyncRun"][];
+      page: number;
+      pageSize: number;
+      total: number;
     };
   };
   responses: {
@@ -4496,6 +6049,33 @@ export interface operations {
       default: components["responses"]["Problem"];
     };
   };
+  listChatGroupMembers: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Members, oldest first, with their room role and read pointer */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroupMemberPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
   addChatGroupMember: {
     parameters: {
       query?: never;
@@ -4605,7 +6185,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Read pointer stored; WS `message.read` fans out */
+      /** @description The effective read pointer; WS `message.read` fans out when it advanced */
       200: {
         headers: {
           "X-Request-Id": components["headers"]["XRequestId"];
@@ -4613,6 +6193,66 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ChatReadResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  markChatDelivered: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatDeliveredInput"];
+      };
+    };
+    responses: {
+      /** @description The effective delivered pointer; WS `message.delivered` fans out when it advanced */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatDeliveredResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listChatContacts: {
+    parameters: {
+      query?: {
+        /** @description Name or email substring (case-insensitive) */
+        q?: string;
+        limit?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Matches, by name */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatContactPage"];
         };
       };
       default: components["responses"]["Problem"];
@@ -4804,6 +6444,338 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ChatDeleteResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  editChatMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          body: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Edited; WS `message.updated` fans out */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatMessage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  pinChatMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          pinned: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description Pinned state applied; WS `message.updated` fans out */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatMessage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listChatMessageSeenBy: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Receipt rows (read before delivered-only) + the pending count */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatSeenByPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listChatMessageReactions: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One row per reacting member */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatReactorPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  toggleChatMessageReaction: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          emoji: string;
+        };
+      };
+    };
+    responses: {
+      /** @description The reaction was added or removed; WS `message.updated` fans out */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatMessage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  voteChatMessagePoll: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          optionIndex: number;
+        };
+      };
+    };
+    responses: {
+      /** @description Vote recorded; WS `message.updated` fans out */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatMessage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  forwardChatMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          targetGroupIds: string[];
+        };
+      };
+    };
+    responses: {
+      /** @description Copies sent (idempotent per client_msg_id); WS `message.new` fans out */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatForwardResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  renameChatGroup: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          name?: string;
+          description?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Updated */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroup"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listChatGroupAssets: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Images and documents, newest first */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroupAssets"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listExploreChatGroups: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Discoverable clubs, newest first */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatExploreGroupPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  joinChatGroup: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Joined as a member */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatGroup"];
         };
       };
       default: components["responses"]["Problem"];
@@ -6649,6 +8621,643 @@ export interface operations {
       default: components["responses"]["Problem"];
     };
   };
+  redirectGatewayCallback: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        gateway: components["schemas"]["PaymentsGateway"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: uuid */
+          txnId: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Redirect to `/payments/status/{txnId}?cb=<status>` (app deep link / web screen) */
+      302: {
+        headers: {
+          /** @description Status screen for the transaction */
+          Location?: string;
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyAdCampaigns: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Own rows */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createAdCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdsCampaignInput"];
+      };
+    };
+    responses: {
+      /** @description Draft created */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateAdCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdsCampaignInput"];
+      };
+    };
+    responses: {
+      /** @description Updated */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  submitAdCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Status `pending_review`; audited */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAdCampaignAnalytics: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Daily rows + totals */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsAnalyticsResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  pauseAdCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Paused; audited */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  resumeAdCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Running; audited */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAudienceEstimate: {
+    parameters: {
+      query: {
+        cityId: string;
+        grade?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description {count} or {count: null, unknown: true} */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEstimateResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyVendorEvents: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Own rows */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEventList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createVendorEvent: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdsEventInput"];
+      };
+    };
+    responses: {
+      /** @description Draft created */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEventResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  submitVendorEvent: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Status `pending_review`; audited */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEventResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getModerationQueue: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Queue payload */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsModerationQueue"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approveAdCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description approved/scheduled/running per schedule */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rejectAdCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdsRejectInput"];
+      };
+    };
+    responses: {
+      /** @description Status `rejected` with the reason surfaced to the vendor */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaignResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approveAdEvent: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Status `published` */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEventResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rejectAdEvent: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdsRejectInput"];
+      };
+    };
+    responses: {
+      /** @description Status `rejected` with the reason surfaced to the vendor */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEventResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAdsOverview: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Overview payload */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsOverviewResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listPublicEvents: {
+    parameters: {
+      query: {
+        cityId: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Public list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEventList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getPublicEvent: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Detail with remaining capacity */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsEventResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listEventTickets: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tickets + totals */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsTicketList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  reserveEventTickets: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AdsTicketInput"];
+      };
+    };
+    responses: {
+      /** @description Ticket reserved (priced) or paid (free) */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsTicketResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  cancelEventTicket: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Cancelled; audited */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsTicketResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
   createLead: {
     parameters: {
       query?: never;
@@ -6970,6 +9579,9 @@ export interface operations {
       query?: {
         entityType?: string;
         entityId?: string;
+        action?: string;
+        actorUserId?: string;
+        q?: string;
         page?: number;
         pageSize?: number;
       };
@@ -6990,6 +9602,659 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["AuditLogPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getRosterTemplate: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description CSV stream (attachment) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "text/csv": string;
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listRosterImports: {
+    parameters: {
+      query?: {
+        status?: components["schemas"]["LmsImportStatus"];
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Newest-first import page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsImportList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createRosterImport: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["LmsImportUpload"];
+      };
+    };
+    responses: {
+      /** @description Identical content re-uploaded — original import returned (no-op) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsImportEnvelope"];
+        };
+      };
+      /** @description Import created; validation job enqueued */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsImportEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getRosterImport: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        importId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Import detail */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsImportEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listRosterImportRows: {
+    parameters: {
+      query?: {
+        result?: components["schemas"]["LmsRowResult"];
+        as?: "csv";
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        importId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Row page (or CSV stream when as=csv) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsImportRowList"];
+          "text/csv": string;
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  commitRosterImport: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        importId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Commit enqueued */
+      202: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsImportEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getRosterReconciliation: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Reconciliation report (baseline null when no committed import exists) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsReconciliation"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listErpEndpoints: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Endpoint page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEndpointList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createErpEndpoint: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LmsEndpointInput"];
+      };
+    };
+    responses: {
+      /** @description Endpoint created; secret v1 in this response only */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEndpointSecretEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rotateErpEndpointSecret: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        endpointId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["LmsRotateInput"];
+      };
+    };
+    responses: {
+      /** @description New secret version (raw shown once) + overlap expiry */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEndpointSecretEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  testErpEndpoint: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        endpointId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Test outcome (success or failure reason) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEndpointTestResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listErpEndpointEvents: {
+    parameters: {
+      query?: {
+        status?: components["schemas"]["LmsEventStatus"];
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        endpointId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Event log page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEventList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  redriveErpEvent: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        endpointId: string;
+        eventId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Redrive outcome */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEventEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  revokeErpEndpoint: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        endpointId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Revoked; audited */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEndpointEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  erpWebhook: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        schoolId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LmsErpEventPayload"];
+      };
+    };
+    responses: {
+      /** @description Applied or duplicate (original outcome; nothing re-applied) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsWebhookResult"];
+        };
+      };
+      /** @description Bad event id / unknown type / stale timestamp */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Invalid signature / unknown or revoked endpoint (indistinguishable on the wire) */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      /** @description Rate limited (Retry-After set) */
+      429: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["Problem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listLmsConnections: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Connection list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsConnectionList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createLmsConnection: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LmsConnectionInput"];
+      };
+    };
+    responses: {
+      /** @description Connection created (credential never returned) */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsConnectionEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deleteLmsConnection: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        connectionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deleted */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsConnectionEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateLmsConnection: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        connectionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LmsConnectionPatch"];
+      };
+    };
+    responses: {
+      /** @description Updated */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsConnectionEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  testLmsConnection: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        connectionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Probe outcome */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsEndpointTestResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  syncLmsConnection: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        connectionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Sync run enqueued */
+      202: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsSyncRunEnvelope"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listLmsSyncRuns: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Sync-run page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["LmsSyncRunList"];
         };
       };
       default: components["responses"]["Problem"];

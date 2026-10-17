@@ -12,6 +12,7 @@ import {
   CheckCheck,
   Clock,
   FileText,
+  Forward,
   Pause,
   Pin,
   Play,
@@ -25,12 +26,13 @@ import { stickerEmoji, type ChatMessage } from "@/fixtures/chat";
 import { mediaFixtures } from "@/fixtures/media";
 import { useT } from "@/i18n/locale-provider";
 import { reactionChips, useChatState } from "@/lib/chat/chat-state";
-import { isEmojiOnly } from "@/lib/chat/message-utils";
+import { documentBadge, isDocumentKind, isEmojiOnly } from "@/lib/chat/message-utils";
+import { forwardLabelKey } from "@/lib/chat/receipts";
 import { useVoicePlayback } from "@/lib/chat/voice-playback";
 import { cn } from "@/lib/utils";
 import { color } from "@/theme/tokens";
 
-export type BubbleSendState = "sending" | "sent" | "seen" | "failed" | "queued";
+export type BubbleSendState = "sending" | "sent" | "delivered" | "seen" | "failed" | "queued";
 
 /** The bubble's rectangle in window coordinates (for the long-press focus menu). */
 export type BubbleAnchor = { x: number; y: number; width: number; height: number };
@@ -81,7 +83,10 @@ export function MessageBubble({
   const ref = useRef<View>(null);
   const tombstoned = Boolean(message.deletedAt);
   const allReactions = useChatState((s) => s.reactions);
-  const chips = reactionChips(allReactions, message.id);
+  // Live sessions carry server reactions (everyone's); fixtures keep the local demo store.
+  const chips = message.reactions
+    ? message.reactions.map((r) => ({ emoji: r.emoji, count: r.count, mine: r.mine === true }))
+    : reactionChips(allReactions, message.id);
   const corners = isOwn ? OUTGOING : isGroup ? INCOMING_GROUP : INCOMING_DM;
   const width = preview ? "w-full" : "max-w-[82%]";
   const measure = (done: (anchor: BubbleAnchor) => void) => {
@@ -132,12 +137,17 @@ export function MessageBubble({
 
   const state = isOwn ? (sendState ?? "sent") : undefined;
   const time = formatTime(message.createdAt);
-  const isMediaBubble = message.kind === "image" || message.kind === "pdf";
+  const isMediaBubble = message.kind === "image" || isDocumentKind(message.kind);
   const showAuthor = !isOwn && (isGroup || showSender);
   const edited = Boolean(message.editedAt);
   const pinned = Boolean(message.pinnedAt);
   const bigEmoji = message.kind === "text" && !message.replyTo && isEmojiOnly(message.body);
   const meta = { time, state, isOwn, edited, pinned };
+  const forwardKey = forwardLabelKey(message.forwardCount);
+  // Screen readers hear the receipt (the tick icons themselves are decorative).
+  const receiptLabel =
+    state === "sent" || state === "delivered" || state === "seen" ? t(`chat.bubble.${state}`) : "";
+  const quoteDeleted = message.replyKind === "deleted";
 
   const avatar =
     !isOwn && isGroup ? (
@@ -188,10 +198,32 @@ export function MessageBubble({
             </Text>
           ) : null}
 
+          {forwardKey ? (
+            <View
+              className={cn("flex-row items-center gap-1", isMediaBubble && "px-1.5 pt-0.5")}
+              accessibilityLabel={t(forwardKey)}
+            >
+              <Forward
+                size={12}
+                color={isOwn ? color["primary-foreground"] : color["muted-foreground"]}
+              />
+              <Text
+                className={cn(
+                  "text-xs italic leading-4",
+                  isOwn ? "text-primary-foreground/80" : "text-muted-foreground",
+                )}
+              >
+                {t(forwardKey)}
+              </Text>
+            </View>
+          ) : null}
+
           {message.replyTo ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${replyAuthor ?? ""} ${message.replyPreview ?? ""}`.trim()}
+              accessibilityLabel={`${replyAuthor ?? ""} ${
+                quoteDeleted ? t("chat.reply.deleted") : (message.replyPreview ?? "")
+              }`.trim()}
               disabled={preview}
               onPress={() => {
                 if (message.replyTo) onPressReply?.(message.replyTo);
@@ -222,9 +254,10 @@ export function MessageBubble({
                 className={cn(
                   "text-sm leading-5",
                   isOwn ? "text-primary-foreground/90" : "text-foreground",
+                  quoteDeleted && "italic",
                 )}
               >
-                {message.replyPreview ?? "…"}
+                {quoteDeleted ? t("chat.reply.deleted") : (message.replyPreview ?? "…")}
               </Text>
             </Pressable>
           ) : null}
@@ -240,7 +273,7 @@ export function MessageBubble({
               }}
             />
           ) : null}
-          {message.kind === "pdf" ? (
+          {isDocumentKind(message.kind) ? (
             <PdfBubble
               message={message}
               isOwn={isOwn}
@@ -253,7 +286,9 @@ export function MessageBubble({
           {message.kind === "voice" ? (
             <VoiceNoteInline message={message} isOwn={isOwn} onLongPress={lift} />
           ) : null}
-          {message.kind === "text" || message.kind === "system" ? (
+          {message.kind === "text" ||
+          message.kind === "system" ||
+          (isDocumentKind(message.kind) && message.body?.trim()) ? (
             <Text
               className={cn(
                 "text-sm leading-5",
@@ -279,7 +314,7 @@ export function MessageBubble({
     >
       <Pressable
         ref={ref}
-        accessibilityLabel={`${message.senderName}, ${time}`}
+        accessibilityLabel={[message.senderName, time, receiptLabel].filter(Boolean).join(", ")}
         accessibilityRole="button"
         accessibilityHint={onLongPress ? t("chat.actions.title") : undefined}
         delayLongPress={250}
@@ -432,11 +467,12 @@ function PdfBubble({
   const t = useT();
   const name = message.media?.fileName ?? t("chat.composer.attach_pdf");
   const sizeLabel = formatSizeBytes(message.media?.sizeBytes ?? 0);
+  const badge = documentBadge(message, t("chat.media.pdf_badge"));
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${name}, ${t("chat.media.pdf_badge")}, ${sizeLabel}`}
+      accessibilityLabel={`${name}, ${badge}, ${sizeLabel}`}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={250}
@@ -466,7 +502,7 @@ function PdfBubble({
         <Text
           className={cn("text-xs", isOwn ? "text-primary-foreground/75" : "text-muted-foreground")}
         >
-          {`${t("chat.media.pdf_badge")} · ${sizeLabel}`}
+          {`${badge} · ${sizeLabel}`}
         </Text>
       </View>
     </Pressable>
@@ -500,8 +536,11 @@ function MetaRow({
     : inside && isOwn
       ? color["primary-foreground"]
       : color["muted-foreground"];
-  // Spartens outgoing ticks read white on the teal bubble; elsewhere seen is teal.
+  // Spartens outgoing ticks read white on the teal bubble; elsewhere seen is teal. WhatsApp's
+  // three states: ✓ sent and ✓✓ delivered stay dimmed (70 % on teal, muted grey elsewhere);
+  // ✓✓ read is the solid accent.
   const seenStroke = onTeal ? color.white : color.primary;
+  const pendingOpacity = onTeal ? 0.7 : 1;
 
   return (
     <View
@@ -517,7 +556,10 @@ function MetaRow({
       <Text className={cn("text-xs", muted)}>{time}</Text>
       {state === "sending" ? <Clock size={11} color={stroke} /> : null}
       {state === "queued" ? <Clock size={11} color={color["muted-foreground"]} /> : null}
-      {state === "sent" ? <Check size={11} color={stroke} /> : null}
+      {state === "sent" ? <Check size={11} color={stroke} opacity={pendingOpacity} /> : null}
+      {state === "delivered" ? (
+        <CheckCheck size={11} color={stroke} opacity={pendingOpacity} />
+      ) : null}
       {state === "seen" ? <CheckCheck size={11} color={seenStroke} /> : null}
       {state === "failed" ? <TriangleAlert size={11} color={color.destructive} /> : null}
     </View>

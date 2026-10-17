@@ -32,7 +32,9 @@ export async function ensureNotificationChannels(locale: "bn" | "en"): Promise<v
         channel.importance === "HIGH"
           ? Notifications.AndroidImportance.HIGH
           : Notifications.AndroidImportance.DEFAULT,
-      sound: channel.importance === "HIGH" ? "default" : undefined,
+      // `sound` stays unset: expo-notifications treats any value (even "default") as a custom
+      // sound file that must ship via the config plugin sounds array — omitting it plays the
+      // platform default (seen on the emulator, 2026-10-15).
     });
   }
 }

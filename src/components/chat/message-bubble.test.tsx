@@ -122,3 +122,44 @@ describe("MessageBubble media", () => {
     expect(screen.getByText("Message deleted")).toBeOnTheScreen();
   });
 });
+
+// 05 · 2026-10-17 — WhatsApp forwarded label, deleted quotes and the three receipt ticks.
+describe("MessageBubble receipts, forwards and quotes", () => {
+  const text: ChatMessage = { ...base, id: "msg_text", kind: "text", body: "Exam on Sunday" };
+
+  it.each([
+    [1, "Forwarded"],
+    [7, "Forwarded many times"],
+  ])("labels a copy forwarded %i time(s) as %s", async (forwardCount, label) => {
+    await renderUi(
+      <MessageBubble message={{ ...text, forwardCount }} isOwn={false} showSender={false} />,
+      { locale: "en" },
+    );
+    expect(screen.getByText(label)).toBeTruthy();
+  });
+
+  it("never shows a deleted quote's content", async () => {
+    await renderUi(
+      <MessageBubble
+        message={{ ...text, replyTo: "msg_old", replyKind: "deleted", replyPreview: "secret" }}
+        isOwn={false}
+        showSender={false}
+        replyAuthor="Rina"
+      />,
+      { locale: "en" },
+    );
+    expect(screen.getByText("This message was deleted")).toBeTruthy();
+    expect(screen.queryByText("secret")).toBeNull();
+  });
+
+  it.each([
+    ["sent", "Sent"],
+    ["delivered", "Delivered"],
+    ["seen", "Seen"],
+  ] as const)("announces the %s receipt on my message", async (state, label) => {
+    await renderUi(<MessageBubble message={text} sendState={state} isOwn showSender={false} />, {
+      locale: "en",
+    });
+    expect(screen.getByLabelText(new RegExp(`, ${label}$`))).toBeTruthy();
+  });
+});

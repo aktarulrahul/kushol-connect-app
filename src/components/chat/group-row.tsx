@@ -11,7 +11,8 @@ import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { useT } from "@/i18n/locale-provider";
 import type { ChatGroup } from "@/fixtures/chat";
-import { chatTitle } from "@/lib/chat/chat-list";
+import { useChatMe } from "@/lib/chat/chat-identity";
+import { chatTitle, listPreview } from "@/lib/chat/chat-list";
 import { cn } from "@/lib/utils";
 
 export type RowAnchor = { x: number; y: number; width: number; height: number };
@@ -43,6 +44,19 @@ export function GroupRow({
   const pending = group.status === "pending_approval";
   const unread = group.unreadCount > 0;
   const draftText = draft?.trim();
+  const me = useChatMe();
+  const preview = listPreview(
+    group,
+    {
+      image: t("chat.preview.image"),
+      pdf: t("chat.composer.attach_pdf"),
+      document: t("chat.preview.document"),
+      voice: t("chat.preview.voice"),
+      deleted: t("chat.deleted"),
+      you: t("chat.you"),
+    },
+    me.userId,
+  );
 
   const a11y = [
     title,
@@ -113,7 +127,7 @@ export function GroupRow({
             <Text numberOfLines={1} className="min-w-0 flex-1 text-xs leading-4 text-primary">
               {`${t("chat.list.draft")} ${draftText}`}
             </Text>
-          ) : group.lastMessagePreview ? (
+          ) : preview ? (
             <Text
               numberOfLines={1}
               className={cn(
@@ -121,7 +135,7 @@ export function GroupRow({
                 unread ? "font-medium text-foreground" : "text-muted-foreground",
               )}
             >
-              {group.lastMessagePreview}
+              {preview}
             </Text>
           ) : (
             <View className="flex-1" />

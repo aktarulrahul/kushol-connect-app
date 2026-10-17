@@ -38,26 +38,21 @@ export type ChatMediaRef = Schemas["ChatMediaRef"];
 import { mediaFixtures } from "@/fixtures/media";
 import { ChatFixtureError } from "@/fixtures/chat-error";
 import { uuidv4 } from "@/lib/chat/uuid";
+import {
+  chatLiveActive,
+  chatLiveModeSync,
+  liveChat,
+  subscribeLiveChatEvents,
+} from "@/lib/chat/live-chat";
 
 export type { ChatFixtureErrorCode } from "@/fixtures/chat-error";
 export { ChatFixtureError } from "@/fixtures/chat-error";
 
-/** Large emoji stickers for the Stage-2 picker (no WebP pack yet). */
-export const DEMO_STICKERS = [
-  { id: "sticker_wave", emoji: "👋" },
-  { id: "sticker_ok", emoji: "👍" },
-  { id: "sticker_heart", emoji: "❤️" },
-  { id: "sticker_laugh", emoji: "😂" },
-  { id: "sticker_clap", emoji: "👏" },
-  { id: "sticker_pray", emoji: "🙏" },
-  { id: "sticker_fire", emoji: "🔥" },
-  { id: "sticker_star", emoji: "⭐" },
-] as const;
-export type DemoStickerId = (typeof DEMO_STICKERS)[number]["id"];
-
-export function stickerEmoji(stickerId: string): string {
-  return DEMO_STICKERS.find((s) => s.id === stickerId)?.emoji ?? "⭐";
-}
+// Sticker catalog moved to `@/lib/chat/stickers` (a leaf module) — re-exported here so the
+// shipped screens keep their imports (ADR-3) while the live backend avoids the import cycle.
+import { stickerEmoji } from "@/lib/chat/stickers";
+import { forwardLimit } from "@/lib/chat/receipts";
+export { DEMO_STICKERS, type DemoStickerId, stickerEmoji } from "@/lib/chat/stickers";
 
 /** Quick reactions offered on long-press (WhatsApp-style row). */
 export const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"] as const;
@@ -73,7 +68,18 @@ export type MessageReceipt = {
   userId: string;
   name: string;
   status: "delivered" | "seen";
+  /** When they read it (seen) or received it (delivered); "" when unknown. */
   at: string;
+};
+
+/** Who reacted with what (Message info · live sessions). */
+export type MessageReactor = { userId: string; name: string; emoji: string; at: string };
+
+/** WhatsApp "Message info": receipts, members not reached yet, and reactions. */
+export type MessageInfo = {
+  receipts: MessageReceipt[];
+  pending: number;
+  reactors: MessageReactor[];
 };
 
 // ─── Flag switcher (demo/testing) ────────────────────────────────────────────────────────────
@@ -435,9 +441,7 @@ const MESSAGES: DemoMessage[] = [
 ];
 
 /** Per-group last_read_message_id — drives own-tick state and unread counts. */
-const READ_STATE = new Map<string, string | null>(
-  GROUPS.map((g) => [g.id, g.lastReadMessageId]),
-);
+const READ_STATE = new Map<string, string | null>(GROUPS.map((g) => [g.id, g.lastReadMessageId]));
 
 /** Messages this demo client has already reported as read (replay dedupe). */
 const reportedRead = new Set<string>();
@@ -472,7 +476,11 @@ const REQUESTS: DemoRequest[] = [
   {
     id: "mreq_out_2",
     fromUser: { userId: DEMO_ME.userId, name: DEMO_ME.name },
-    toUser: { userId: "user_demo_brand", name: "ডেমো ব্র্যান্ড ম্যানেজার", schoolName: "নমুনা মডেল স্কুল" },
+    toUser: {
+      userId: "user_demo_brand",
+      name: "ডেমো ব্র্যান্ড ম্যানেজার",
+      schoolName: "নমুনা মডেল স্কুল",
+    },
     status: "declined",
     createdAt: iso(60 * 30),
     decidedAt: iso(60 * 26),
@@ -486,9 +494,13 @@ export type ChatRealtimeEvent =
   | { type: "message.new"; message: ChatMessage }
   | { type: "message.ack"; clientMsgId: string; id: string; createdAt: string }
   | { type: "message.read"; groupId: string; userId: string; lastReadMessageId: string }
+  /** Grey double ticks (05 · 2026-10-17): a member's device received up to this message. */
+  | { type: "message.delivered"; groupId: string; userId: string; lastDeliveredMessageId: string }
   | { type: "message.deleted"; groupId: string; id: string; deletedAt: string }
   | { type: "typing"; groupId: string; userId: string; state: "start" | "stop" }
-  | { type: "presence.update"; groupId: string; userId: string; online: boolean };
+  | { type: "presence.update"; groupId: string; userId: string; online: boolean }
+  /** Roster/name/description change (05 · 2026-10-17) — the list refetches. */
+  | { type: "group.updated"; groupId: string };
 
 type EventListener = (event: ChatRealtimeEvent) => void;
 
@@ -499,8 +511,19 @@ function emit(event: ChatRealtimeEvent): void {
   for (const listener of eventListeners) listener(event);
 }
 
-/** Subscribe to the fixture's realtime events; returns the unsubscribe fn. */
+/** Subscribe to the fixture's realtime events; returns the unsubscribe fn. Live sessions attach
+ * the real WS gateway through the same listener set (05 Stage 5 — same event shapes). */
 export function subscribeChatEvents(listener: EventListener): () => void {
+  const offFixture = subscribeLive(listener);
+  const offLive = subscribeLiveChatEvents(listener);
+  void chatLiveActive(); // refreshes the sync mode snapshot for the socket gate
+  return () => {
+    offFixture();
+    offLive();
+  };
+}
+
+function subscribeLive(listener: EventListener): () => void {
   eventListeners.add(listener);
   return () => {
     eventListeners.delete(listener);
@@ -511,14 +534,12 @@ export function subscribeChatEvents(listener: EventListener): () => void {
 
 /** GET /chat/groups — my groups, last activity first. */
 export async function listChatGroups(): Promise<ChatGroup[]> {
+  if (await chatLiveActive()) return liveChat.listChatGroups();
   await latency(250);
   requireOnline();
   return GROUPS.map((g) => ({
     ...g,
-    unreadCount:
-      mode === "not_verified"
-        ? 0
-        : countUnread(g),
+    unreadCount: mode === "not_verified" ? 0 : countUnread(g),
   }));
 }
 
@@ -537,7 +558,13 @@ export async function listChatMessages(
   groupId: string,
   before?: string,
   limit = 50,
-): Promise<{ data: ChatMessage[]; nextBefore?: string }> {
+): Promise<{
+  data: ChatMessage[];
+  nextBefore?: string;
+  readUpTo?: string;
+  deliveredUpTo?: string;
+}> {
+  if (await chatLiveActive()) return liveChat.listChatMessages(groupId, before, limit);
   await latency(280);
   requireOnline();
   assertMember(groupId);
@@ -563,6 +590,7 @@ function assertMember(groupId: string): void {
  * gateway would, then a demo peer reply so the room feels alive.
  */
 export async function sendChatMessage(input: ChatMessageSendInput): Promise<ChatMessage> {
+  if (await chatLiveActive()) return liveChat.sendChatMessage(input);
   await latency(220);
   requireOnline();
   assertMember(input.groupId);
@@ -609,7 +637,12 @@ export async function sendChatMessage(input: ChatMessageSendInput): Promise<Chat
   group.lastMessagePreview = previewFor(message);
   group.lastMessageAt = message.createdAt;
 
-  emit({ type: "message.ack", clientMsgId: input.clientMsgId, id: message.id, createdAt: message.createdAt });
+  emit({
+    type: "message.ack",
+    clientMsgId: input.clientMsgId,
+    id: message.id,
+    createdAt: message.createdAt,
+  });
   emit({ type: "message.new", message: { ...message } });
   simulatePeerReply(group.id);
   return { ...message };
@@ -619,11 +652,16 @@ function preview(m?: ChatMessage | null): string {
   if (!m) return "";
   if (m.deletedAt) return "";
   switch (m.kind) {
-    case "image": return "🖼";
-    case "pdf": return m.media?.fileName ?? "📄";
-    case "voice": return "🎤";
-    case "sticker": return stickerEmoji(m.stickerId ?? "");
-    default: return m.body ?? "";
+    case "image":
+      return "🖼";
+    case "pdf":
+      return m.media?.fileName ?? "📄";
+    case "voice":
+      return "🎤";
+    case "sticker":
+      return stickerEmoji(m.stickerId ?? "");
+    default:
+      return m.body ?? "";
   }
 }
 
@@ -632,6 +670,7 @@ function preview(m?: ChatMessage | null): string {
  * from the demo section roster; incoming messages return an empty list (info is sender-side).
  */
 export function listMessageSeenBy(messageId: string): MessageReceipt[] {
+  if (chatLiveModeSync()) return []; // G-7: no seen-by endpoint in the live spec yet
   const message = MESSAGES.find((m) => m.id === messageId);
   if (!message || message.senderId !== DEMO_ME.userId) return [];
   const peers =
@@ -663,8 +702,12 @@ function simulatePeerReply(groupId: string): void {
   };
   const peer = peers[groupId];
   if (!peer) return;
-  setTimeout(() => { emit({ type: "typing", groupId, userId: peer.userId, state: "start" }); }, 900);
-  setTimeout(() => { emit({ type: "typing", groupId, userId: peer.userId, state: "stop" }); }, 3_800);
+  setTimeout(() => {
+    emit({ type: "typing", groupId, userId: peer.userId, state: "start" });
+  }, 900);
+  setTimeout(() => {
+    emit({ type: "typing", groupId, userId: peer.userId, state: "stop" });
+  }, 3_800);
   setTimeout(() => {
     const message: ChatMessage = {
       id: id("msg"),
@@ -686,8 +729,53 @@ function simulatePeerReply(groupId: string): void {
   }, 4_500);
 }
 
+/**
+ * POST /chat/messages/{id}/forward (WhatsApp): copies one message into up to 5 chats (1 once
+ * it was forwarded 5+ times); each copy counts one more hop. Returns how many chats got it.
+ */
+export async function forwardChatMessage(
+  messageId: string,
+  targetGroupIds: string[],
+): Promise<number> {
+  if (await chatLiveActive()) return liveChat.forwardChatMessage(messageId, targetGroupIds);
+  await latency(200);
+  requireOnline();
+  const source = MESSAGES.find((m) => m.id === messageId);
+  if (!source || source.deletedAt) throw new ChatFixtureError("NOT_FOUND");
+  const targets = [...new Set(targetGroupIds)].filter((g) => g !== source.groupId);
+  if (targets.length === 0 || targets.length > forwardLimit(source.forwardCount)) {
+    throw new ChatFixtureError("VALIDATION_FAILED");
+  }
+  let forwarded = 0;
+  for (const groupId of targets) {
+    const group = GROUPS.find((g) => g.id === groupId);
+    if (!group || group.status !== "active") continue;
+    const copy: ChatMessage = {
+      id: id("msg"),
+      groupId,
+      senderId: DEMO_ME.userId,
+      senderName: DEMO_ME.name,
+      kind: source.kind,
+      ...(source.body !== undefined ? { body: source.body } : {}),
+      ...(source.stickerId ? { stickerId: source.stickerId } : {}),
+      ...(source.media ? { media: source.media } : {}),
+      clientMsgId: uuidv4(),
+      forwardCount: (source.forwardCount ?? 0) + 1,
+      createdAt: new Date().toISOString(),
+    };
+    MESSAGES.push(copy);
+    group.lastMessagePreview = previewFor(copy);
+    group.lastMessageAt = copy.createdAt;
+    emit({ type: "message.new", message: { ...copy } });
+    forwarded += 1;
+  }
+  if (forwarded === 0) throw new ChatFixtureError("FORBIDDEN");
+  return forwarded;
+}
+
 /** PATCH /chat/groups/{id}/read — idempotent read report; WS `message.read` fans out. */
 export async function markChatRead(groupId: string, lastReadMessageId: string): Promise<void> {
+  if (await chatLiveActive()) return liveChat.markChatRead(groupId, lastReadMessageId);
   await Promise.resolve();
   requireOnline();
   assertMember(groupId);
@@ -701,7 +789,10 @@ export async function markChatRead(groupId: string, lastReadMessageId: string): 
  * DELETE /chat/messages/{id} — tombstone (BR-007): the demo identity is the section moderator,
  * so any message deletes; a non-moderator attempt outside the window would be CONFLICT.
  */
-export async function deleteChatMessage(messageId: string): Promise<{ id: string; deletedAt: string }> {
+export async function deleteChatMessage(
+  messageId: string,
+): Promise<{ id: string; deletedAt: string }> {
+  if (await chatLiveActive()) return liveChat.deleteChatMessage(messageId);
   await latency(200);
   requireOnline();
   assertMemberOfMessage(messageId);
@@ -717,7 +808,12 @@ export async function deleteChatMessage(messageId: string): Promise<{ id: string
     throw new ChatFixtureError("CONFLICT");
   }
   message.deletedAt = new Date().toISOString();
-  emit({ type: "message.deleted", groupId: message.groupId, id: message.id, deletedAt: message.deletedAt });
+  emit({
+    type: "message.deleted",
+    groupId: message.groupId,
+    id: message.id,
+    deletedAt: message.deletedAt,
+  });
   return { id: message.id, deletedAt: message.deletedAt };
 }
 
@@ -729,6 +825,7 @@ export const MAX_PINNED_MESSAGES = 5;
  * 08-gaps G-7): the author rewrites their own text message; it keeps its id and shows "edited".
  */
 export async function editChatMessage(messageId: string, body: string): Promise<ChatMessage> {
+  if (await chatLiveActive()) return liveChat.editChatMessage(messageId, body);
   await latency(200);
   requireOnline();
   assertMemberOfMessage(messageId);
@@ -755,6 +852,7 @@ export async function setChatMessagePinned(
   messageId: string,
   pinned: boolean,
 ): Promise<ChatMessage> {
+  if (await chatLiveActive()) return liveChat.setChatMessagePinned(messageId, pinned);
   await latency(200);
   requireOnline();
   assertMemberOfMessage(messageId);
@@ -792,12 +890,11 @@ export const DM_PEERS = [
 
 /** GET /chat/dm/{peerId} — same-school instant; cross-school needs an accepted request. */
 export async function openDm(peerId: string): Promise<ChatGroup> {
+  if (await chatLiveActive()) return liveChat.openDm(peerId);
   await latency(220);
   requireOnline();
   const existing = REQUESTS.find(
-    (r) =>
-      r.status === "accepted" &&
-      (r.fromUser.userId === peerId || r.toUser.userId === peerId),
+    (r) => r.status === "accepted" && (r.fromUser.userId === peerId || r.toUser.userId === peerId),
   );
   if (existing?.dmGroupId) {
     const room = GROUPS.find((g) => g.id === existing.dmGroupId);
@@ -805,9 +902,7 @@ export async function openDm(peerId: string): Promise<ChatGroup> {
   }
   const peer = DM_PEERS.find((p) => p.userId === peerId);
   if (!peer) throw new ChatFixtureError("NOT_FOUND");
-  const room = GROUPS.find(
-    (g) => g.kind === "dm" && g.peer?.userId === peerId,
-  );
+  const room = GROUPS.find((g) => g.kind === "dm" && g.peer?.userId === peerId);
   if (room) return { ...room }; // idempotent open (US-008)
   if (!peer.sameSchool) {
     throw new ChatFixtureError("NOT_FOUND", "message_request_hint");
@@ -829,6 +924,7 @@ export async function openDm(peerId: string): Promise<ChatGroup> {
 
 /** GET /chat/message-requests — inbox (received) + sent. */
 export async function listMessageRequests(): Promise<MessageRequestPage> {
+  if (await chatLiveActive()) return liveChat.listMessageRequests();
   await latency(250);
   requireOnline();
   return {
@@ -841,6 +937,7 @@ export type MessageRequestPage = { received: MessageRequest[]; sent: MessageRequ
 
 /** POST /chat/message-requests — no self, no dup-pending (CONFLICT), rate-limited retries. */
 export async function createMessageRequest(input: MessageRequestInput): Promise<MessageRequest> {
+  if (await chatLiveActive()) return liveChat.createMessageRequest(input);
   await latency(300);
   requireOnline();
   if (mode === "rate_limited") throw new ChatFixtureError("RATE_LIMITED");
@@ -857,7 +954,11 @@ export async function createMessageRequest(input: MessageRequestInput): Promise<
   const request: DemoRequest = {
     id: id("mreq"),
     fromUser: { userId: DEMO_ME.userId, name: DEMO_ME.name, schoolName: DEMO_ME.schoolName },
-    toUser: { userId: peer.userId, name: peer.name, schoolName: peer.sameSchool ? DEMO_ME.schoolName : "নমুনা মডেল স্কুল" },
+    toUser: {
+      userId: peer.userId,
+      name: peer.name,
+      schoolName: peer.sameSchool ? DEMO_ME.schoolName : "নমুনা মডেল স্কুল",
+    },
     status: "pending",
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
@@ -868,6 +969,7 @@ export async function createMessageRequest(input: MessageRequestInput): Promise<
 
 /** POST /chat/message-requests/{id}/accept — recipient only; creates + links the DM room. */
 export async function acceptMessageRequest(requestId: string): Promise<MessageRequestDecision> {
+  if (await chatLiveActive()) return liveChat.acceptMessageRequest(requestId);
   await latency(260);
   requireOnline();
   const request = REQUESTS.find((r) => r.id === requestId);
@@ -875,8 +977,7 @@ export async function acceptMessageRequest(requestId: string): Promise<MessageRe
   if (request.status !== "pending") throw new ChatFixtureError("CONFLICT");
   let room = GROUPS.find(
     (g) =>
-      g.kind === "dm" &&
-      ((g.peer?.userId === request.fromUser.userId) || g.id === request.dmGroupId),
+      g.kind === "dm" && (g.peer?.userId === request.fromUser.userId || g.id === request.dmGroupId),
   );
   if (!room) {
     room = {
@@ -903,6 +1004,7 @@ export async function acceptMessageRequest(requestId: string): Promise<MessageRe
 
 /** POST /chat/message-requests/{id}/decline — the sender stays politely blocked. */
 export async function declineMessageRequest(requestId: string): Promise<MessageRequestDecision> {
+  if (await chatLiveActive()) return liveChat.declineMessageRequest(requestId);
   await latency(260);
   requireOnline();
   const request = REQUESTS.find((r) => r.id === requestId);
@@ -917,13 +1019,12 @@ export async function declineMessageRequest(requestId: string): Promise<MessageR
 
 /** POST /chat/groups — verified users only; lands `pending_approval`, creator is owner. */
 export async function createChatGroup(input: ChatGroupCreateInput): Promise<ChatGroup> {
+  if (await chatLiveActive()) return liveChat.createChatGroup(input);
   await latency(400);
   requireOnline();
   const name = input.name.trim();
   if (name.length < 3 || name.length > 60) throw new ChatFixtureError("VALIDATION_FAILED");
-  const clash = GROUPS.some(
-    (g) => g.kind === "custom" && g.status === "active" && g.name === name,
-  );
+  const clash = GROUPS.some((g) => g.kind === "custom" && g.status === "active" && g.name === name);
   if (clash) throw new ChatFixtureError("CONFLICT");
   const group: DemoGroup = {
     id: id("grp_club"),

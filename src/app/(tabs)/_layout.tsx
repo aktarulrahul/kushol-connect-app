@@ -55,7 +55,8 @@ function useTabBadges(): { chat: number; feeds: number } {
         ?.filter((g) => g.status !== "archived")
         .reduce((sum, g) => sum + (g.unreadCount || 0), 0) ?? 0;
     const feeds =
-      requests.data?.received.filter((r) => r.status === "pending").length ?? 0;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- openapi-fetch returns `data` undefined on transport failure
+      (requests.data?.received ?? []).filter((r) => r.status === "pending").length;
     return { chat, feeds };
   }, [groups.data, requests.data]);
 }

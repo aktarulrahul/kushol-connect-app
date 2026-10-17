@@ -8,7 +8,8 @@ export type ChatFixtureErrorCode =
   | "CONFLICT"
   | "RATE_LIMITED"
   | "NOT_VERIFIED"
-  | "SEND_FAILED";
+  | "SEND_FAILED"
+  | "NOT_IN_LIVE";
 
 export class ChatFixtureError extends Error {
   constructor(

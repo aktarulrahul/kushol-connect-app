@@ -30,7 +30,9 @@ export default function MediaViewerModal() {
   const [uri, setUri] = useState<string | null>(null);
   const [pdfFailed, setPdfFailed] = useState(false);
   const reducedMotion = useReducedMotion();
-  const kind = (kindParam as "image" | "pdf" | "voice" | undefined) ?? mediaFixtures.kindOf(assetId);
+  const kind =
+    (kindParam as "image" | "pdf" | "voice" | "doc" | "sheet" | "csv" | undefined) ??
+    mediaFixtures.kindOf(assetId);
 
   useEffect(() => {
     let alive = true;
@@ -98,6 +100,21 @@ export default function MediaViewerModal() {
           <Text className="px-4 text-sm text-white/80">{t("chat.state.error")}</Text>
         ) : kind === "image" && uri ? (
           <ZoomableImage uri={uri} label={heading} />
+        ) : (kind === "doc" || kind === "sheet" || kind === "csv") && uri ? (
+          // Word/Excel/CSV open in the phone's own app (Android intent / iOS Quick Look via the
+          // browser) from the short-lived R2 URL — no third-party viewer sees the file.
+          <View className="mx-4 w-full items-center gap-4 rounded-2xl bg-white/10 p-6">
+            <FileText size={56} color={color.white} />
+            <Text className="text-center text-base font-semibold text-white">{heading}</Text>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                void Linking.openURL(uri);
+              }}
+            >
+              <Text>{t("chat.media.open_doc")}</Text>
+            </Button>
+          </View>
         ) : kind === "pdf" && uri ? (
           <PdfViewer
             uri={uri}

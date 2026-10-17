@@ -44,16 +44,33 @@ export function isEmojiOnly(text: string | undefined): boolean {
   return units > 0 && units <= 3 && rest === "";
 }
 
+/** Attachment kinds rendered as a document card (PDF, Word, Excel, CSV — all on R2). */
+export function isDocumentKind(kind: ChatMessage["kind"]): boolean {
+  return kind === "pdf" || kind === "doc" || kind === "sheet" || kind === "csv";
+}
+
+/** Badge for a document card: PDF keeps its localized label; Office/CSV show the extension. */
+export function documentBadge(message: ChatMessage, pdfLabel: string): string {
+  if (message.kind === "pdf") return pdfLabel;
+  const ext = message.media?.fileName?.split(".").pop()?.toUpperCase();
+  if (ext && ext.length <= 4) return ext;
+  return message.kind === "sheet" ? "XLSX" : message.kind === "csv" ? "CSV" : "DOCX";
+}
+
 /** One-line preview of a message for reply quotes and the pinned bar. */
 export function messagePreview(
   message: ChatMessage,
-  labels: { image: string; pdf: string; voice: string; sticker: string },
+  labels: { image: string; pdf: string; voice: string; sticker: string; document?: string },
 ): string {
   switch (message.kind) {
     case "image":
       return message.body?.trim() || labels.image;
     case "pdf":
       return message.media?.fileName ?? labels.pdf;
+    case "doc":
+    case "sheet":
+    case "csv":
+      return message.media?.fileName ?? labels.document ?? labels.pdf;
     case "voice":
       return labels.voice;
     case "sticker":

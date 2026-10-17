@@ -53,3 +53,58 @@ export function filterChatList(
 export function archivedDmCount(groups: readonly ChatGroup[]): number {
   return groups.filter((g) => g.kind === "dm" && g.status === "archived").length;
 }
+
+export type PreviewLabels = {
+  image: string;
+  pdf: string;
+  document: string;
+  voice: string;
+  deleted: string;
+  you: string;
+};
+
+/**
+ * The list row's one-line preview (WhatsApp): attachments show their kind (+ caption), a
+ * tombstone reads "Message deleted", and group rows prefix the sender ("You: …" / "Karim: …").
+ * Fixture rows carry only `lastMessagePreview` and render it as before.
+ */
+export function listPreview(
+  group: ChatGroup,
+  labels: PreviewLabels,
+  myUserId: string,
+): string | undefined {
+  const kind = group.lastMessageKind;
+  const text = group.lastMessagePreview ?? "";
+  if (!kind) return text || undefined;
+  let body: string;
+  switch (kind) {
+    case "deleted":
+      return labels.deleted;
+    case "image":
+      body = text ? `📷 ${text}` : `📷 ${labels.image}`;
+      break;
+    case "pdf":
+      body = text ? `📄 ${text}` : `📄 ${labels.pdf}`;
+      break;
+    case "doc":
+    case "sheet":
+    case "csv":
+      body = text ? `📎 ${text}` : `📎 ${labels.document}`;
+      break;
+    case "voice":
+      body = `🎤 ${labels.voice}`;
+      break;
+    case "poll":
+      body = `📊 ${text}`;
+      break;
+    default:
+      body = text;
+  }
+  if (!body) return undefined;
+  if (group.kind === "dm") return body;
+  if (group.lastMessageSenderId && group.lastMessageSenderId === myUserId) {
+    return `${labels.you}: ${body}`;
+  }
+  const first = group.lastMessageSenderName?.trim().split(/\s+/)[0];
+  return first ? `${first}: ${body}` : body;
+}

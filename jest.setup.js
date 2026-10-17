@@ -34,3 +34,18 @@ jest.mock("react-native-webview", () => ({
     return null;
   },
 }));
+
+// expo-audio reads its native player class at import time; the chat screen only mounts the
+// recorder in live sessions, so tests get an inert recorder (05 · 2026-10-17 voice notes).
+jest.mock("expo-audio", () => ({
+  RecordingPresets: { HIGH_QUALITY: { extension: ".m4a" }, LOW_QUALITY: { extension: ".m4a" } },
+  requestRecordingPermissionsAsync: jest.fn(() => Promise.resolve({ granted: false })),
+  setAudioModeAsync: jest.fn(() => Promise.resolve()),
+  useAudioRecorder: () => ({
+    prepareToRecordAsync: jest.fn(() => Promise.resolve()),
+    record: jest.fn(),
+    stop: jest.fn(() => Promise.resolve()),
+    getStatus: () => ({ durationMillis: 0 }),
+    uri: null,
+  }),
+}));

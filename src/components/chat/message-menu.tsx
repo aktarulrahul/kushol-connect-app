@@ -1,7 +1,7 @@
 // Long-press focus menu for one message (Spartens MessageMenu, owner 2026-10-09): the backdrop
 // frosts the room, the pressed bubble is lifted in place (shifted only as far as needed to fit),
-// the quick-reaction bar sits above it and the action list below — Reply, Edit, Pin/Unpin,
-// Message info, Delete (red). Rows only appear when the action is allowed for this message.
+// the quick-reaction bar sits above it and the action list below — Reply, Forward, Edit,
+// Pin/Unpin, Message info, Delete (red). Rows only appear when the action is allowed for this message.
 import type { LucideIcon } from "lucide-react-native";
 import { type ReactNode } from "react";
 import { Pressable, View, useWindowDimensions } from "react-native";

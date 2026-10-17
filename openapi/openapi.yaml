@@ -888,12 +888,22 @@ paths:
         presence keys TTL 60 s.
         x-ws-events (client→server): subscribe {rooms[]} · unsubscribe {rooms[]} ·
         message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?} ·
-        message.read {groupId, lastReadMessageId} · typing {groupId, state start|stop} · ping.
+        message.read {groupId, lastReadMessageId} · message.delivered {groupId,
+        lastDeliveredMessageId} (send on receiving another member's message.new) · typing
+        {groupId, state start|stop} · ping.
         x-ws-events (server→client): message.new (full ChatMessage) · message.ack
         {clientMsgId, id, createdAt} · message.read {groupId, userId, lastReadMessageId} ·
-        message.deleted {groupId, id, deletedAt} · presence.update {groupId, userId, online} ·
-        typing {groupId, userId, state} · notice.new (Notice summary) · error (RFC-7807-shaped
-        {type, title, status}). Reconnect: backoff 1 s → 30 s cap with jitter → re-auth →
+        message.delivered {groupId, userId, lastDeliveredMessageId} (receipt pointers only move
+        forward; read implies delivered — receivers refresh their ticks) ·
+        message.deleted {groupId, id, deletedAt} · message.updated {groupId, message} (edit, pin,
+        reaction, poll vote — receivers refetch per-viewer fields) · group.updated {groupId}
+        (rename, description, roster; also sent to an added/removed user's private room) ·
+        presence.update {groupId, userId, online} (a snapshot of who is online is sent on each
+        subscribe) · typing {groupId, userId, state} · notice.new (Notice summary) · error
+        (RFC-7807-shaped {type, title, status}). Every room the user may read is subscribed
+        automatically at connect and when membership changes; `subscribe` remains for clients
+        that re-subscribe explicitly. Browsers authenticate with the session cookie (same-origin
+        upgrade through the site's `/api/v1` proxy); the Origin must match the site host. Reconnect: backoff 1 s → 30 s cap with jitter → re-auth →
         re-subscribe → REST catch-up from the latest local cursor → offline queue replay
         (dedupe by clientMsgId).
       responses:
@@ -996,6 +1006,32 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/chat/groups/{groupId}/members:
+    get:
+      operationId: listChatGroupMembers
+      tags: [chat]
+      summary: Group participants (members only) — group info roster
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Members, oldest first, with their room role and read pointer
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroupMemberPage'
+        default:
+          $ref: '#/components/responses/Problem'
     post:
       operationId: addChatGroupMember
       tags: [chat]
@@ -1032,7 +1068,10 @@ paths:
     delete:
       operationId: removeChatGroupMember
       tags: [chat]
-      summary: Remove a member (moderator+)
+      summary: Remove a member (moderator+), or leave the group when userId is the caller
+      description: Self-removal is "Exit group" — custom, unmanaged groups only; a leaving owner
+        hands ownership to the longest-standing moderator (else member). Official and managed
+        groups follow enrollment/role and answer CONFLICT.
       security:
         - bearerJWT: []
         - sessionCookie: []
@@ -1101,7 +1140,9 @@ paths:
     patch:
       operationId: markChatRead
       tags: [chat]
-      summary: Set the caller's last_read_message_id (drives seen counts)
+      summary: Advance the caller's read pointer (blue ticks, seen counts, Message info "Read")
+      description: The pointer only moves forward (a stale id answers with the current pointer)
+        and implies delivery. A message from another group is VALIDATION_FAILED.
       security:
         - bearerJWT: []
         - sessionCookie: []
@@ -1120,7 +1161,7 @@ paths:
               $ref: '#/components/schemas/ChatReadInput'
       responses:
         '200':
-          description: Read pointer stored; WS `message.read` fans out
+          description: The effective read pointer; WS `message.read` fans out when it advanced
           headers:
             X-Request-Id:
               $ref: '#/components/headers/XRequestId'
@@ -1128,6 +1169,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatReadResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/delivered:
+    patch:
+      operationId: markChatDelivered
+      tags: [chat]
+      summary: Advance the caller's delivered pointer (grey double ticks, Message info "Delivered")
+      description: Clients send this (or the WS `message.delivered` frame) when another member's
+        message reaches the device. The pointer only moves forward; listing groups and loading
+        history advance it too. A message from another group is VALIDATION_FAILED.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatDeliveredInput'
+      responses:
+        '200':
+          description: The effective delivered pointer; WS `message.delivered` fans out when it
+            advanced
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatDeliveredResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/contacts:
+    get:
+      operationId: listChatContacts
+      tags: [chat]
+      summary: People picker — who the caller can add to a group or message directly
+      description: Verified users of the caller's school; Kushol super admins also see every
+        super admin and institution admin, institution admins also see the super admins.
+        Name + role only (no phone/email).
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: q
+          in: query
+          required: false
+          description: Name or email substring (case-insensitive)
+          schema:
+            type: string
+            maxLength: 60
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Matches, by name
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatContactPage'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/chat/dm/{peerId}:
@@ -1316,6 +1434,382 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatDeleteResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: editChatMessage
+      tags: [chat]
+      summary: Edit a text message (author only; polls are not editable)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body:
+                  type: string
+                  minLength: 1
+                  maxLength: 4000
+      responses:
+        '200':
+          description: Edited; WS `message.updated` fans out
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages/{messageId}/pin:
+    post:
+      operationId: pinChatMessage
+      tags: [chat]
+      summary: Pin or unpin a message (group owner/moderator; School Admin anytime)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pinned]
+              properties:
+                pinned:
+                  type: boolean
+      responses:
+        '200':
+          description: Pinned state applied; WS `message.updated` fans out
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages/{messageId}/seen-by:
+    get:
+      operationId: listChatMessageSeenBy
+      tags: [chat]
+      summary: Message info receipts — who it was delivered to and read by, and when
+      description: Every member except the sender whose delivered or read pointer covers the
+        message (read first, then delivered), with the time each pointer first passed it;
+        `pending` counts members it has not reached yet.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Receipt rows (read before delivered-only) + the pending count
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatSeenByPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages/{messageId}/reactions:
+    get:
+      operationId: listChatMessageReactions
+      tags: [chat]
+      summary: Who reacted with what (Message info, the reactions sheet) — newest first
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One row per reacting member
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatReactorPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: toggleChatMessageReaction
+      tags: [chat]
+      summary: React to a message — one reaction per person (WhatsApp)
+      description: A new emoji sets or replaces my reaction; sending my current emoji again
+        removes it.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emoji]
+              properties:
+                emoji:
+                  type: string
+                  minLength: 1
+                  maxLength: 16
+      responses:
+        '200':
+          description: The reaction was added or removed; WS `message.updated` fans out
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages/{messageId}/poll/vote:
+    post:
+      operationId: voteChatMessagePoll
+      tags: [chat]
+      summary: Cast, change or withdraw my poll vote (single-choice polls toggle off on repeat)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [optionIndex]
+              properties:
+                optionIndex:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: Vote recorded; WS `message.updated` fans out
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages/{messageId}/forward:
+    post:
+      operationId: forwardChatMessage
+      tags: [chat]
+      summary: Forward a message into chats I am a member of
+      description: Caller must be able to read the source message. Copies keep the text,
+        caption, attachment or poll (fresh votes) but not the quote, and carry `forwardCount`
+        (source + 1). WhatsApp limits — up to 5 chats per forward; a message already forwarded
+        5+ times ("Forwarded many times") goes to 1 chat at a time.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetGroupIds]
+              properties:
+                targetGroupIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Copies sent (idempotent per client_msg_id); WS `message.new` fans out
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatForwardResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}:
+    patch:
+      operationId: renameChatGroup
+      tags: [chat]
+      summary: Edit group info — rename a custom club and/or set the description
+      description: Name — custom, unmanaged groups (owner/moderator; School Admin anytime).
+        Description — any non-dm group (owner/moderator; School Admin anytime); an empty string
+        clears it. `group.updated` fans out on the WS.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name:
+                  type: string
+                  minLength: 3
+                  maxLength: 60
+                description:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Updated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/assets:
+    get:
+      operationId: listChatGroupAssets
+      tags: [chat]
+      summary: Confirmed attachments from the group's live messages (gallery backing)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Images and documents, newest first
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroupAssets'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/explore:
+    get:
+      operationId: listExploreChatGroups
+      tags: [chat]
+      summary: Active public clubs in my school I have not joined
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Discoverable clubs, newest first
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatExploreGroupPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/groups/{groupId}/join:
+    post:
+      operationId: joinChatGroup
+      tags: [chat]
+      summary: Join an active public club in my school
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Joined as a member
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatGroup'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/notices:
@@ -3216,6 +3710,637 @@ paths:
                 $ref: '#/components/schemas/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/payments/callback/{gateway}:
+    post:
+      operationId: redirectGatewayCallback
+      tags: [payments]
+      summary: |
+        GATEWAY BROWSER RETURN (PAY-BE-006, 12 §2 I-9) — UX only, never authoritative (the
+        webhook stays the source of truth): verify the reference belongs to this gateway, ONE
+        FetchStatus confirm, apply the terminal state if the webhook hasn't already, then always
+        302 to the status screen. Callback errors surface in the redirect state, not as API errors.
+      security: []
+      parameters:
+        - name: gateway
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/PaymentsGateway'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [txnId]
+              properties:
+                txnId: { type: string, format: uuid }
+      responses:
+        '302':
+          description: Redirect to `/payments/status/{txnId}?cb=<status>` (app deep link / web screen)
+          headers:
+            Location:
+              description: Status screen for the transaction
+              schema: { type: string }
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/campaigns:
+    post:
+      operationId: createAdCampaign
+      tags: [ads]
+      summary: Create a draft campaign (approved vendor; demographic-only targeting)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdsCampaignInput'
+      responses:
+        '201':
+          description: Draft created
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listMyAdCampaigns
+      tags: [ads]
+      summary: Own campaigns (account-scoped)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Own rows
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/campaigns/{id}:
+    patch:
+      operationId: updateAdCampaign
+      tags: [ads]
+      summary: Edit while draft/rejected (review states immutable — CONFLICT)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdsCampaignInput'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/campaigns/{id}/submit:
+    post:
+      operationId: submitAdCampaign
+      tags: [ads]
+      summary: Submit for moderation (unmodified rejected → CAMPAIGN_REJECTED)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Status `pending_review`; audited'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/campaigns/{id}/analytics:
+    get:
+      operationId: getAdCampaignAnalytics
+      tags: [ads]
+      summary: Daily aggregates (ads_daily only — aggregate-only rule)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Daily rows + totals
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsAnalyticsResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/campaigns/{id}/pause:
+    post:
+      operationId: pauseAdCampaign
+      tags: [ads]
+      summary: running → paused (budget exhaustion mirrors this)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paused; audited
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/campaigns/{id}/resume:
+    post:
+      operationId: resumeAdCampaign
+      tags: [ads]
+      summary: paused → running (inside the window)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Running; audited
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/audience-estimate:
+    get:
+      operationId: getAudienceEstimate
+      tags: [ads]
+      summary: Aggregate verified-user count from 04 (unknown on 04 failure — never invented)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: cityId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: grade
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: '{count} or {count: null, unknown: true}'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEstimateResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/events:
+    post:
+      operationId: createVendorEvent
+      tags: [ads]
+      summary: List an event (draft; ticket_price null = free)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdsEventInput'
+      responses:
+        '201':
+          description: Draft created
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEventResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listMyVendorEvents
+      tags: [ads]
+      summary: Own events with ticket totals
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Own rows
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEventList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/vendor/events/{id}/submit:
+    post:
+      operationId: submitVendorEvent
+      tags: [ads]
+      summary: Submit an event for moderation
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Status `pending_review`; audited'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEventResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/moderation/queue:
+    get:
+      operationId: getModerationQueue
+      tags: [ads]
+      summary: Pending campaigns + events with the moderation checklist (Super Admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Queue payload
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsModerationQueue'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/campaigns/{id}/approve:
+    post:
+      operationId: approveAdCampaign
+      tags: [ads]
+      summary: Approve (checklist version audited) — concurrent decision → CONFLICT
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: approved/scheduled/running per schedule
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/campaigns/{id}/reject:
+    post:
+      operationId: rejectAdCampaign
+      tags: [ads]
+      summary: Reject — reason mandatory; audit-logged
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdsRejectInput'
+      responses:
+        '200':
+          description: 'Status `rejected` with the reason surfaced to the vendor'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaignResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/events/{id}/approve:
+    post:
+      operationId: approveAdEvent
+      tags: [ads]
+      summary: Publish an event (busts `events:city:{id}`)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 'Status `published`'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEventResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/events/{id}/reject:
+    post:
+      operationId: rejectAdEvent
+      tags: [ads]
+      summary: Reject an event — reason mandatory; audit-logged
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdsRejectInput'
+      responses:
+        '200':
+          description: 'Status `rejected` with the reason surfaced to the vendor'
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEventResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/admin/ads/overview:
+    get:
+      operationId: getAdsOverview
+      tags: [ads]
+      summary: Platform totals — campaigns by status, spend, events, tickets, gross/commission/net
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Overview payload
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsOverviewResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/events:
+    get:
+      operationId: listPublicEvents
+      tags: [ads]
+      summary: Published, upcoming events by city (BR-012 — drafts never leak)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: cityId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEventList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/events/{id}:
+    get:
+      operationId: getPublicEvent
+      tags: [ads]
+      summary: Public event detail (published only)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detail with remaining capacity
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsEventResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/events/{id}/tickets:
+    post:
+      operationId: reserveEventTickets
+      tags: [ads]
+      summary: Reserve/buy tickets (VERIFIED; row-locked capacity; free → paid instantly)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdsTicketInput'
+      responses:
+        '201':
+          description: Ticket reserved (priced) or paid (free)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsTicketResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listEventTickets
+      tags: [ads]
+      summary: Organizer ticket list + totals (gross/commission/net; cancelled counted separately)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tickets + totals
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsTicketList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/event-tickets/{id}/cancel:
+    post:
+      operationId: cancelEventTicket
+      tags: [ads]
+      summary: Buyer/Super-Admin cancel before starts_at (capacity freed)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cancelled; audited
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsTicketResult'
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/leads:
     post:
       operationId: createLead
@@ -3593,6 +4718,21 @@ paths:
           required: false
           schema:
             type: string
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: actorUserId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
         - name: page
           in: query
           required: false
@@ -3618,6 +4758,731 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuditLogPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/roster/template:
+    get:
+      operationId: getRosterTemplate
+      tags: [lms]
+      summary: Portal-generated roster template CSV (LMS-US-001)
+      description: >-
+        Fixed English machine header set (LMS-BR-008) plus bn/en instruction rows and the
+        institution's ACTIVE sections pre-filled. Licence-gated (LMS-BR-014). Streamed, no-store.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: CSV stream (attachment)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            text/csv:
+              schema:
+                type: string
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/roster/imports:
+    post:
+      operationId: createRosterImport
+      tags: [lms]
+      summary: Upload a roster file (dry-run first, content-hash idempotent — LMS-US-002)
+      description: >-
+        multipart file (csv; xlsx P1) <= 20 MB, <= 10,000 data rows (LMS-BR-007). Identical
+        re-upload returns the original import with 200 (LMS-BR-002). Stored via 05 media; the
+        process job is enqueued. 10 uploads/hour/institution.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LmsImportUpload'
+      responses:
+        '201':
+          description: Import created; validation job enqueued
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsImportEnvelope'
+        '200':
+          description: Identical content re-uploaded — original import returned (no-op)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsImportEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listRosterImports
+      tags: [lms]
+      summary: Import history (LMS-US-003)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/LmsImportStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Newest-first import page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsImportList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/roster/imports/{importId}:
+    get:
+      operationId: getRosterImport
+      tags: [lms]
+      summary: Import detail with totals (LMS-US-003/004)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Import detail
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsImportEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/roster/imports/{importId}/rows:
+    get:
+      operationId: listRosterImportRows
+      tags: [lms]
+      summary: Row-level report (default the error rows; LMS-US-003)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: result
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/LmsRowResult'
+        - name: as
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [csv]
+      responses:
+        '200':
+          description: Row page (or CSV stream when as=csv)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsImportRowList'
+            text/csv:
+              schema:
+                type: string
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/roster/imports/{importId}/commit:
+    post:
+      operationId: commitRosterImport
+      tags: [lms]
+      summary: Commit a clean import (status must be ready — LMS-BR-003/INV-004)
+      description: >-
+        202 with status committing; the commit job applies chunks of 500 (phone-match update /
+        PENDING create via 03, enrollments via 04). 5/hour/institution.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Commit enqueued
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsImportEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/roster/reconciliation:
+    get:
+      operationId: getRosterReconciliation
+      tags: [lms]
+      summary: Baseline vs platform counts with drift flags (LMS-US-012)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Reconciliation report (baseline null when no committed import exists)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsReconciliation'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/erp/endpoints:
+    post:
+      operationId: createErpEndpoint
+      tags: [lms]
+      summary: Register an ERP webhook endpoint (raw secret shown exactly once — LMS-US-005)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LmsEndpointInput'
+      responses:
+        '201':
+          description: Endpoint created; secret v1 in this response only
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEndpointSecretEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listErpEndpoints
+      tags: [lms]
+      summary: Endpoints (never the secret)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Endpoint page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEndpointList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/erp/endpoints/{endpointId}/rotate-secret:
+    post:
+      operationId: rotateErpEndpointSecret
+      tags: [lms]
+      summary: Versioned rotation with overlap (LMS-US-010)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: endpointId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LmsRotateInput'
+      responses:
+        '200':
+          description: New secret version (raw shown once) + overlap expiry
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEndpointSecretEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/erp/endpoints/{endpointId}/test:
+    post:
+      operationId: testErpEndpoint
+      tags: [lms]
+      summary: Send a signed test event (LMS-US-006)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: endpointId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Test outcome (success or failure reason)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEndpointTestResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/erp/endpoints/{endpointId}/events:
+    get:
+      operationId: listErpEndpointEvents
+      tags: [lms]
+      summary: Delivery log (LMS-US-011)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: endpointId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/LmsEventStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Event log page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEventList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/erp/endpoints/{endpointId}/events/{eventId}/redrive:
+    post:
+      operationId: redriveErpEvent
+      tags: [lms]
+      summary: Re-apply a failed event (LMS-US-011)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: endpointId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Redrive outcome
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEventEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/erp/endpoints/{endpointId}:
+    delete:
+      operationId: revokeErpEndpoint
+      tags: [lms]
+      summary: Revoke (terminal — events thereafter rejected; LMS-BR-013)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: endpointId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Revoked; audited
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEndpointEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/webhooks/erp/{schoolId}:
+    post:
+      operationId: erpWebhook
+      tags: [lms]
+      summary: |
+        SIGNATURE-VERIFIED EXCEPTION (documented, module 12 pattern) — unauthenticated-but-HMAC-
+        signed ERP events: constant-time HMAC-SHA256 over {timestamp}.{rawBody} against the
+        institution's versioned secret, ±5-min timestamp window, UUID event id, body <= 1 MB,
+        60 events/min/institution. Applied via 03/04 in one per-event transaction.
+      security: []
+      parameters:
+        - name: schoolId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LmsErpEventPayload'
+      responses:
+        '200':
+          description: Applied or duplicate (original outcome; nothing re-applied)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsWebhookResult'
+        '400':
+          description: Bad event id / unknown type / stale timestamp
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Invalid signature / unknown or revoked endpoint (indistinguishable on the wire)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Rate limited (Retry-After set)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/lms/connections:
+    post:
+      operationId: createLmsConnection
+      tags: [lms]
+      summary: Create the LMS pull connection (LMS-US-013; plan §6.1)
+      description: >-
+        HTTPS base URL + bearer/api-key credential (write-only, AES-256-GCM at rest), schedule
+        preset, optional resource path overrides. One connection per institution.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LmsConnectionInput'
+      responses:
+        '201':
+          description: Connection created (credential never returned)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsConnectionEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listLmsConnections
+      tags: [lms]
+      summary: Connections (credential redacted)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Connection list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsConnectionList'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/lms/connections/{connectionId}:
+    patch:
+      operationId: updateLmsConnection
+      tags: [lms]
+      summary: Update config (credential optional — only rewritten when provided)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LmsConnectionPatch'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsConnectionEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deleteLmsConnection
+      tags: [lms]
+      summary: Revoke the connection (schedule stops)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deleted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsConnectionEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/lms/connections/{connectionId}/test:
+    post:
+      operationId: testLmsConnection
+      tags: [lms]
+      summary: Probe GET /teachers?limit=1 for auth sanity (plan §2.1)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Probe outcome
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsEndpointTestResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/lms/connections/{connectionId}/sync:
+    post:
+      operationId: syncLmsConnection
+      tags: [lms]
+      summary: Sync now (202; one running sync per institution — 409 otherwise)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '202':
+          description: Sync run enqueued
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsSyncRunEnvelope'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/school/lms/sync-runs:
+    get:
+      operationId: listLmsSyncRuns
+      tags: [lms]
+      summary: Sync-run history (newest first)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Sync-run page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsSyncRunList'
         default:
           $ref: '#/components/responses/Problem'
 components:
@@ -4286,6 +6151,22 @@ components:
         lastMessageAt:
           type: string
           format: date-time
+        lastMessageKind:
+          type: string
+          description: Kind of the latest message (text|image|pdf|voice|doc|sheet|csv|poll|system),
+            or `deleted` for a tombstone — clients render attachment/tombstone previews from it
+        lastMessageSenderId:
+          type: string
+        lastMessageSenderName:
+          type: string
+          description: Author of the latest message (group list rows show "Name - preview")
+        description:
+          type: string
+          maxLength: 500
+        managed:
+          type: boolean
+          description: Server-created group kept in sync automatically (Kushol Admin, institution
+            staff) — no rename, leave or manual roster edits
         createdAt:
           type: string
           format: date-time
@@ -4305,6 +6186,9 @@ components:
           type: string
           minLength: 3
           maxLength: 60
+        description:
+          type: string
+          maxLength: 500
     ChatGroupMember:
       type: object
       required: [userId, name, role, joinedAt]
@@ -4320,6 +6204,34 @@ components:
         joinedAt:
           type: string
           format: date-time
+    ChatGroupMemberPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatGroupMember'
+    ChatContact:
+      type: object
+      description: Someone the caller may add to a group or message directly (name + role only)
+      required: [userId, name, role]
+      properties:
+        userId:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, school_admin, teacher, student, guardian, vendor]
+    ChatContactPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatContact'
     ChatGroupMemberInput:
       type: object
       required: [userId]
@@ -4348,9 +6260,194 @@ components:
               type: string
             removed:
               type: boolean
+    ChatReactionSummary:
+      type: object
+      required: [emoji, count]
+      properties:
+        emoji:
+          type: string
+        count:
+          type: integer
+        mine:
+          type: boolean
+          description: The viewer reacted with this emoji (REST reads only — WS fan-outs carry the
+            actor's view, so receivers refetch)
+    ChatPollOption:
+      type: object
+      required: [text, votes]
+      properties:
+        text:
+          type: string
+        votes:
+          type: integer
+    ChatPoll:
+      type: object
+      required: [question, options]
+      properties:
+        question:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatPollOption'
+        allowMultiple:
+          type: boolean
+        userVoted:
+          type: array
+          description: Option indexes the viewer voted for (REST reads only)
+          items:
+            type: integer
+    ChatSeenByEntry:
+      type: object
+      required: [userId, name, status]
+      properties:
+        userId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [read, delivered]
+        readAt:
+          type: string
+          format: date-time
+          description: When the member read it (absent for delivered-only or a pre-receipts read)
+        deliveredAt:
+          type: string
+          format: date-time
+          description: When it reached the member (absent when the time is unknown)
+    ChatSeenByPage:
+      type: object
+      required: [data, pending]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatSeenByEntry'
+        pending:
+          type: integer
+          minimum: 0
+          description: Members (sender excluded) the message has not reached yet
+    ChatReactor:
+      type: object
+      required: [userId, name, emoji, reactedAt]
+      properties:
+        userId:
+          type: string
+        name:
+          type: string
+        emoji:
+          type: string
+        reactedAt:
+          type: string
+          format: date-time
+    ChatReactorPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatReactor'
+    ChatDeliveredInput:
+      type: object
+      required: [lastDeliveredMessageId]
+      properties:
+        lastDeliveredMessageId:
+          type: string
+    ChatDeliveredResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [groupId, lastDeliveredMessageId]
+          properties:
+            groupId:
+              type: string
+            lastDeliveredMessageId:
+              type: string
+    ChatForwardResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [forwarded]
+          properties:
+            forwarded:
+              type: integer
+    ChatGroupAssetImage:
+      type: object
+      required: [assetId, createdAt]
+      properties:
+        assetId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ChatGroupAssetFile:
+      type: object
+      required: [assetId, createdAt]
+      properties:
+        assetId:
+          type: string
+        kind:
+          $ref: '#/components/schemas/MediaKind'
+        mime:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        fileName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ChatGroupAssets:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [images, files]
+          properties:
+            images:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatGroupAssetImage'
+            files:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatGroupAssetFile'
+    ChatExploreGroup:
+      type: object
+      required: [id, name, kind, status, memberCount, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        memberCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    ChatExploreGroupPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatExploreGroup'
     ChatMessageKind:
       type: string
-      enum: [text, image, pdf, voice, system]
+      enum: [text, image, pdf, voice, doc, sheet, csv, system, poll]
     ChatMediaRef:
       type: object
       description: The referenced confirmed asset (message render data)
@@ -4404,10 +6501,39 @@ components:
         replyPreview:
           type: string
           description: Server-rendered one-line preview of the quoted message
+        replySenderName:
+          type: string
+          description: Author of the quoted message (WhatsApp quote header)
+        replyKind:
+          type: string
+          description: Kind of the quoted message (text, image, pdf, voice, doc, sheet, csv, poll)
+            or `deleted` once it was deleted — its preview is then empty
+        forwardCount:
+          type: integer
+          minimum: 0
+          description: Forward hops — absent/0 for an original; ≥ 1 shows "Forwarded", ≥ 5
+            "Forwarded many times"
         deletedAt:
           type: string
           format: date-time
           description: Set ⇒ tombstone ("Message deleted")
+        editedAt:
+          type: string
+          format: date-time
+          description: Set ⇒ the author edited the body
+        pinnedAt:
+          type: string
+          format: date-time
+          description: Set ⇒ pinned (moderator/owner/School Admin)
+        pinnedBy:
+          type: string
+        reactions:
+          type: array
+          description: Aggregated emoji reactions
+          items:
+            $ref: '#/components/schemas/ChatReactionSummary'
+        poll:
+          $ref: '#/components/schemas/ChatPoll'
         createdAt:
           type: string
           format: date-time
@@ -4422,6 +6548,16 @@ components:
         nextBefore:
           type: string
           description: Opaque cursor for the next (older) page; absent when exhausted
+        readUpTo:
+          type: string
+          format: date-time
+          description: Every other member has read messages created at or before this instant
+            (blue ticks); absent while someone has read nothing yet
+        deliveredUpTo:
+          type: string
+          format: date-time
+          description: Every other member has received messages created at or before this
+            instant (grey double ticks); absent while someone has received nothing yet
     ChatMessageSendInput:
       type: object
       required: [groupId, kind, clientMsgId]
@@ -4430,19 +6566,41 @@ components:
           type: string
         kind:
           type: string
-          enum: [text, image, pdf, voice]
+          enum: [text, image, pdf, voice, doc, sheet, csv, poll]
         body:
           type: string
           minLength: 1
           maxLength: 4000
+          description: Text messages — the text; attachments (image|pdf|doc|sheet|csv) — an
+            optional caption; voice and poll carry none
         mediaAssetId:
           type: string
-          description: Required for image|pdf|voice; asset must be `confirmed` + owned
+          description: Required for image|pdf|doc|sheet|csv|voice; the asset must be `confirmed`
+            and its kind must equal the message kind
         clientMsgId:
           type: string
           format: uuid
         replyTo:
           type: string
+        poll:
+          type: object
+          description: Required for kind=poll
+          required: [question, options]
+          properties:
+            question:
+              type: string
+              minLength: 3
+              maxLength: 200
+            options:
+              type: array
+              minItems: 2
+              maxItems: 6
+              items:
+                type: string
+                minLength: 1
+                maxLength: 80
+            allowMultiple:
+              type: boolean
     ChatReadInput:
       type: object
       required: [lastReadMessageId]
@@ -4562,7 +6720,10 @@ components:
       enum: [pending, confirmed, archived]
     MediaKind:
       type: string
-      enum: [image, pdf, voice]
+      description: Cloudflare R2 attachment kinds — image (jpeg/png/heic, 10 MB), pdf (20 MB),
+        voice (aac/m4a, 5 min), doc (Word .docx/.doc, 20 MB), slides (.pptx), sheet (Excel
+        .xlsx/.xls, 20 MB), csv (UTF-8 text, 10 MB). The magic-byte sniff at confirm decides.
+      enum: [image, pdf, voice, doc, slides, sheet, csv]
     MediaAssetSummary:
       type: object
       description: Attachment summary embedded in notices/messages
@@ -4666,6 +6827,10 @@ components:
         mime:
           type: string
           description: Client-declared; the sniff at confirm is authoritative
+        fileName:
+          type: string
+          maxLength: 255
+          description: Original file name for document bubbles (base name kept, trimmed to 120)
     MediaPresignResult:
       type: object
       required: [data]
@@ -4713,6 +6878,8 @@ components:
           type: integer
         durationMs:
           type: integer
+        fileName:
+          type: string
         status:
           $ref: '#/components/schemas/MediaStatus'
         createdAt:
@@ -5264,6 +7431,20 @@ components:
           type: string
         entityId:
           type: string
+        message:
+          type: string
+          description: Human-readable narrative describing the action
+        changes:
+          type: array
+          items:
+            type: string
+          description: Key diffs and property mutations recorded with the audit row
+        actorName:
+          type: string
+          description: Display name of the user or system actor
+        requestId:
+          type: string
+          description: Correlation request ID
         createdAt:
           type: string
           format: date-time
@@ -6746,6 +8927,698 @@ components:
         reason:
           type: string
           description: 'DUPLICATE_WEBHOOK etc. — always 2xx for valid signatures'
+    AdsCampaignStatus:
+      title: CampaignStatus
+      type: string
+      enum: [draft, pending_review, approved, rejected, scheduled, running, completed, paused]
+    AdsObjective:
+      title: Objective
+      type: string
+      enum: [awareness, event_promo]
+    AdsCreativeKind:
+      title: CreativeKind
+      type: string
+      enum: [push, native_banner]
+    AdsEventStatus:
+      title: EventStatus
+      type: string
+      enum: [draft, pending_review, published, rejected, cancelled]
+    AdsTicketStatus:
+      title: TicketStatus
+      type: string
+      enum: [reserved, paid, cancelled]
+    AdsTargeting:
+      type: object
+      description: Demographic keys only (ADS-BR-003) — nothing user-level exists
+      required: [cityId]
+      properties:
+        cityId:
+          type: string
+        grade:
+          type: string
+        sectionIds:
+          type: array
+          items:
+            type: string
+    AdsCreativeInput:
+      type: object
+      required: [kind, titleBn, titleEn, bodyBn, bodyEn, ctaLabel, ctaUrl]
+      properties:
+        kind:
+          $ref: '#/components/schemas/AdsCreativeKind'
+        titleBn:
+          type: string
+          maxLength: 120
+        titleEn:
+          type: string
+          maxLength: 120
+        bodyBn:
+          type: string
+          maxLength: 500
+        bodyEn:
+          type: string
+          maxLength: 500
+        imageMediaId:
+          type: string
+        ctaLabel:
+          type: string
+          maxLength: 40
+        ctaUrl:
+          type: string
+          pattern: '^https://'
+    AdsCampaignInput:
+      type: object
+      required: [name, objective, targeting, scheduleStart, scheduleEnd, budgetBdt, creative]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        objective:
+          $ref: '#/components/schemas/AdsObjective'
+        targeting:
+          $ref: '#/components/schemas/AdsTargeting'
+        scheduleStart:
+          type: string
+          format: date-time
+        scheduleEnd:
+          type: string
+          format: date-time
+        budgetBdt:
+          type: number
+          format: double
+          minimum: 0.01
+        creative:
+          $ref: '#/components/schemas/AdsCreativeInput'
+    AdsCampaign:
+      type: object
+      required: [id, name, objective, status, budgetBdt, spendBdt, createdAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        objective:
+          $ref: '#/components/schemas/AdsObjective'
+        status:
+          $ref: '#/components/schemas/AdsCampaignStatus'
+        rejectionReason:
+          type: string
+        scheduleStart:
+          type: string
+          format: date-time
+        scheduleEnd:
+          type: string
+          format: date-time
+        budgetBdt:
+          type: number
+          format: double
+        spendBdt:
+          type: number
+          format: double
+        creative:
+          $ref: '#/components/schemas/AdsCreativeInput'
+        createdAt:
+          type: string
+          format: date-time
+    AdsCampaignResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdsCampaign'
+    AdsCampaignList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdsCampaign'
+    AdsAnalyticsDay:
+      type: object
+      required: [day, impressions, clicks, spendBdt]
+      properties:
+        day:
+          type: string
+          format: date
+        impressions:
+          type: integer
+        clicks:
+          type: integer
+        spendBdt:
+          type: number
+          format: double
+    AdsAnalyticsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [days, totals]
+          properties:
+            days:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdsAnalyticsDay'
+            totals:
+              type: object
+              properties:
+                impressions:
+                  type: integer
+                clicks:
+                  type: integer
+                ctr:
+                  type: number
+                spendBdt:
+                  type: number
+                  format: double
+                budgetBdt:
+                  type: number
+                  format: double
+    AdsEstimateResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          properties:
+            count:
+              type: integer
+            unknown:
+              type: boolean
+    AdsEventInput:
+      type: object
+      required: [cityId, titleBn, titleEn, descriptionBn, descriptionEn, venue, startsAt, endsAt, capacity]
+      properties:
+        cityId:
+          type: string
+        titleBn:
+          type: string
+          maxLength: 150
+        titleEn:
+          type: string
+          maxLength: 150
+        descriptionBn:
+          type: string
+          maxLength: 2000
+        descriptionEn:
+          type: string
+          maxLength: 2000
+        venue:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        ticketPriceBdt:
+          type: number
+          format: double
+          description: 'null/absent = free event'
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 100000
+    AdsEvent:
+      type: object
+      required: [id, cityId, titleBn, venue, startsAt, endsAt, capacity, status, ticketsSold, grossBdt, commissionBdt, netBdt, createdAt]
+      properties:
+        id:
+          type: string
+        cityId:
+          type: string
+        titleBn:
+          type: string
+        titleEn:
+          type: string
+        descriptionBn:
+          type: string
+        descriptionEn:
+          type: string
+        venue:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        ticketPriceBdt:
+          type: number
+          format: double
+        capacity:
+          type: integer
+        ticketsSold:
+          type: integer
+        status:
+          $ref: '#/components/schemas/AdsEventStatus'
+        rejectionReason:
+          type: string
+        grossBdt:
+          type: number
+          format: double
+        commissionBdt:
+          type: number
+          format: double
+        netBdt:
+          type: number
+          format: double
+        createdAt:
+          type: string
+          format: date-time
+    AdsEventResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdsEvent'
+    AdsEventList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdsEvent'
+    AdsTicketInput:
+      type: object
+      required: [qty]
+      properties:
+        qty:
+          type: integer
+          minimum: 1
+          maximum: 100
+    AdsTicket:
+      type: object
+      required: [id, eventId, qty, amountBdt, commissionBdt, status, reservedAt]
+      properties:
+        id:
+          type: string
+        eventId:
+          type: string
+        buyerUserId:
+          type: string
+        qty:
+          type: integer
+        amountBdt:
+          type: number
+          format: double
+        commissionBdt:
+          type: number
+          format: double
+        status:
+          $ref: '#/components/schemas/AdsTicketStatus'
+        paymentTransactionId:
+          type: string
+        reservedAt:
+          type: string
+          format: date-time
+    AdsTicketResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdsTicket'
+    AdsTicketList:
+      type: object
+      required: [data, totals]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdsTicket'
+        totals:
+          type: object
+          required: [grossBdt, commissionBdt, netBdt, cancelledCount]
+          properties:
+            grossBdt:
+              type: number
+              format: double
+            commissionBdt:
+              type: number
+              format: double
+            netBdt:
+              type: number
+              format: double
+            cancelledCount:
+              type: integer
+    AdsModerationQueue:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [campaigns, events, checklist]
+          properties:
+            campaigns:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdsCampaign'
+            events:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdsEvent'
+            checklist:
+              type: array
+              items:
+                type: string
+              description: Moderation checklist items (banned categories; version audited)
+    AdsOverview:
+      type: object
+      required: [campaignsByStatus, spendBdt, publishedEvents, ticketsSold, grossBdt, commissionBdt, netBdt]
+      properties:
+        campaignsByStatus:
+          type: object
+          additionalProperties:
+            type: integer
+        spendBdt:
+          type: number
+          format: double
+        publishedEvents:
+          type: integer
+        ticketsSold:
+          type: integer
+        grossBdt:
+          type: number
+          format: double
+        commissionBdt:
+          type: number
+          format: double
+        netBdt:
+          type: number
+          format: double
+    AdsOverviewResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/AdsOverview'
+    AdsRejectInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+    LmsImportStatus:
+      type: string
+      enum: [uploaded, validating, validated_with_errors, ready, committing, committed, failed, cancelled]
+    LmsRowResult:
+      type: string
+      enum: [created, updated, skipped, error]
+    LmsImportUpload:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: CSV (xlsx P1); <= 20 MB, <= 10,000 data rows
+        dryRun:
+          type: boolean
+          default: true
+    LmsImportTotals:
+      type: object
+      required: [totalRows, createdCount, updatedCount, skippedCount, erroredCount]
+      properties:
+        totalRows:      { type: integer, minimum: 0 }
+        createdCount:   { type: integer, minimum: 0 }
+        updatedCount:   { type: integer, minimum: 0 }
+        skippedCount:   { type: integer, minimum: 0 }
+        erroredCount:   { type: integer, minimum: 0 }
+    LmsImport:
+      type: object
+      required: [id, format, status, dryRun, totals, createdAt]
+      properties:
+        id:             { type: string, format: uuid }
+        format:         { type: string, enum: [csv, xlsx] }
+        status:         { $ref: '#/components/schemas/LmsImportStatus' }
+        dryRun:         { type: boolean }
+        totals:         { $ref: '#/components/schemas/LmsImportTotals' }
+        failReasonKey:  { type: string, nullable: true }
+        committedAt:    { type: string, format: date-time, nullable: true }
+        createdAt:      { type: string, format: date-time }
+    LmsImportEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/LmsImport' }
+    LmsImportList:
+      type: object
+      required: [data, page, pageSize, total]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LmsImport' }
+        page:     { type: integer }
+        pageSize: { type: integer }
+        total:    { type: integer }
+    LmsImportRow:
+      type: object
+      required: [rowNo, payload]
+      properties:
+        rowNo:    { type: integer, minimum: 1 }
+        payload:  { type: object, description: "Parsed source row (name, phone, role, classLevel, sectionName, sessionYear)" }
+        result:   { $ref: '#/components/schemas/LmsRowResult' }
+        errorKey: { type: string, nullable: true }
+        message:  { type: string, nullable: true }
+    LmsImportRowList:
+      type: object
+      required: [data, page, pageSize, total]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LmsImportRow' }
+        page:     { type: integer }
+        pageSize: { type: integer }
+        total:    { type: integer }
+    LmsReconciliationSection:
+      type: object
+      required: [sectionId, classLevel, name, baselineStudents, activeStudents, drift]
+      properties:
+        sectionId:        { type: string, format: uuid }
+        classLevel:       { type: integer }
+        name:             { type: string }
+        baselineStudents: { type: integer, nullable: true, description: null when no baseline import exists }
+        activeStudents:   { type: integer }
+        drift:            { type: string, enum: [none, extra, missing, mismatch] }
+        delta:            { type: integer }
+    LmsReconciliation:
+      type: object
+      required: [baseline, platform, sections]
+      properties:
+        baseline:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/LmsImport'
+        platformTotal: { type: integer }
+        sections:
+          type: array
+          items: { $ref: '#/components/schemas/LmsReconciliationSection' }
+    LmsEndpointInput:
+      type: object
+      required: [name, url]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        url:  { type: string, format: uri, pattern: '^https://', maxLength: 500 }
+    LmsEndpoint:
+      type: object
+      required: [id, name, url, status, secretVersion, createdAt]
+      properties:
+        id:             { type: string, format: uuid }
+        name:           { type: string }
+        url:            { type: string }
+        status:         { type: string, enum: [active, revoked] }
+        secretVersion:  { type: integer, minimum: 1 }
+        overlapUntil:   { type: string, format: date-time, nullable: true }
+        lastSuccessAt:  { type: string, format: date-time, nullable: true }
+        createdAt:      { type: string, format: date-time }
+    LmsEndpointEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/LmsEndpoint' }
+    LmsEndpointList:
+      type: object
+      required: [data, page, pageSize, total]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LmsEndpoint' }
+        page:     { type: integer }
+        pageSize: { type: integer }
+        total:    { type: integer }
+    LmsEndpointSecretEnvelope:
+      type: object
+      required: [data, secret]
+      properties:
+        data:          { $ref: '#/components/schemas/LmsEndpoint' }
+        secret:        { type: string, description: Raw HMAC secret — returned exactly once (LMS-INV-005) }
+        overlapUntil:  { type: string, format: date-time, nullable: true }
+    LmsRotateInput:
+      type: object
+      properties:
+        overlapHours: { type: integer, minimum: 1, maximum: 72, default: 24 }
+    LmsEndpointTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:        { type: boolean }
+        httpStatus: { type: integer, nullable: true }
+        latencyMs:  { type: integer, nullable: true }
+        errorKey:   { type: string, nullable: true }
+    LmsEventStatus:
+      type: string
+      enum: [applied, rejected, duplicate, error]
+    LmsEventType:
+      type: string
+      enum: [student.upserted, enrollment.changed, staff.upserted]
+    LmsEvent:
+      type: object
+      required: [eventId, type, status, signatureValid, receivedAt]
+      properties:
+        eventId:         { type: string, format: uuid }
+        type:            { $ref: '#/components/schemas/LmsEventType' }
+        status:          { $ref: '#/components/schemas/LmsEventStatus' }
+        signatureValid:  { type: boolean }
+        rejectReasonKey: { type: string, nullable: true }
+        receivedAt:      { type: string, format: date-time }
+    LmsEventEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/LmsEvent' }
+    LmsEventList:
+      type: object
+      required: [data, page, pageSize, total]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LmsEvent' }
+        page:     { type: integer }
+        pageSize: { type: integer }
+        total:    { type: integer }
+    LmsErpEventPayload:
+      type: object
+      required: [type, data]
+      properties:
+        type: { $ref: '#/components/schemas/LmsEventType' }
+        data:
+          type: object
+          description: >
+            student.upserted / staff.upserted: { fullName, phone, sectionExternalId? };
+            enrollment.changed: { phone, sectionExternalId, sessionYear, active }
+          properties:
+            fullName:          { type: string }
+            phone:             { type: string }
+            sectionExternalId: { type: string }
+            sessionYear:       { type: integer }
+            active:            { type: boolean }
+    LmsWebhookResult:
+      type: object
+      required: [status, eventId]
+      properties:
+        status:  { $ref: '#/components/schemas/LmsEventStatus' }
+        eventId: { type: string, format: uuid }
+    LmsSchedulePreset:
+      type: string
+      enum: [off, hourly, daily, weekly]
+    LmsConnectionInput:
+      type: object
+      required: [name, baseUrl, authType, credential]
+      properties:
+        name:              { type: string, minLength: 1, maxLength: 120 }
+        baseUrl:           { type: string, format: uri, pattern: '^https://', maxLength: 500 }
+        authType:          { type: string, enum: [bearer, api_key] }
+        credential:        { type: string, minLength: 1, maxLength: 1000, writeOnly: true }
+        apiKeyHeader:      { type: string, default: X-Api-Key, maxLength: 60 }
+        schedule:          { $ref: '#/components/schemas/LmsSchedulePreset' }
+        syncNotices:       { type: boolean, default: false }
+        sessionYearOverride: { type: integer, nullable: true }
+        resourceOverrides:
+          type: object
+          description: Optional per-resource path overrides (teachers/students/sections/notices)
+          additionalProperties: { type: string }
+    LmsConnectionPatch:
+      type: object
+      properties:
+        name:              { type: string, minLength: 1, maxLength: 120 }
+        baseUrl:           { type: string, format: uri, pattern: '^https://', maxLength: 500 }
+        authType:          { type: string, enum: [bearer, api_key] }
+        credential:        { type: string, maxLength: 1000, writeOnly: true, description: Omitted = keep existing }
+        apiKeyHeader:      { type: string, maxLength: 60 }
+        schedule:          { $ref: '#/components/schemas/LmsSchedulePreset' }
+        enabled:           { type: boolean }
+        syncNotices:       { type: boolean }
+        sessionYearOverride: { type: integer, nullable: true }
+        resourceOverrides:
+          type: object
+          additionalProperties: { type: string }
+    LmsConnection:
+      type: object
+      required: [id, name, baseUrl, authType, enabled, schedule, createdAt]
+      properties:
+        id:             { type: string, format: uuid }
+        name:           { type: string }
+        baseUrl:        { type: string }
+        authType:       { type: string, enum: [bearer, api_key] }
+        credentialMask: { type: string, description: 'e.g. "••••" — the credential itself is never returned' }
+        apiKeyHeader:   { type: string }
+        enabled:        { type: boolean }
+        schedule:       { $ref: '#/components/schemas/LmsSchedulePreset' }
+        syncNotices:    { type: boolean }
+        lastRunAt:      { type: string, format: date-time, nullable: true }
+        lastStatus:     { type: string, nullable: true, enum: [ok, error, null] }
+        lastErrorKey:   { type: string, nullable: true }
+        createdAt:      { type: string, format: date-time }
+    LmsConnectionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/LmsConnection' }
+    LmsConnectionList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LmsConnection' }
+    LmsSyncRunStatus:
+      type: string
+      enum: [running, ok, error]
+    LmsSyncRun:
+      type: object
+      required: [id, connectionId, status, startedAt]
+      properties:
+        id:            { type: string, format: uuid }
+        connectionId:  { type: string, format: uuid }
+        trigger:       { type: string, enum: [manual, schedule] }
+        status:        { $ref: '#/components/schemas/LmsSyncRunStatus' }
+        sectionsUpserted:  { type: integer }
+        peopleUpserted:    { type: integer }
+        enrollmentsChanged: { type: integer }
+        errorRows:     { type: integer }
+        errorKey:      { type: string, nullable: true }
+        startedAt:     { type: string, format: date-time }
+        finishedAt:    { type: string, format: date-time, nullable: true }
+    LmsSyncRunEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/LmsSyncRun' }
+    LmsSyncRunList:
+      type: object
+      required: [data, page, pageSize, total]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/LmsSyncRun' }
+        page:     { type: integer }
+        pageSize: { type: integer }
+        total:    { type: integer }
   securitySchemes:
     bearerJWT:
       type: http

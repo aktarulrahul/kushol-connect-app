@@ -39,7 +39,12 @@ export function useChatGroups() {
   });
 }
 
-export type HistoryPage = { data: ChatMessage[]; nextBefore?: string };
+export type HistoryPage = {
+  data: ChatMessage[];
+  nextBefore?: string;
+  readUpTo?: string;
+  deliveredUpTo?: string;
+};
 
 export function useChatHistory(groupId: string) {
   return useQuery({

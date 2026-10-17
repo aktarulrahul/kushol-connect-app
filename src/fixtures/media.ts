@@ -19,6 +19,20 @@ export const MEDIA_CAPS = {
   image: { maxBytes: 10 * 1024 * 1024, label: "image/jpeg" },
   pdf: { maxBytes: 20 * 1024 * 1024, label: "application/pdf" },
   voice: { maxBytes: 5 * 1024 * 1024, label: "audio/mp4", maxDurationMs: 300_000 },
+  // Office/CSV attachments (owner 2026-10-17) — caps mirror the api's media/sniff.go.
+  doc: {
+    maxBytes: 20 * 1024 * 1024,
+    label: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  },
+  slides: {
+    maxBytes: 20 * 1024 * 1024,
+    label: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  },
+  sheet: {
+    maxBytes: 20 * 1024 * 1024,
+    label: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  },
+  csv: { maxBytes: 10 * 1024 * 1024, label: "text/csv" },
 } as const;
 
 let seq = 0;
@@ -213,6 +227,20 @@ function sniff(kind: MediaKind, bytes: Uint8Array | null): string | null {
       if (startsWith([0xff, 0xf1]) || startsWith([0xff, 0xf9])) return "audio/aac";
       if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "audio/mp4";
       return null;
+    case "doc":
+    case "slides":
+    case "sheet":
+      // OOXML containers are ZIP (PK\x03\x04); legacy .doc/.xls are OLE (D0 CF 11 E0).
+      if (startsWith([0x50, 0x4b, 0x03, 0x04])) return MEDIA_CAPS[kind].label;
+      if (kind !== "slides" && startsWith([0xd0, 0xcf, 0x11, 0xe0])) {
+        return kind === "doc" ? "application/msword" : "application/vnd.ms-excel";
+      }
+      return null;
+    case "csv":
+      // No magic: text without NUL/control bytes.
+      return b.every((v) => v >= 0x20 || v === 0x09 || v === 0x0a || v === 0x0d)
+        ? "text/csv"
+        : null;
   }
 }
 

@@ -1,16 +1,27 @@
 // Group / DM conversation (COM-AP-003..005, 010, 011, 016) in the Spartens channel language
 // (owner 2026-10-09): channel header (back · avatar + name · info), pinned-message bar, inverted
 // message list with day pills and the "N new unread" pill captured on open, swipe-to-reply,
-// long-press focus menu (reactions · reply · edit · pin · info · delete), reply/edit banners,
+// long-press focus menu (reactions · reply · forward · edit · pin · info · delete), reply/edit banners,
 // typing pill, jump-to-latest button. Shared by /groups/[id] and /messages/[peerId] (05 §2.2).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { CircleAlert, Info, Pencil, Pin, PinOff, Reply, Trash2 } from "lucide-react-native";
+import {
+  CircleAlert,
+  Forward,
+  Info,
+  Pencil,
+  Pin,
+  PinOff,
+  Reply,
+  Trash2,
+} from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReducedMotion } from "react-native-reanimated";
 
 import { ChannelHeader, ChatInfoSheet, PinnedBar } from "@/components/chat/channel-header";
+import { ChatWallpaper } from "@/components/chat/chat-wallpaper";
 import type { ChatAvatarKind } from "@/components/chat/chat-avatar";
 import {
   DateSeparator,
@@ -22,6 +33,7 @@ import {
 } from "@/components/chat/chrome";
 import { AttachSheet, Composer, VoiceRecorderSheet } from "@/components/chat/composer";
 import type { Anchor } from "@/components/chat/focus-overlay";
+import { ForwardSheet } from "@/components/chat/forward-sheet";
 import { MessageInfoSheet, StickerPickerSheet } from "@/components/chat/message-actions";
 import {
   MessageBubble,
@@ -37,8 +49,8 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import {
   chatFixtureFlags,
-  DEMO_ME,
   DEMO_STICKERS,
+  forwardChatMessage,
   MAX_PINNED_MESSAGES,
   type ChatGroup,
   type ChatMessage,
@@ -46,7 +58,12 @@ import {
 import { DEMO_MAGIC } from "@/fixtures/media";
 import { useT } from "@/i18n/locale-provider";
 import { EMPTY_TYPING, reactionChips, useChatState } from "@/lib/chat/chat-state";
+import { useChatMe } from "@/lib/chat/chat-identity";
+import { pickDocument, pickImage, type PickOutcome } from "@/lib/chat/device-media";
+import { chatLiveModeSync, liveChat } from "@/lib/chat/live-chat";
 import { uploadMedia, type MediaPick } from "@/lib/chat/media-pipeline";
+import { receiptState } from "@/lib/chat/receipts";
+import { VoiceRecordingSession, type VoiceSessionHandle } from "@/lib/chat/voice-recorder";
 import {
   firstUnreadId,
   isSameDay,
@@ -54,6 +71,7 @@ import {
   sortMessagesAsc,
 } from "@/lib/chat/message-utils";
 import {
+  chatKeys,
   useChatHistory,
   useDeleteMessage,
   useEditMessage,
@@ -64,13 +82,12 @@ import {
 import { cn } from "@/lib/utils";
 import { motion } from "@/theme/tokens";
 
-const ME = DEMO_ME.userId;
 /** Show the jump-to-latest button once the reader is this far (pt) above the newest message. */
 const JUMP_AFTER = 300;
 const HIGHLIGHT_MS = 2_000;
 
 type SendInput = {
-  kind: "text" | "image" | "pdf" | "voice" | "sticker";
+  kind: "text" | "image" | "pdf" | "doc" | "sheet" | "csv" | "voice" | "sticker";
   body?: string;
   mediaAssetId?: string;
   stickerId?: string;
@@ -105,6 +122,12 @@ export function GroupChatScreen({
 }) {
   const t = useT();
   const toast = useToast();
+  const queryClient = useQueryClient();
+  // "Me" is the signed-in account in live sessions; the demo teacher on fixtures.
+  const me = useChatMe();
+  const ME = me.userId;
+  const live = chatLiveModeSync();
+  const voiceSession = useRef<VoiceSessionHandle>(null);
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const history = useChatHistory(groupId);
@@ -132,6 +155,8 @@ export function GroupChatScreen({
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [focus, setFocus] = useState<{ message: ChatMessage; anchor: Anchor } | null>(null);
   const [infoMessage, setInfoMessage] = useState<ChatMessage | null>(null);
+  const [forwardSource, setForwardSource] = useState<ChatMessage | null>(null);
+  const [forwarding, setForwarding] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [activePin, setActivePin] = useState(0);
@@ -147,10 +172,12 @@ export function GroupChatScreen({
   const readOnly = group?.status === "archived" || group?.status === "pending_approval";
 
   const messages = useMemo(() => sortMessagesAsc(history.data?.data ?? []), [history.data]);
+  const readUpTo = history.data?.readUpTo;
+  const deliveredUpTo = history.data?.deliveredUpTo;
   const byId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const unreadMarker = useMemo(
     () => (showUnread ? firstUnreadId(messages, unreadAtOpen, ME) : null),
-    [messages, unreadAtOpen, showUnread],
+    [messages, unreadAtOpen, showUnread, ME],
   );
 
   // History rows + optimistic sends not yet in history, newest first for the inverted list.
@@ -163,7 +190,10 @@ export function GroupChatScreen({
       message,
       optimistic: false,
       sendState:
-        message.senderId !== ME ? undefined : (tracked.get(message.clientMsgId)?.state ?? "seen"),
+        message.senderId !== ME
+          ? undefined
+          : (tracked.get(message.clientMsgId)?.state ??
+            (live ? receiptState(message.createdAt, readUpTo, deliveredUpTo) : "seen")),
     }));
     const pending: Row[] = [...tracked.values()]
       .filter((o) => !seen.has(o.clientMsgId))
@@ -174,7 +204,7 @@ export function GroupChatScreen({
           id: o.clientMsgId,
           groupId,
           senderId: ME,
-          senderName: DEMO_ME.name,
+          senderName: me.name,
           kind: o.input.kind,
           ...(o.input.kind === "text" ? { body: o.input.body } : {}),
           ...(o.input.kind === "sticker" ? { stickerId: o.input.stickerId } : {}),
@@ -191,7 +221,7 @@ export function GroupChatScreen({
     return [...fromHistory, ...pending].reverse();
     // previewOf is stable per locale via t; byId covers quoted messages.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, outgoing, groupId, byId]);
+  }, [messages, outgoing, groupId, byId, ME, live, readUpTo, deliveredUpTo]);
 
   const pins = useMemo(
     () =>
@@ -206,7 +236,7 @@ export function GroupChatScreen({
     return Object.keys(typing)
       .filter((id) => id !== ME)
       .map((userId) => ({ userId, name: names.get(userId) ?? title }));
-  }, [typing, messages, title]);
+  }, [typing, messages, title, ME]);
 
   function previewOf(message: ChatMessage | undefined): string {
     if (!message) return "…";
@@ -214,6 +244,7 @@ export function GroupChatScreen({
     return messagePreview(message, {
       image: t("chat.preview.image"),
       pdf: t("chat.composer.attach_pdf"),
+      document: t("chat.preview.document"),
       voice: t("chat.preview.voice"),
       sticker: t("chat.preview.sticker"),
     });
@@ -286,10 +317,42 @@ export function GroupChatScreen({
   const pickMedia = (pick: MediaPick) => {
     void uploadMedia(pick)
       .then((ref) => {
-        doSend({ kind: ref.kind, mediaAssetId: ref.assetId });
+        // slides never come from the chat pickers; anything Office-like sends as a document.
+        doSend({ kind: ref.kind === "slides" ? "doc" : ref.kind, mediaAssetId: ref.assetId });
       })
       .catch(() => {
         toast({ title: t("chat.media.upload_failed"), variant: "error" });
+      });
+  };
+
+  // Live sessions: real files from the system pickers → Cloudflare R2 (demo keeps fixtures).
+  const sendPicked = (outcome: PickOutcome) => {
+    if (outcome.ok) {
+      pickMedia(outcome.pick);
+      return;
+    }
+    if (outcome.reason === "too_large") {
+      toast({ title: t("chat.media.file_too_large"), variant: "warning" });
+    } else if (outcome.reason === "unsupported") {
+      toast({ title: t("chat.media.unsupported"), variant: "warning" });
+    }
+  };
+
+  const failPick = () => {
+    toast({ title: t("chat.media.upload_failed"), variant: "error" });
+  };
+
+  // Reactions are server state in live sessions (everyone sees them); local on fixtures.
+  const reactTo = (message: ChatMessage, emoji: string) => {
+    if (!live) {
+      toggleReaction(message.id, emoji);
+      return;
+    }
+    void liveChat
+      .toggleReaction(message.id, emoji)
+      .then(() => queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) }))
+      .catch(() => {
+        toast({ title: t("common.state.error_title"), variant: "error" });
       });
   };
 
@@ -317,6 +380,25 @@ export function GroupChatScreen({
     afterMenu(() => {
       setFocusKey((n) => n + 1);
     });
+  };
+
+  // WhatsApp forward: copies into the picked chats; the api re-checks every target.
+  const forwardTo = (targetGroupIds: string[]) => {
+    const source = forwardSource;
+    if (!source) return;
+    setForwarding(true);
+    forwardChatMessage(source.id, targetGroupIds)
+      .then((count) => {
+        setForwardSource(null);
+        toast({ title: t("chat.forward.done", { count }), variant: "success" });
+        void queryClient.invalidateQueries({ queryKey: chatKeys.groups });
+      })
+      .catch(() => {
+        toast({ title: t("chat.forward.failed"), variant: "error" });
+      })
+      .finally(() => {
+        setForwarding(false);
+      });
   };
 
   const togglePin = (message: ChatMessage) => {
@@ -357,6 +439,16 @@ export function GroupChatScreen({
         icon: Reply,
         onPress: () => {
           startReply(message);
+        },
+      },
+      {
+        key: "forward",
+        label: t("chat.actions.forward"),
+        icon: Forward,
+        onPress: () => {
+          afterMenu(() => {
+            setForwardSource(message);
+          });
         },
       },
     ];
@@ -481,7 +573,7 @@ export function GroupChatScreen({
           });
         }}
         onToggleReaction={(m, emoji) => {
-          toggleReaction(m.id, emoji);
+          reactTo(m, emoji);
         }}
         onPressReply={jumpTo}
         onRetry={retry}
@@ -548,6 +640,7 @@ export function GroupChatScreen({
       {/* Overlap-based padding: safe whether or not Android resizes the window (edge-to-edge). */}
       <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View className="flex-1 bg-muted">
+          <ChatWallpaper />
           {history.isLoading ? (
             <View className="flex-1 justify-end gap-3 p-4">
               {["w-3/5", "w-4/5", "w-2/3", "w-1/2"].map((w, i) => (
@@ -647,13 +740,13 @@ export function GroupChatScreen({
         reactions={Boolean(focusMessage && !focusMessage.deletedAt && !focusRow?.optimistic)}
         selectedEmojis={
           focusMessage
-            ? reactionChips(reactions, focusMessage.id)
-                .filter((chip) => chip.mine)
+            ? (focusMessage.reactions ?? reactionChips(reactions, focusMessage.id))
+                .filter((chip) => "mine" in chip && chip.mine === true)
                 .map((chip) => chip.emoji)
             : []
         }
         onReact={(emoji) => {
-          if (focusMessage) toggleReaction(focusMessage.id, emoji);
+          if (focusMessage) reactTo(focusMessage, emoji);
         }}
         onClose={() => {
           setFocus(null);
@@ -663,6 +756,10 @@ export function GroupChatScreen({
         open={attachOpen}
         onOpenChange={setAttachOpen}
         onPickImage={() => {
+          if (live) {
+            void pickImage().then(sendPicked).catch(failPick);
+            return;
+          }
           pickMedia({
             kind: "image",
             headerBytes: DEMO_MAGIC.jpeg,
@@ -673,6 +770,10 @@ export function GroupChatScreen({
           });
         }}
         onPickPdf={() => {
+          if (live) {
+            void pickDocument().then(sendPicked).catch(failPick);
+            return;
+          }
           pickMedia({
             kind: "pdf",
             headerBytes: DEMO_MAGIC.pdf,
@@ -694,12 +795,50 @@ export function GroupChatScreen({
           doSend({ kind: "sticker", stickerId });
         }}
       />
+      {live && voiceOpen ? (
+        <VoiceRecordingSession
+          ref={voiceSession}
+          onDenied={() => {
+            setVoiceOpen(false);
+            toast({ title: t("chat.voice.mic_denied"), variant: "warning" });
+          }}
+          onFailed={() => {
+            setVoiceOpen(false);
+            failPick();
+          }}
+        />
+      ) : null}
       <VoiceRecorderSheet
         visible={voiceOpen}
         onClose={() => {
+          void voiceSession.current?.cancel();
           setVoiceOpen(false);
         }}
         onSend={(durationMs) => {
+          if (live) {
+            // Real voice note: stop the recorder, then stream the .m4a to R2.
+            const session = voiceSession.current;
+            void (session ? session.finish() : Promise.resolve(null))
+              .then((note) => {
+                setVoiceOpen(false);
+                if (!note) return;
+                if (note.durationMs > 300_000) {
+                  toast({ title: t("chat.voice.too_long"), variant: "warning" });
+                  return;
+                }
+                pickMedia({
+                  kind: "voice",
+                  uri: note.uri,
+                  headerBytes: new Uint8Array(0),
+                  sizeBytes: 1,
+                  mime: "audio/mp4",
+                  fileName: "voice-note.m4a",
+                  durationMs: Math.round(note.durationMs),
+                });
+              })
+              .catch(failPick);
+            return;
+          }
           setVoiceOpen(false);
           if (durationMs > 300_000) {
             toast({ title: t("chat.voice.too_long"), variant: "warning" });
@@ -712,6 +851,15 @@ export function GroupChatScreen({
             durationMs,
           });
         }}
+      />
+      <ForwardSheet
+        message={forwardSource}
+        open={Boolean(forwardSource)}
+        sending={forwarding}
+        onOpenChange={(open) => {
+          if (!open) setForwardSource(null);
+        }}
+        onSend={forwardTo}
       />
       <MessageInfoSheet
         message={infoMessage}

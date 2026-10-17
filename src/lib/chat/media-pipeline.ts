@@ -4,9 +4,11 @@
 // `expo-image-manipulator`/`expo-av` steps in — no screen changes (05 §3/§4).
 import { ChatFixtureError } from "@/fixtures/chat-error";
 import { mediaFixtures, type ChatMediaRef } from "@/fixtures/media";
+import { chatLiveActive, openMediaUrlLive, uploadMediaLive } from "@/lib/chat/live-chat";
 
 export type MediaPick = {
-  kind: "image" | "pdf" | "voice";
+  /** R2 kinds (owner 2026-10-17: images, PDF, Word, Excel, CSV, voice notes). */
+  kind: "image" | "pdf" | "voice" | "doc" | "sheet" | "csv";
   /** Bytes the (simulated) device file starts with — the sniff decides at confirm. */
   headerBytes: Uint8Array;
   sizeBytes: number;
@@ -14,6 +16,11 @@ export type MediaPick = {
   width?: number;
   height?: number;
   durationMs?: number;
+  /** Live sessions: the local file (picker/recorder) streamed to the presigned R2 URL. */
+  uri?: string;
+  /** Live sessions without a file URI (tests): the full bytes. Fixtures simulate instead. */
+  bytes?: Uint8Array;
+  mime?: string;
 };
 
 /**
@@ -21,6 +28,7 @@ export type MediaPick = {
  * reference a message send requires (INV-6: only `confirmed` assets are referencable).
  */
 export async function uploadMedia(pick: MediaPick): Promise<ChatMediaRef> {
+  if (await chatLiveActive()) return uploadMediaLive(pick);
   const presign = await mediaFixtures.presign({
     kind: pick.kind,
     sizeBytes: pick.sizeBytes,
@@ -47,6 +55,7 @@ export async function uploadMedia(pick: MediaPick): Promise<ChatMediaRef> {
 
 /** Opens the viewer for an asset: short-lived URL (COM-US-005); archived → rehydrate flag. */
 export async function openMediaUrl(assetId: string): Promise<string> {
+  if (await chatLiveActive()) return openMediaUrlLive(assetId);
   const result = await mediaFixtures.downloadUrl(assetId);
   if (result.rehydrated) {
     // "Recovering attachment…" happens while this resolves; the URL is only usable once back.
