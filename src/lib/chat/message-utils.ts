@@ -60,7 +60,15 @@ export function documentBadge(message: ChatMessage, pdfLabel: string): string {
 /** One-line preview of a message for reply quotes and the pinned bar. */
 export function messagePreview(
   message: ChatMessage,
-  labels: { image: string; pdf: string; voice: string; sticker: string; document?: string },
+  labels: {
+    image: string;
+    pdf: string;
+    voice: string;
+    sticker: string;
+    document?: string;
+    gif?: string;
+    poll?: string;
+  },
 ): string {
   switch (message.kind) {
     case "image":
@@ -75,6 +83,10 @@ export function messagePreview(
       return labels.voice;
     case "sticker":
       return labels.sticker;
+    case "gif":
+      return labels.gif ?? "GIF";
+    case "poll":
+      return message.poll?.question ?? labels.poll ?? "";
     default:
       return message.body ?? "";
   }

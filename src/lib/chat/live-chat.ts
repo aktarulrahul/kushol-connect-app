@@ -21,13 +21,17 @@ import type {
   ChatMessageSendInput,
   ChatRealtimeEvent,
   ChatGroupCreateInput,
+  ChatGroupUpdateInput,
+  ChatRosterMember,
   MessageInfo,
   MessageReceipt,
   MessageRequest,
   MessageRequestDecision,
   MessageRequestInput,
+  StarredPage,
 } from "@/fixtures/chat";
 import type { ChatMediaRef } from "@/fixtures/media";
+import type { KlipyConfig } from "@/lib/chat/klipy";
 import type { MediaPick } from "@/lib/chat/media-pipeline";
 
 type EventListener = (event: ChatRealtimeEvent) => void;
@@ -105,8 +109,17 @@ async function call<T>(
 // ─── REST surface ────────────────────────────────────────────────────────────────────────────
 
 function toSendBody(input: ChatMessageSendInput): Schemas["ChatMessageSendInput"] {
-  // Stickers are a Stage-2 UI affordance the spec does not carry (G-7) — live sends the emoji
-  // as text so the picker keeps working without an OpenAPI change.
+  // KLIPY GIFs/stickers (owner 2026-10-18) carry the KLIPY reference; the api checks the host.
+  if ((input.kind === "gif" || input.kind === "sticker") && input.klipy) {
+    return {
+      groupId: input.groupId,
+      kind: input.kind,
+      klipy: input.klipy,
+      clientMsgId: input.clientMsgId,
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    };
+  }
+  // The emoji sticker set (KLIPY off / demo) has no api kind — it goes out as the emoji text.
   if (input.kind === "sticker") {
     return {
       groupId: input.groupId,
@@ -117,8 +130,14 @@ function toSendBody(input: ChatMessageSendInput): Schemas["ChatMessageSendInput"
     };
   }
   if (input.kind === "poll") {
-    // Polls are composed on the web console; the app seam cannot carry the payload.
-    throw new ChatFixtureError("VALIDATION_FAILED", "polls are composed on the web console");
+    if (!input.poll) throw new ChatFixtureError("VALIDATION_FAILED", "poll payload missing");
+    return {
+      groupId: input.groupId,
+      kind: "poll",
+      poll: input.poll,
+      clientMsgId: input.clientMsgId,
+      ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    };
   }
   return {
     groupId: input.groupId,
@@ -127,6 +146,9 @@ function toSendBody(input: ChatMessageSendInput): Schemas["ChatMessageSendInput"
     ...(input.mediaAssetId ? { mediaAssetId: input.mediaAssetId } : {}),
     clientMsgId: input.clientMsgId,
     ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    // @mentions (owner 2026-10-19): text and captioned attachments only; every id must be a
+    // current member (VALIDATION_FAILED otherwise), ≤ 50 distinct.
+    ...(input.mentions?.length ? { mentions: input.mentions } : {}),
   };
 }
 
@@ -190,13 +212,25 @@ export const liveChat = {
     return data.data;
   },
 
-  /** G-7 (`TODO: Confirm`): no OpenAPI path — the action stays disabled in live sessions. */
-  async editChatMessage(messageId: string, body: string): Promise<ChatMessage> {
-    const res = await liveAuth().PATCH("/api/v1/chat/messages/{messageId}", {
-      params: { path: { messageId } },
-      body: { body },
-    });
-    return res.data as unknown as ChatMessage;
+  /**
+   * Author edit (PATCH semantics for @mentions, owner 2026-10-19): `mentions` absent keeps the
+   * stored ones, a list replaces them (`[]` clears). The answer is the author's view without the
+   * per-viewer `starred` flag — callers refetch history instead of merging it.
+   */
+  async editChatMessage(
+    messageId: string,
+    body: string,
+    mentions?: string[],
+  ): Promise<ChatMessage> {
+    const message = await call(
+      () =>
+        liveAuth().PATCH("/api/v1/chat/messages/{messageId}", {
+          params: { path: { messageId } },
+          body: mentions === undefined ? { body } : { body, mentions },
+        }),
+      "VALIDATION_FAILED",
+    );
+    return normalizeMessage(message);
   },
 
   /** G-7 (`TODO: Confirm`): no OpenAPI path — see `editChatMessage`. */
@@ -207,6 +241,65 @@ export const liveChat = {
       body,
     });
     return result.then(({ data }) => data as unknown as ChatMessage);
+  },
+
+  /** Stars (bookmarks) one message — private to the viewer: no event, no push (2026-10-19). */
+  async starChatMessage(
+    messageId: string,
+  ): Promise<{ starred: boolean; starredAt?: string }> {
+    return call(
+      () =>
+        liveAuth().PUT("/api/v1/chat/messages/{messageId}/star", {
+          params: { path: { messageId } },
+        }),
+      "NOT_FOUND",
+    );
+  },
+
+  /** Removes the viewer's star (idempotent). */
+  async unstarChatMessage(messageId: string): Promise<{ starred: boolean }> {
+    return call(
+      () =>
+        liveAuth().DELETE("/api/v1/chat/messages/{messageId}/star", {
+          params: { path: { messageId } },
+        }),
+      "NOT_FOUND",
+    );
+  },
+
+  /** The viewer's starred messages (newest star first; `groupId` scopes, `before` pages). */
+  async listStarredChatMessages(
+    params: { groupId?: string; before?: string; limit?: number } = {},
+  ): Promise<StarredPage> {
+    const page = await call(
+      () =>
+        liveAuth().GET("/api/v1/chat/starred", {
+          params: {
+            query: {
+              ...(params.groupId ? { groupId: params.groupId } : {}),
+              ...(params.before ? { before: params.before } : {}),
+              ...(params.limit ? { limit: params.limit } : {}),
+            },
+          },
+        }),
+      "FORBIDDEN",
+    );
+    return {
+      data: page.data,
+      ...(page.nextBefore ? { nextBefore: page.nextBefore } : {}),
+    };
+  },
+
+  /** The room roster (@mention picker + name resolution); includes the caller. */
+  async listChatGroupMembers(groupId: string): Promise<ChatRosterMember[]> {
+    const data = await call(
+      () =>
+        liveAuth().GET("/api/v1/chat/groups/{groupId}/members", {
+          params: { path: { groupId } },
+        }),
+      "NOT_FOUND",
+    );
+    return data.data.map((m) => ({ userId: m.userId, name: m.name }));
   },
 
   /** "Message info": read by / delivered to (api order), members not reached, reactions. */
@@ -313,7 +406,38 @@ export const liveChat = {
     return call(() => liveAuth().POST("/api/v1/chat/groups", { body: input }), "VALIDATION_FAILED");
   },
 
+  /** Group settings (owner 2026-10-18): only the changed fields; "" clears description/photo. */
+  async updateChatGroup(groupId: string, input: ChatGroupUpdateInput): Promise<ChatGroup> {
+    return call(
+      () =>
+        liveAuth().PATCH("/api/v1/chat/groups/{groupId}", {
+          params: { path: { groupId } },
+          body: input,
+        }),
+      "VALIDATION_FAILED",
+    );
+  },
+
   /** WhatsApp reaction toggle (server-side; the bubble renders the returned aggregate). */
+  /** The caller's KLIPY app key + customer id (the device calls KLIPY itself). */
+  async klipyConfig(): Promise<KlipyConfig> {
+    const result = await call(() => liveAuth().GET("/api/v1/chat/klipy"), "VALIDATION_FAILED");
+    return result.data;
+  },
+
+  /** Vote / withdraw on a poll option (single-choice polls withdraw on a repeat tap). */
+  async votePoll(messageId: string, optionIndex: number): Promise<ChatMessage> {
+    const message = await call(
+      () =>
+        liveAuth().POST("/api/v1/chat/messages/{messageId}/poll/vote", {
+          params: { path: { messageId } },
+          body: { optionIndex },
+        }),
+      "VALIDATION_FAILED",
+    );
+    return normalizeMessage(message);
+  },
+
   async toggleReaction(messageId: string, emoji: string): Promise<ChatMessage> {
     const message = await call(
       () =>
@@ -416,6 +540,27 @@ export function mapEvent(raw: WsServerEvent): ChatRealtimeEvent | null {
 }
 
 /** The gateway emits the OpenAPI message DTO; the app's seam type adds fixture-only optionals. */
+function isPoll(value: unknown): value is NonNullable<ChatMessage["poll"]> {
+  const poll = value as ChatMessage["poll"];
+  return (
+    typeof poll === "object" &&
+    typeof poll.question === "string" &&
+    Array.isArray(poll.options) &&
+    poll.options.every((o) => typeof o.text === "string" && typeof o.votes === "number")
+  );
+}
+
+function isKlipy(value: unknown): value is NonNullable<ChatMessage["klipy"]> {
+  const klipy = value as ChatMessage["klipy"];
+  return (
+    typeof klipy === "object" &&
+    typeof klipy.slug === "string" &&
+    typeof klipy.url === "string" &&
+    typeof klipy.width === "number" &&
+    typeof klipy.height === "number"
+  );
+}
+
 function normalizeMessage(m: Record<string, unknown>): ChatMessage {
   const media =
     typeof m.media === "object" && m.media !== null ? (m.media as ChatMessage["media"]) : undefined;
@@ -438,6 +583,13 @@ function normalizeMessage(m: Record<string, unknown>): ChatMessage {
     ...(typeof m.deletedAt === "string" ? { deletedAt: m.deletedAt } : {}),
     ...(typeof m.editedAt === "string" ? { editedAt: m.editedAt } : {}),
     ...(typeof m.pinnedAt === "string" ? { pinnedAt: m.pinnedAt } : {}),
+    ...(isPoll(m.poll) ? { poll: m.poll } : {}),
+    ...(isKlipy(m.klipy) ? { klipy: m.klipy } : {}),
+    // @mentions are the same for every member and ride every frame (absent ⇒ none). `starred` is
+    // per-viewer and never trusted from a frame — it is not copied; the cache keeps its own.
+    ...(Array.isArray(m.mentions) && m.mentions.length > 0
+      ? { mentions: m.mentions.filter((id): id is string => typeof id === "string") }
+      : {}),
     // Reactions on a WS frame carry the actor's `mine` — drop it; the next REST read restores it.
     ...(Array.isArray(m.reactions)
       ? {

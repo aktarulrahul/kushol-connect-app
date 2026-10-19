@@ -2,13 +2,16 @@
 // circle (share sheet: image · PDF · sticker) beside a card field that is a pill on one line and
 // rounded-2xl when it grows, the sticker/emoji button and a teal send circle inside the field —
 // the send circle turns into the mic (COM-AP-007) while the field is empty. Above it: the reply
-// quote (author + preview) or the "Editing message" banner. Read-only rooms show a lock line.
+// quote (author + preview) or the "Editing message" banner, and the @mention suggestions while an
+// "@query" is typed (groups, owner 2026-10-19). Read-only rooms show a lock line.
 // The text is controlled by the screen so the chat list can show it as a draft.
 import { useEffect, useRef, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import Animated, { FadeInDown, FadeOutDown, ReduceMotion } from "react-native-reanimated";
 import {
   ArrowUp,
+  BarChart3,
+  Clapperboard,
   FileText,
   Image as ImageIcon,
   Lock,
@@ -21,11 +24,18 @@ import {
 import type { LucideIcon } from "lucide-react-native";
 
 import { toBnDigits } from "@/components/chat/group-row";
+import { MentionSuggestions } from "@/components/chat/mention-suggestions";
 import { BottomActionBar } from "@/components/ui/bottom-action-bar";
 import { Icon } from "@/components/ui/icon";
 import { Sheet } from "@/components/ui/sheet";
 import { Text } from "@/components/ui/text";
 import { useT } from "@/i18n/locale-provider";
+import {
+  filterMentionCandidates,
+  insertMention,
+  mentionQueryAt,
+  type MentionMember,
+} from "@/lib/chat/mentions";
 import { cn } from "@/lib/utils";
 import { color, motion } from "@/theme/tokens";
 
@@ -47,6 +57,9 @@ export function Composer({
   onCancelEdit,
   focusKey = 0,
   bottomInset = 0,
+  mentionCandidates,
+  myUserId,
+  onMentionPick,
 }: {
   value: string;
   onChangeText: (text: string) => void;
@@ -65,15 +78,51 @@ export function Composer({
   focusKey?: number;
   /** Safe-area bottom while the keyboard is down. */
   bottomInset?: number;
+  /**
+   * @mentions (owner 2026-10-19): the group roster. An "@query" at the caret opens the
+   * suggestion strip above the field; DMs pass nothing (no picker).
+   */
+  mentionCandidates?: ReadonlyArray<MentionMember> | undefined;
+  /** The viewer — never offered as a suggestion. */
+  myUserId?: string;
+  /** A picked member (the text already holds "@Full Name"); the screen records the id. */
+  onMentionPick?: (member: MentionMember) => void;
 }) {
   const t = useT();
   const [multiline, setMultiline] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  // Caret from onSelectionChange; null right after a text change (until the next selection
+  // event) means "at the end", which is where typing happens.
+  const [caret, setCaret] = useState<number | null>(null);
   const body = value.trim();
 
   useEffect(() => {
     if (focusKey > 0) inputRef.current?.focus();
   }, [focusKey]);
+
+  const mentionAt =
+    mentionCandidates && mentionCandidates.length > 0
+      ? mentionQueryAt(value, caret ?? value.length)
+      : null;
+  // A trailing space ends the lookup ("@Karim Ahmed " after a pick, or a finished word).
+  const suggestions =
+    mentionAt && !/\s$/.test(mentionAt.query)
+      ? filterMentionCandidates(mentionCandidates ?? [], mentionAt.query, myUserId)
+      : [];
+
+  const handleTextChange = (text: string) => {
+    setCaret(null);
+    onChangeText(text);
+  };
+
+  const pickMention = (member: MentionMember) => {
+    if (!mentionAt) return;
+    const next = insertMention(value, mentionAt, member.name);
+    onChangeText(next.text);
+    setCaret(next.caret);
+    onMentionPick?.(member);
+    inputRef.current?.focus();
+  };
 
   if (disabled) {
     return (
@@ -133,6 +182,8 @@ export function Composer({
           </Pressable>
         </Animated.View>
       ) : null}
+      {/* @mention suggestions (WhatsApp): open while an "@query" is typed at the caret */}
+      <MentionSuggestions members={suggestions} onPick={pickMention} />
       <View className="flex-row items-end gap-3">
         {editing ? null : (
           <Pressable
@@ -162,7 +213,10 @@ export function Composer({
             multiline
             maxLength={4000}
             value={value}
-            onChangeText={onChangeText}
+            onChangeText={handleTextChange}
+            onSelectionChange={(event) => {
+              setCaret(event.nativeEvent.selection.end);
+            }}
             className="max-h-32 flex-1 py-1 text-sm text-foreground"
           />
           <View className="flex-row items-center gap-1.5 self-end">
@@ -217,12 +271,17 @@ export function AttachSheet({
   onPickImage,
   onPickPdf,
   onPickSticker,
+  onPickGif,
+  onPickPoll,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPickImage: () => void;
   onPickPdf: () => void;
   onPickSticker?: () => void;
+  /** KLIPY GIFs (only when the api has a KLIPY key). */
+  onPickGif?: () => void;
+  onPickPoll?: () => void;
 }) {
   const t = useT();
   const tiles: { key: string; label: string; icon: LucideIcon; onPress: () => void }[] = [
@@ -236,6 +295,26 @@ export function AttachSheet({
             label: t("chat.composer.attach_sticker"),
             icon: Smile,
             onPress: onPickSticker,
+          },
+        ]
+      : []),
+    ...(onPickGif
+      ? [
+          {
+            key: "gif",
+            label: t("chat.composer.attach_gif"),
+            icon: Clapperboard,
+            onPress: onPickGif,
+          },
+        ]
+      : []),
+    ...(onPickPoll
+      ? [
+          {
+            key: "poll",
+            label: t("chat.composer.attach_poll"),
+            icon: BarChart3,
+            onPress: onPickPoll,
           },
         ]
       : []),

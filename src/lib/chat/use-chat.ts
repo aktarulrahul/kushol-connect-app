@@ -1,7 +1,13 @@
 // Chat query hooks (COM-AP-001/003): TanStack Query reads over the Stage-2 seam + optimistic
 // send/read/delete mutations. `message.new`/`message.ack` events land through realtime.ts; this
 // module owns everything request-shaped.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 
 import {
   type ChatFixtureError,
@@ -12,16 +18,22 @@ import {
   declineMessageRequest,
   deleteChatMessage,
   editChatMessage,
+  listChatGroupMembers,
   listChatGroups,
   listChatMessages,
   listMessageRequests,
+  listStarredChatMessages,
   markChatRead,
   openDm,
   sendChatMessage,
   setChatMessagePinned,
+  starChatMessage,
+  unstarChatMessage,
   type ChatMessage,
+  type StarredPage,
 } from "@/fixtures/chat";
 import { useChatState, type OutgoingMessage } from "@/lib/chat/chat-state";
+import { dropStarredEntry, setStarredInPage } from "@/lib/chat/starred";
 import { uuidv4 } from "@/lib/chat/uuid";
 
 export const chatKeys = {
@@ -29,6 +41,8 @@ export const chatKeys = {
   history: (groupId: string) => ["chat", "messages", groupId] as const,
   requests: ["chat", "requests"] as const,
   dm: (peerId: string) => ["chat", "dm", peerId] as const,
+  starred: (groupId: string) => ["chat", "starred", groupId] as const,
+  members: (groupId: string) => ["chat", "members", groupId] as const,
 };
 
 export function useChatGroups() {
@@ -75,13 +89,9 @@ export function useSendMessage(groupId: string) {
   const { trackSend, setSendState, dropSend, connection } = useChatState();
 
   return useMutation({
-    mutationFn: async (input: {
-      kind: ChatMessageSendInput["kind"];
-      body?: string;
-      mediaAssetId?: string;
-      stickerId?: string;
-      replyTo?: string;
-    }): Promise<{ clientMsgId: string; queued: boolean }> => {
+    mutationFn: async (
+      input: Omit<ChatMessageSendInput, "groupId" | "clientMsgId">,
+    ): Promise<{ clientMsgId: string; queued: boolean }> => {
       const clientMsgId = uuidv4();
       const outgoing: OutgoingMessage = {
         clientMsgId,
@@ -157,12 +167,22 @@ export function useDeleteMessage(groupId: string) {
   });
 }
 
-/** Fixture-only edit of an own text message (Spartens parity — 08-gaps G-7). */
+/**
+ * Edit of an own text message. `mentions` (owner 2026-10-19): omit to keep the stored @mentions,
+ * pass a list to replace them (`[]` clears).
+ */
 export function useEditMessage(groupId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ messageId, body }: { messageId: string; body: string }) =>
-      editChatMessage(messageId, body),
+    mutationFn: ({
+      messageId,
+      body,
+      mentions,
+    }: {
+      messageId: string;
+      body: string;
+      mentions?: string[] | undefined;
+    }) => editChatMessage(messageId, body, mentions),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) });
       void queryClient.invalidateQueries({ queryKey: chatKeys.groups });
@@ -179,6 +199,67 @@ export function usePinMessage(groupId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) });
     },
+  });
+}
+
+type StarredData = InfiniteData<StarredPage>;
+
+/**
+ * Star / unstar one message (private bookmark, owner 2026-10-19). `starred` is the state to set.
+ * The history bubble and the starred list update optimistically (rolled back on failure); the
+ * starred list refetches afterwards. Stars fan out nothing, so no event will refresh them.
+ */
+export function useStarMessage(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, starred }: { messageId: string; starred: boolean }) =>
+      starred ? starChatMessage(messageId) : unstarChatMessage(messageId),
+    onMutate: async ({ messageId, starred }) => {
+      await queryClient.cancelQueries({ queryKey: chatKeys.history(groupId) });
+      const history = queryClient.getQueryData<HistoryPage>(chatKeys.history(groupId));
+      const list = queryClient.getQueryData<StarredData>(chatKeys.starred(groupId));
+      queryClient.setQueryData<HistoryPage>(chatKeys.history(groupId), (page) =>
+        setStarredInPage(page, messageId, starred),
+      );
+      if (!starred) {
+        queryClient.setQueryData<StarredData>(chatKeys.starred(groupId), (data) =>
+          dropStarredEntry(data, messageId),
+        );
+      }
+      return { history, list };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.history) queryClient.setQueryData(chatKeys.history(groupId), context.history);
+      if (context?.list) queryClient.setQueryData(chatKeys.starred(groupId), context.list);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: chatKeys.starred(groupId) });
+    },
+  });
+}
+
+/**
+ * The viewer's starred messages in one chat (the chat-info "Starred messages" sheet): newest
+ * star first, older pages through `nextBefore`.
+ */
+export function useStarredMessages(groupId: string, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.starred(groupId),
+    queryFn: ({ pageParam }) =>
+      listStarredChatMessages(pageParam ? { groupId, before: pageParam } : { groupId }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last: StarredPage) => last.nextBefore,
+    enabled,
+  });
+}
+
+/** The room roster — the @mention picker and name resolution (owner 2026-10-19). */
+export function useChatGroupMembers(groupId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: chatKeys.members(groupId),
+    queryFn: () => listChatGroupMembers(groupId),
+    enabled,
+    staleTime: 60_000,
   });
 }
 

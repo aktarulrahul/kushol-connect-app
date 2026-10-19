@@ -61,6 +61,8 @@ export type PreviewLabels = {
   voice: string;
   deleted: string;
   you: string;
+  gif?: string;
+  sticker?: string;
 };
 
 /**
@@ -96,6 +98,12 @@ export function listPreview(
       break;
     case "poll":
       body = `📊 ${text}`;
+      break;
+    case "gif":
+      body = `🎞️ ${labels.gif ?? "GIF"}`;
+      break;
+    case "sticker":
+      body = `💟 ${labels.sticker ?? "Sticker"}`;
       break;
     default:
       body = text;

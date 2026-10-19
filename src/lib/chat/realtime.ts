@@ -17,6 +17,8 @@ import {
 import { subscribeChatEvents, type ChatMessage } from "@/fixtures/chat";
 import { useChatState } from "@/lib/chat/chat-state";
 import { raiseHorizons } from "@/lib/chat/receipts";
+// Frames merge with the per-viewer rules: mentions absent ⇒ none, `starred` kept (2026-10-19).
+import { mergeRealtimeMessage } from "@/lib/chat/starred";
 import { chatKeys, type HistoryPage } from "@/lib/chat/use-chat";
 
 function appendMessage(queryClient: ReturnType<typeof useQueryClient>, message: ChatMessage): void {
@@ -30,7 +32,7 @@ function appendMessage(queryClient: ReturnType<typeof useQueryClient>, message: 
       return {
         ...page,
         data: exists
-          ? page.data.map((m) => (m.id === message.id ? { ...m, ...message } : m))
+          ? page.data.map((m) => (m.id === message.id ? mergeRealtimeMessage(m, message) : m))
           : [...page.data, message],
       };
     },
@@ -83,6 +85,7 @@ export function useChatRealtime(): void {
               kind: tracked.input.kind,
               ...(tracked.input.kind === "text" ? { body: tracked.input.body } : {}),
               ...(tracked.input.kind === "sticker" ? { stickerId: tracked.input.stickerId } : {}),
+              ...(tracked.input.mentions?.length ? { mentions: tracked.input.mentions } : {}),
               clientMsgId: event.clientMsgId,
               ...(tracked.input.replyTo
                 ? { replyTo: tracked.input.replyTo, replyPreview: undefined }
@@ -108,6 +111,8 @@ export function useChatRealtime(): void {
           void queryClient.invalidateQueries({
             queryKey: chatKeys.history(event.groupId),
           });
+          // A tombstone takes every member's star with it.
+          void queryClient.invalidateQueries({ queryKey: chatKeys.starred(event.groupId) });
           break;
         case "typing":
           markTyping(event.groupId, event.userId, event.state);
@@ -119,6 +124,8 @@ export function useChatRealtime(): void {
           // Added/removed, renamed, new DM: the list (and that room's history) refetch.
           void queryClient.invalidateQueries({ queryKey: chatKeys.groups });
           void queryClient.invalidateQueries({ queryKey: chatKeys.history(event.groupId) });
+          // …and the @mention roster (members joined/left).
+          void queryClient.invalidateQueries({ queryKey: chatKeys.members(event.groupId) });
           break;
       }
     });

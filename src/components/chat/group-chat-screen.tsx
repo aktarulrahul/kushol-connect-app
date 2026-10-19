@@ -1,11 +1,12 @@
 // Group / DM conversation (COM-AP-003..005, 010, 011, 016) in the Spartens channel language
 // (owner 2026-10-09): channel header (back · avatar + name · info), pinned-message bar, inverted
 // message list with day pills and the "N new unread" pill captured on open, swipe-to-reply,
-// long-press focus menu (reactions · reply · forward · edit · pin · info · delete), reply/edit banners,
-// typing pill, jump-to-latest button. Shared by /groups/[id] and /messages/[peerId] (05 §2.2).
+// long-press focus menu (reactions · reply · forward · star · edit · pin · info · delete), reply/edit banners,
+// typing pill, jump-to-latest button, @mentions in groups and the starred-messages sheet (owner
+// 2026-10-19). Shared by /groups/[id] and /messages/[peerId] (05 §2.2).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Keyboard, KeyboardAvoidingView, Platform, View } from "react-native";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import {
   CircleAlert,
@@ -15,11 +16,14 @@ import {
   Pin,
   PinOff,
   Reply,
+  Star,
+  StarOff,
   Trash2,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReducedMotion } from "react-native-reanimated";
 
+import { AttachmentCaptionSheet } from "@/components/chat/attachment-caption-sheet";
 import { ChannelHeader, ChatInfoSheet, PinnedBar } from "@/components/chat/channel-header";
 import { ChatWallpaper } from "@/components/chat/chat-wallpaper";
 import type { ChatAvatarKind } from "@/components/chat/chat-avatar";
@@ -34,6 +38,7 @@ import {
 import { AttachSheet, Composer, VoiceRecorderSheet } from "@/components/chat/composer";
 import type { Anchor } from "@/components/chat/focus-overlay";
 import { ForwardSheet } from "@/components/chat/forward-sheet";
+import { KlipyPickerSheet } from "@/components/chat/klipy-picker-sheet";
 import { MessageInfoSheet, StickerPickerSheet } from "@/components/chat/message-actions";
 import {
   MessageBubble,
@@ -41,6 +46,8 @@ import {
   type BubbleSendState,
 } from "@/components/chat/message-bubble";
 import { MessageFocusMenu, type MessageMenuAction } from "@/components/chat/message-menu";
+import { PollSheet } from "@/components/chat/poll-sheet";
+import { StarredMessagesSheet } from "@/components/chat/starred-sheet";
 import { SwipeToReply } from "@/components/chat/swipe-to-reply";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Icon } from "@/components/ui/icon";
@@ -48,10 +55,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import {
+  ChatFixtureError,
   chatFixtureFlags,
   DEMO_STICKERS,
   forwardChatMessage,
   MAX_PINNED_MESSAGES,
+  votePollMessage,
   type ChatGroup,
   type ChatMessage,
 } from "@/fixtures/chat";
@@ -60,9 +69,19 @@ import { useT } from "@/i18n/locale-provider";
 import { EMPTY_TYPING, reactionChips, useChatState } from "@/lib/chat/chat-state";
 import { useChatMe } from "@/lib/chat/chat-identity";
 import { pickDocument, pickImage, type PickOutcome } from "@/lib/chat/device-media";
+import { klipyShare, type KlipyKind, type KlipyMedia } from "@/lib/chat/klipy";
 import { chatLiveModeSync, liveChat } from "@/lib/chat/live-chat";
 import { uploadMedia, type MediaPick } from "@/lib/chat/media-pipeline";
+import {
+  collectMentionIds,
+  editMentions,
+  MAX_MENTIONS,
+  mentionedMembers,
+  mentionsViewer,
+  type MentionMember,
+} from "@/lib/chat/mentions";
 import { receiptState } from "@/lib/chat/receipts";
+import { starActionFor, starredEntries } from "@/lib/chat/starred";
 import { VoiceRecordingSession, type VoiceSessionHandle } from "@/lib/chat/voice-recorder";
 import {
   firstUnreadId,
@@ -77,6 +96,9 @@ import {
   useEditMessage,
   useMarkRead,
   usePinMessage,
+  useStarMessage,
+  useChatGroupMembers,
+  useStarredMessages,
   useSendMessage,
 } from "@/lib/chat/use-chat";
 import { cn } from "@/lib/utils";
@@ -87,10 +109,15 @@ const JUMP_AFTER = 300;
 const HIGHLIGHT_MS = 2_000;
 
 type SendInput = {
-  kind: "text" | "image" | "pdf" | "doc" | "sheet" | "csv" | "voice" | "sticker";
+  kind: "text" | "image" | "pdf" | "doc" | "sheet" | "csv" | "voice" | "sticker" | "gif" | "poll";
   body?: string;
   mediaAssetId?: string;
   stickerId?: string;
+  /** KLIPY GIF/sticker (owner 2026-10-18). */
+  klipy?: KlipyMedia;
+  poll?: { question: string; options: string[]; allowMultiple: boolean };
+  /** Tagged member ids (@mentions, owner 2026-10-19) — text messages only from the composer. */
+  mentions?: string[];
 };
 
 type Row = { message: ChatMessage; sendState?: BubbleSendState; optimistic: boolean };
@@ -136,6 +163,12 @@ export function GroupChatScreen({
   const deleteMessage = useDeleteMessage(groupId);
   const editMessage = useEditMessage(groupId);
   const pinMessage = usePinMessage(groupId);
+  const starMessage = useStarMessage(groupId);
+  // @mentions (owner 2026-10-19): the group roster feeds the composer suggestions and resolves
+  // mention ids to names in bubbles; picked members ride the next send/edit while their
+  // "@Full Name" is still in the text.
+  const roster = useChatGroupMembers(groupId, avatarKind !== "dm");
+  const pickedMentions = useRef<MentionMember[]>([]);
   const typing = useChatState((s) => s.typing[groupId]) ?? EMPTY_TYPING;
   const outgoing = useChatState((s) => s.outgoing);
   const connection = useChatState((s) => s.connection);
@@ -152,7 +185,12 @@ export function GroupChatScreen({
   const [unreadAtOpen] = useState(() => group?.unreadCount ?? 0);
   const [showUnread, setShowUnread] = useState(true);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [editing, setEditing] = useState<{
+    id: string;
+    text: string;
+    /** The stored @mentions when the edit began (PATCH keeps them unless the set changes). */
+    mentions?: string[] | undefined;
+  } | null>(null);
   const [focus, setFocus] = useState<{ message: ChatMessage; anchor: Anchor } | null>(null);
   const [infoMessage, setInfoMessage] = useState<ChatMessage | null>(null);
   const [forwardSource, setForwardSource] = useState<ChatMessage | null>(null);
@@ -166,6 +204,21 @@ export function GroupChatScreen({
   const [stickerOpen, setStickerOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  // Starred messages (owner 2026-10-19): the info row's count + the sheet share one query.
+  const [starredOpen, setStarredOpen] = useState(false);
+  const starredList = useStarredMessages(groupId, infoOpen || starredOpen);
+  // WhatsApp send preview: a picked photo/document waits here for its caption.
+  const [captionPick, setCaptionPick] = useState<MediaPick | null>(null);
+  const [klipyKind, setKlipyKind] = useState<KlipyKind | null>(null);
+  const [pollOpen, setPollOpen] = useState(false);
+  // KLIPY GIFs/stickers: the api hands out the app key; the device searches KLIPY itself.
+  const klipyConfig = useQuery({
+    queryKey: ["chat_klipy_config", ME],
+    queryFn: () => liveChat.klipyConfig(),
+    enabled: live,
+    staleTime: 30 * 60_000,
+  });
+  const klipy = klipyConfig.data?.enabled ? klipyConfig.data : null;
 
   const isGroup = avatarKind !== "dm";
   const moderator = isGroup && group !== undefined && group.myRole !== "member";
@@ -208,6 +261,18 @@ export function GroupChatScreen({
           kind: o.input.kind,
           ...(o.input.kind === "text" ? { body: o.input.body } : {}),
           ...(o.input.kind === "sticker" ? { stickerId: o.input.stickerId } : {}),
+          ...(o.input.klipy ? { klipy: o.input.klipy } : {}),
+          ...(o.input.poll
+            ? {
+                poll: {
+                  question: o.input.poll.question,
+                  options: o.input.poll.options.map((text) => ({ text, votes: 0 })),
+                  ...(o.input.poll.allowMultiple ? { allowMultiple: true } : {}),
+                },
+              }
+            : {}),
+          ...(o.input.body && o.input.kind !== "text" ? { body: o.input.body } : {}),
+          ...(o.input.mentions?.length ? { mentions: o.input.mentions } : {}),
           ...(o.input.replyTo
             ? {
                 replyTo: o.input.replyTo,
@@ -247,6 +312,8 @@ export function GroupChatScreen({
       document: t("chat.preview.document"),
       voice: t("chat.preview.voice"),
       sticker: t("chat.preview.sticker"),
+      gif: t("chat.preview.gif"),
+      poll: t("chat.preview.poll"),
     });
   }
 
@@ -295,18 +362,44 @@ export function GroupChatScreen({
     listRef.current?.scrollToOffset({ offset: 0, animated: !reducedMotion });
   };
 
-  const jumpTo = (messageId: string) => {
+  /** Scrolls to a loaded message and flashes it; false when it is not in the loaded window. */
+  const jumpTo = (messageId: string): boolean => {
     const index = rows.findIndex((row) => row.message.id === messageId);
-    if (index === -1) return;
+    if (index === -1) return false;
     setHighlighted(messageId);
     listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: !reducedMotion });
+    return true;
+  };
+
+  /**
+   * A send failed. When it tagged someone and the api said VALIDATION_FAILED, a mentioned member
+   * left the group: the red bubble would only fail again on retry, so it goes away, the text
+   * comes back into an empty composer and the roster refreshes (owner 2026-10-19).
+   */
+  const sendFailed = (input: { body?: string; mentions?: string[] }, error: unknown) => {
+    const mentionRefused =
+      (input.mentions?.length ?? 0) > 0 &&
+      error instanceof ChatFixtureError &&
+      error.code === "VALIDATION_FAILED";
+    if (!mentionRefused) {
+      toast({ title: t("chat.bubble.failed"), variant: "error" });
+      return;
+    }
+    const state = useChatState.getState();
+    const failed = [...state.outgoing]
+      .reverse()
+      .find((o) => o.groupId === groupId && o.input.body === input.body && o.state === "failed");
+    if (failed) dropSend(failed.clientMsgId);
+    if (input.body && !state.drafts[groupId]) setDraft(groupId, input.body);
+    void queryClient.invalidateQueries({ queryKey: chatKeys.members(groupId) });
+    toast({ title: t("chat.mention.not_member"), variant: "error" });
   };
 
   const doSend = (input: SendInput) => {
     const quoted = replyTo;
     sendMessage.mutate(quoted ? { ...input, replyTo: quoted.id } : input, {
-      onError: () => {
-        toast({ title: t("chat.bubble.failed"), variant: "error" });
+      onError: (error) => {
+        sendFailed(input, error);
       },
     });
     setReplyTo(null);
@@ -314,11 +407,15 @@ export function GroupChatScreen({
     scrollToLatest();
   };
 
-  const pickMedia = (pick: MediaPick) => {
+  const pickMedia = (pick: MediaPick, caption = "") => {
     void uploadMedia(pick)
       .then((ref) => {
         // slides never come from the chat pickers; anything Office-like sends as a document.
-        doSend({ kind: ref.kind === "slides" ? "doc" : ref.kind, mediaAssetId: ref.assetId });
+        doSend({
+          kind: ref.kind === "slides" ? "doc" : ref.kind,
+          mediaAssetId: ref.assetId,
+          ...(caption && ref.kind !== "voice" ? { body: caption } : {}),
+        });
       })
       .catch(() => {
         toast({ title: t("chat.media.upload_failed"), variant: "error" });
@@ -328,7 +425,7 @@ export function GroupChatScreen({
   // Live sessions: real files from the system pickers → Cloudflare R2 (demo keeps fixtures).
   const sendPicked = (outcome: PickOutcome) => {
     if (outcome.ok) {
-      pickMedia(outcome.pick);
+      setCaptionPick(outcome.pick); // WhatsApp: preview + caption before the upload
       return;
     }
     if (outcome.reason === "too_large") {
@@ -356,22 +453,53 @@ export function GroupChatScreen({
       });
   };
 
+  const tooManyMentions = (ids: readonly string[] | undefined): boolean => {
+    if (!ids || ids.length <= MAX_MENTIONS) return false;
+    toast({ title: t("chat.mention.too_many", { count: MAX_MENTIONS }), variant: "warning" });
+    return true;
+  };
+
   const submitText = (body: string) => {
     if (editing) {
-      const target = editing.id;
+      const target = editing;
+      // PATCH semantics: omitted when the tagged set is unchanged (or the roster is unknown).
+      const mentions = editMentions(
+        body,
+        target.mentions,
+        pickedMentions.current,
+        roster.data,
+        ME,
+      );
+      if (tooManyMentions(mentions)) return;
       setEditing(null);
+      pickedMentions.current = [];
       editMessage.mutate(
-        { messageId: target, body },
+        { messageId: target.id, body, ...(mentions !== undefined ? { mentions } : {}) },
         {
-          onError: () => {
-            toast({ title: t("common.state.error_title"), variant: "error" });
+          onError: (error) => {
+            const refused =
+              (mentions?.length ?? 0) > 0 &&
+              error instanceof ChatFixtureError &&
+              error.code === "VALIDATION_FAILED";
+            if (refused) void queryClient.invalidateQueries({ queryKey: chatKeys.members(groupId) });
+            toast({
+              title: refused ? t("chat.mention.not_member") : t("common.state.error_title"),
+              variant: "error",
+            });
           },
         },
       );
       return;
     }
+    // Every "@Full Name" still in the text that names a picked (or uniquely named) member.
+    const mentions =
+      isGroup && roster.data
+        ? collectMentionIds(body, pickedMentions.current, roster.data, ME)
+        : [];
+    if (tooManyMentions(mentions)) return;
     setDraft(groupId, "");
-    doSend({ kind: "text", body });
+    pickedMentions.current = [];
+    doSend({ kind: "text", body, ...(mentions.length > 0 ? { mentions } : {}) });
   };
 
   const startReply = (message: ChatMessage) => {
@@ -423,15 +551,28 @@ export function GroupChatScreen({
     if (!failed) return;
     dropSend(failed.clientMsgId);
     sendMessage.mutate(failed.input, {
-      onError: () => {
-        toast({ title: t("chat.bubble.failed"), variant: "error" });
+      onError: (error) => {
+        sendFailed(failed.input, error);
       },
     });
+  };
+
+  // Star / unstar (owner 2026-10-19): a private bookmark — no role gate, nothing fans out.
+  const setStar = (message: ChatMessage, starred: boolean) => {
+    starMessage.mutate(
+      { messageId: message.id, starred },
+      {
+        onError: () => {
+          toast({ title: t("chat.starred.failed"), variant: "error" });
+        },
+      },
+    );
   };
 
   const actionsFor = (message: ChatMessage, optimistic: boolean): MessageMenuAction[] => {
     if (message.deletedAt || optimistic) return [];
     const own = message.senderId === ME;
+    const star = starActionFor(message, optimistic);
     const list: MessageMenuAction[] = [
       {
         key: "reply",
@@ -452,6 +593,16 @@ export function GroupChatScreen({
         },
       },
     ];
+    if (star) {
+      list.push({
+        key: star,
+        label: star === "unstar" ? t("chat.actions.unstar") : t("chat.actions.star"),
+        icon: star === "unstar" ? StarOff : Star,
+        onPress: () => {
+          setStar(message, star === "star");
+        },
+      });
+    }
     if (own && message.kind === "text") {
       list.push({
         key: "edit",
@@ -459,7 +610,8 @@ export function GroupChatScreen({
         icon: Pencil,
         onPress: () => {
           setReplyTo(null);
-          setEditing({ id: message.id, text: message.body ?? "" });
+          pickedMentions.current = [];
+          setEditing({ id: message.id, text: message.body ?? "", mentions: message.mentions });
           afterMenu(() => {
             setFocusKey((n) => n + 1);
           });
@@ -525,6 +677,7 @@ export function GroupChatScreen({
         : t("chat.header.kind_custom"),
     ...(memberCount ? [t("chat.group.members_count", { count: memberCount })] : []),
     ...(peerOnline ? [t("chat.group.online")] : []),
+    ...(group?.description ? [group.description] : []),
   ];
 
   const focusRow = focus ? rows.find((row) => row.message.id === focus.message.id) : undefined;
@@ -532,6 +685,19 @@ export function GroupChatScreen({
   const replyQuote = replyTo
     ? { author: authorOf(replyTo) ?? "", preview: previewOf(replyTo) }
     : null;
+
+  const sendKlipy = (kind: KlipyKind, media: KlipyMedia, query: string, slug: string) => {
+    doSend({ kind: kind === "gifs" ? "gif" : "sticker", klipy: media });
+    if (klipy) klipyShare(klipy, kind, slug, query);
+  };
+
+  const votePoll = (message: ChatMessage, optionIndex: number) => {
+    void votePollMessage(message.id, optionIndex)
+      .then(() => queryClient.invalidateQueries({ queryKey: chatKeys.history(groupId) }))
+      .catch(() => {
+        toast({ title: t("chat.poll.vote_failed"), variant: "error" });
+      });
+  };
 
   const renderBubble = (row: Row, preview: boolean) => {
     const message = row.message;
@@ -543,6 +709,9 @@ export function GroupChatScreen({
         showSender={!own}
         isGroup={isGroup}
         sendState={row.sendState}
+        starred={message.starred === true}
+        mentionMembers={mentionedMembers(message.mentions, roster.data)}
+        mentionsMe={mentionsViewer(message, ME)}
         replyAuthor={message.replyTo ? authorOf(byId.get(message.replyTo)) : undefined}
         preview={preview}
         onLongPress={
@@ -577,6 +746,7 @@ export function GroupChatScreen({
         }}
         onPressReply={jumpTo}
         onRetry={retry}
+        {...(row.optimistic ? {} : { onVotePoll: votePoll })}
       />
     );
   };
@@ -620,6 +790,7 @@ export function GroupChatScreen({
         subtitleActive={typers.length > 0 || peerOnline}
         avatarKind={avatarKind}
         avatarId={peerId ?? groupId}
+        photoAssetId={group?.photoAssetId}
         onBack={() => {
           router.back();
         }}
@@ -705,6 +876,14 @@ export function GroupChatScreen({
           }}
           onSend={submitText}
           disabled={readOnly}
+          mentionCandidates={isGroup ? roster.data : undefined}
+          myUserId={ME}
+          onMentionPick={(member) => {
+            pickedMentions.current = [
+              ...pickedMentions.current.filter((m) => m.userId !== member.userId),
+              member,
+            ];
+          }}
           disabledNotice={
             group?.status === "pending_approval" ? t("chat.group.pending_badge") : undefined
           }
@@ -714,6 +893,7 @@ export function GroupChatScreen({
           }}
           editing={editing !== null}
           onCancelEdit={() => {
+            pickedMentions.current = [];
             setEditing(null);
           }}
           onOpenAttach={() => {
@@ -722,7 +902,8 @@ export function GroupChatScreen({
           }}
           onOpenStickers={() => {
             Keyboard.dismiss();
-            setStickerOpen(true);
+            if (klipy) setKlipyKind("stickers");
+            else setStickerOpen(true);
           }}
           onStartVoice={() => {
             Keyboard.dismiss();
@@ -760,7 +941,7 @@ export function GroupChatScreen({
             void pickImage().then(sendPicked).catch(failPick);
             return;
           }
-          pickMedia({
+          setCaptionPick({
             kind: "image",
             headerBytes: DEMO_MAGIC.jpeg,
             sizeBytes: 940_000,
@@ -774,7 +955,7 @@ export function GroupChatScreen({
             void pickDocument().then(sendPicked).catch(failPick);
             return;
           }
-          pickMedia({
+          setCaptionPick({
             kind: "pdf",
             headerBytes: DEMO_MAGIC.pdf,
             sizeBytes: 830_000,
@@ -783,8 +964,53 @@ export function GroupChatScreen({
         }}
         onPickSticker={() => {
           afterMenu(() => {
-            setStickerOpen(true);
+            if (klipy) setKlipyKind("stickers");
+            else setStickerOpen(true);
           });
+        }}
+        {...(klipy
+          ? {
+              onPickGif: () => {
+                afterMenu(() => {
+                  setKlipyKind("gifs");
+                });
+              },
+            }
+          : {})}
+        onPickPoll={() => {
+          afterMenu(() => {
+            setPollOpen(true);
+          });
+        }}
+      />
+      <AttachmentCaptionSheet
+        pick={captionPick}
+        onCancel={() => {
+          setCaptionPick(null);
+        }}
+        onSend={(pick, caption) => {
+          setCaptionPick(null);
+          pickMedia(pick, caption);
+        }}
+      />
+      {klipy ? (
+        <KlipyPickerSheet
+          open={klipyKind !== null}
+          onOpenChange={(open) => {
+            if (!open) setKlipyKind(null);
+          }}
+          config={klipy}
+          initialKind={klipyKind ?? "gifs"}
+          onPick={(kind, item, query) => {
+            sendKlipy(kind, item.send, query, item.slug);
+          }}
+        />
+      ) : null}
+      <PollSheet
+        open={pollOpen}
+        onOpenChange={setPollOpen}
+        onCreate={(poll) => {
+          doSend({ kind: "poll", poll });
         }}
       />
       <StickerPickerSheet
@@ -875,6 +1101,33 @@ export function GroupChatScreen({
         avatarKind={avatarKind}
         avatarId={peerId ?? groupId}
         details={infoDetails}
+        photoAssetId={group?.photoAssetId}
+        onOpenStarred={() => {
+          setInfoOpen(false);
+          afterMenu(() => {
+            setStarredOpen(true);
+          });
+        }}
+        starredCount={starredList.data ? starredEntries(starredList.data).length : undefined}
+        starredMore={starredList.hasNextPage}
+      />
+      <StarredMessagesSheet
+        open={starredOpen}
+        onOpenChange={setStarredOpen}
+        groupId={groupId}
+        meId={ME}
+        previewOf={previewOf}
+        onJump={(message) => {
+          setStarredOpen(false);
+          afterMenu(() => {
+            if (!jumpTo(message.id)) {
+              toast({ title: t("chat.starred.not_loaded"), variant: "info" });
+            }
+          });
+        }}
+        onUnstar={(message) => {
+          setStar(message, false);
+        }}
       />
       <ConfirmModal
         open={deleteTarget !== null}

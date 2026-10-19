@@ -3,6 +3,7 @@ import { fireEvent, screen } from "@testing-library/react-native";
 import { MessageBubble } from "@/components/chat/message-bubble";
 import type { ChatMessage } from "@/fixtures/chat";
 import { DEMO_IMAGE_DATA_URI, DEMO_PDF_URL, mediaFixtures } from "@/fixtures/media";
+import { mentionSegments } from "@/lib/chat/mentions";
 import { renderUi } from "@/test/render";
 
 const base = {
@@ -161,5 +162,48 @@ describe("MessageBubble receipts, forwards and quotes", () => {
       locale: "en",
     });
     expect(screen.getByLabelText(new RegExp(`, ${label}$`))).toBeTruthy();
+  });
+});
+
+// @mentions + stars (owner 2026-10-18): pure segment rendering and the meta star badge.
+describe("mentionSegments and the star badge", () => {
+  it("splits @Name tokens of mentioned members into accent segments", () => {
+    const segments = mentionSegments("জরুরি! @করিম আহমেদ আজ জমা দিতে হবে — @রহিমা বুঝিয়ে দিন", [
+      { userId: "user_demo_karim", name: "করিম আহমেদ" },
+      { userId: "user_demo_rahima", name: "মিসেস রহিমা (শিক্ষক)" },
+    ]);
+    const chips = segments.filter((s) => s.mention).map((s) => s.text);
+    expect(chips).toEqual(["@করিম আহমেদ"]);
+  });
+
+  it("leaves text alone when nothing resolves and survives regex metachars", () => {
+    expect(mentionSegments("no mentions here", undefined)).toEqual([
+      { text: "no mentions here", mention: false },
+    ]);
+    // A name whose roster row exists but whose "@Name" token is not in the body stays plain…
+    expect(mentionSegments("call (a.b) now", [{ userId: "u1", name: "(a.b)" }])).toEqual([
+      { text: "call (a.b) now", mention: false },
+    ]);
+    // …while the same metachar name, once typed as "@(a.b)", is matched literally.
+    expect(mentionSegments("call @(a.b) now", [{ userId: "u1", name: "(a.b)" }])).toEqual([
+      { text: "call ", mention: false },
+      { text: "@(a.b)", mention: true, userId: "u1" },
+      { text: " now", mention: false },
+    ]);
+  });
+
+  it("renders the star badge on the meta row when starred", async () => {
+    const message: ChatMessage = {
+      ...base,
+      id: "msg_star",
+      kind: "text",
+      senderId: "user_demo_karim",
+      body: "Exam on Sunday",
+    };
+    await renderUi(
+      <MessageBubble message={message} isOwn={false} showSender starred />,
+      { locale: "en" },
+    );
+    expect(screen.getByText("Exam on Sunday")).toBeOnTheScreen();
   });
 });

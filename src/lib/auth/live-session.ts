@@ -93,7 +93,7 @@ type LogoutAllClient = Pick<ApiClient, "POST">;
 
 /** PATCH /me — locale (and display name) for a live session. */
 export async function patchMeLive(
-  input: { locale?: "bn" | "en"; fullName?: string },
+  input: { locale?: "bn" | "en"; fullName?: string; avatarUrl?: string },
   client: MeClient = liveAuth(),
 ): Promise<User> {
   const { data, error, response } = await client.PATCH("/api/v1/me", { body: input });

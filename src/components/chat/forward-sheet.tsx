@@ -118,6 +118,7 @@ export function ForwardSheet({
                   name={title}
                   id={group.id}
                   size="sm"
+                  photoAssetId={group.photoAssetId}
                 />
                 <Text numberOfLines={1} className="flex-1 text-base text-foreground">
                   {title}

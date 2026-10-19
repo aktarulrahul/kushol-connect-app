@@ -887,7 +887,8 @@ paths:
         non-member rooms are ignored + logged. Heartbeat ping ≤ 30 s (2 missed → close);
         presence keys TTL 60 s.
         x-ws-events (client→server): subscribe {rooms[]} · unsubscribe {rooms[]} ·
-        message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?} ·
+        message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?, poll?, klipy?,
+        mentions?} (same rules as the REST send — mentions must be current members) ·
         message.read {groupId, lastReadMessageId} · message.delivered {groupId,
         lastDeliveredMessageId} (send on receiving another member's message.new) · typing
         {groupId, state start|stop} · ping.
@@ -897,11 +898,18 @@ paths:
         ack just moved — never to the group room; the values are that sender's own horizons,
         exactly as the history page's readUpTo/deliveredUpTo, absent = not reached by every
         other member yet; receipt pointers only move forward and read implies delivered) ·
-        message.deleted {groupId, id, deletedAt} · message.updated {groupId, message} (edit, pin,
-        reaction, poll vote — receivers refetch per-viewer fields) · group.updated {groupId}
+        message.deleted {groupId, id, deletedAt} (the tombstone also drops its mentions and every
+        member's star) · message.updated {groupId, message} (edit, pin, reaction, poll vote —
+        receivers refetch per-viewer fields). message.new and message.updated carry `mentions`
+        (the same for every member) but NEVER the per-viewer `starred` flag; starring/unstarring
+        publishes no event at all (stars are private — REST only) · group.updated {groupId}
         (rename, description, roster; also sent to an added/removed user's private room) ·
         presence.update {groupId, userId, online} (a snapshot of who is online is sent on each
-        subscribe) · typing {groupId, userId, state} · notice.new (Notice summary) · error
+        subscribe) · typing {groupId, userId, state} · notice.new (Notice summary) ·
+        notification.new {notification: InboxNotification, unreadCount?} and notification.read
+        {ids?, all?, unreadCount} (06 in-app inbox — private user room only; produced by the api
+        process; rows written by background jobs reach clients through the 60 s unread-count
+        poll) · error
         (RFC-7807-shaped {type, title, status}). Every room the user may read is subscribed
         automatically at connect and when membership changes; `subscribe` remains for clients
         that re-subscribe explicitly. Browsers authenticate with the session cookie (same-origin
@@ -970,7 +978,8 @@ paths:
       tags: [chat]
       summary: Group history, 50/page, cursor `before`
       description: Member guard (`FORBIDDEN` otherwise); tombstones are included and marked so
-        renderers can swap them.
+        renderers can swap them. Rows are the caller's view — `starred` (per-viewer) is set on
+        the messages the caller starred; `mentions` is the same for everyone.
       security:
         - bearerJWT: []
         - sessionCookie: []
@@ -1251,6 +1260,33 @@ paths:
                 $ref: '#/components/schemas/ChatContactPage'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/chat/klipy:
+    get:
+      operationId: getChatKlipyConfig
+      tags: [chat]
+      summary: KLIPY GIF/sticker config for the signed-in user
+      description: KLIPY's integration requirements put search, trending and media loads on the
+        end-user client (no partner proxy, no re-hosting), so clients call
+        `https://api.klipy.com/api/v1/{appKey}/{gifs|stickers}/…` themselves with these values
+        and send the picked item as a `gif`/`sticker` message. `enabled` is false (and `appKey`
+        absent) while the api has no `KLIPY_APP_KEY` — the pickers stay hidden.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The caller's KLIPY config
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatKlipyConfigResult'
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/chat/dm/{peerId}:
     get:
       operationId: openDm
@@ -1443,6 +1479,11 @@ paths:
       operationId: editChatMessage
       tags: [chat]
       summary: Edit a text message (author only; polls are not editable)
+      description: The author must still be a member. `mentions` follows PATCH semantics —
+        absent keeps the stored @mentions, an array replaces them (`[]` clears) under the same
+        rules as sending (current members only, deduped, max 50 → VALIDATION_FAILED otherwise).
+        An edit never sends mention pushes. The response is the author's view without the
+        per-viewer `starred` flag (the same DTO fans out as WS `message.updated`).
       security:
         - bearerJWT: []
         - sessionCookie: []
@@ -1465,6 +1506,13 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 4000
+                mentions:
+                  type: array
+                  maxItems: 50
+                  description: Replaces the @mentions (current members only); absent keeps them
+                  items:
+                    type: string
+                    format: uuid
       responses:
         '200':
           description: Edited; WS `message.updated` fans out
@@ -1655,8 +1703,9 @@ paths:
       tags: [chat]
       summary: Forward a message into chats I am a member of
       description: Caller must be able to read the source message. Copies keep the text,
-        caption, attachment or poll (fresh votes) but not the quote, and carry `forwardCount`
-        (source + 1). WhatsApp limits — up to 5 chats per forward; a message already forwarded
+        caption, attachment or poll (fresh votes) but not the quote, the @mentions (the text
+        stays, nobody in the target chat is tagged or pushed) or anyone's star, and carry
+        `forwardCount` (source + 1). WhatsApp limits — up to 5 chats per forward; a message already forwarded
         5+ times ("Forwarded many times") goes to 1 chat at a time.
       security:
         - bearerJWT: []
@@ -1694,14 +1743,387 @@ paths:
                 $ref: '#/components/schemas/ChatForwardResult'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/chat/messages/{messageId}/star:
+    put:
+      operationId: starChatMessage
+      tags: [chat]
+      summary: Star (bookmark) a message — private to the caller, WhatsApp "Starred"
+      description: Idempotent — re-starring keeps the original starredAt. Member-guarded (a
+        non-member gets FORBIDDEN, an unknown message NOT_FOUND); starring a deleted message is
+        CONFLICT. Stars are per-viewer and invisible to other members — they fan out nothing
+        (no WS event, no push). Deleting a message for everyone removes every star on it, and
+        groups the caller left drop out of the starred list (it re-checks live membership).
+        Session-cookie (web) callers must send the `X-CSRF-Token` double-submit header
+        (FORBIDDEN otherwise); bearer-token callers do not.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The star state (starred true + when)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStarState'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: unstarChatMessage
+      tags: [chat]
+      summary: Remove the caller's star (idempotent)
+      description: Member-guarded like starring (FORBIDDEN for a non-member, NOT_FOUND for an
+        unknown message); unstarring a message that is not starred (or was deleted) answers
+        starred=false. No WS event, no push. Session-cookie (web) callers must send
+        `X-CSRF-Token` like starring.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The star state (starred false)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStarState'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/chat/starred:
+    get:
+      operationId: listStarredChatMessages
+      tags: [chat]
+      summary: The caller's starred messages (newest star first; optional group filter)
+      description: Entries carry the full message DTO (viewed by the caller — `starred` is true,
+        reactions/poll carry the caller's own marks) + starredAt. Without `groupId` the list
+        spans every group; groups the caller is no longer a member of are filtered out
+        server-side. With `groupId` (the group-info "Starred" section) the caller must still be
+        a member (FORBIDDEN otherwise). Deleted messages never appear (their stars are removed).
+        Keyset-paged on (starredAt, messageId) via `before`/`nextBefore`.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: groupId
+          in: query
+          description: Restrict to one group (the group-info "Starred" section)
+          schema:
+            type: string
+        - name: before
+          in: query
+          description: Opaque cursor from the previous page's `nextBefore` (older stars)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Page size (default 50, max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: The starred page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatStarredPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/platform/modules:
+    get:
+      operationId: listPlatformModules
+      tags: [platform]
+      summary: The static module × action registry (Kushol admins only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The registry
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformModules'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/platform/roles:
+    get:
+      operationId: listPlatformRoles
+      tags: [platform]
+      summary: Platform roles with their permission sets (Kushol admins only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The roles
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformRoleList'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createPlatformRole
+      tags: [platform]
+      summary: Create a dynamic platform role (Kushol admins only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformRoleInput'
+      responses:
+        '201':
+          description: The created role
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformRole'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/platform/roles/{roleId}:
+    patch:
+      operationId: updatePlatformRole
+      tags: [platform]
+      summary: Rename/describe a dynamic role (system roles are immutable — 403)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformRoleUpdate'
+      responses:
+        '200':
+          description: The updated role
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformRole'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deletePlatformRole
+      tags: [platform]
+      summary: Delete a dynamic, ungranted role (403 system, 409 granted)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/platform/roles/{roleId}/permissions:
+    get:
+      operationId: getPlatformRolePermissions
+      tags: [platform]
+      summary: One role's permission set (Kushol admins only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The permission set
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformPermissionList'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: replacePlatformRolePermissions
+      tags: [platform]
+      summary: Replace a role's permission set (system roles immutable; registry-validated)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PlatformPermission'
+      responses:
+        '204':
+          description: Replaced
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/platform/users:
+    get:
+      operationId: listPlatformUsers
+      tags: [platform]
+      summary: Accounts holding platform roles (Kushol admins only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The platform users
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformUserList'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: grantPlatformUser
+      tags: [platform]
+      summary: Assign a platform role to an account by email (idempotent)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, roleId]
+              properties:
+                email:
+                  type: string
+                  format: email
+                roleId:
+                  type: string
+      responses:
+        '200':
+          description: The grant
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformUser'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/platform/users/{userId}/roles/{roleId}:
+    delete:
+      operationId: revokePlatformUser
+      tags: [platform]
+      summary: Revoke a role grant (409 when revoking the last super_admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Revoked
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/chat/groups/{groupId}:
     patch:
       operationId: renameChatGroup
       tags: [chat]
-      summary: Edit group info — rename a custom club and/or set the description
-      description: Name — custom, unmanaged groups (owner/moderator; School Admin anytime).
-        Description — any non-dm group (owner/moderator; School Admin anytime); an empty string
-        clears it. `group.updated` fans out on the WS.
+      summary: Group settings — name, description and photo
+      description: Name — Kushol admins only (super_admin), custom groups including the managed
+        ones; official names follow the section. Description and photo — any non-dm group
+        (owner/moderator, School Admin or Kushol admin); an empty string clears either. The
+        photo is an image the caller uploaded (`POST /api/v1/media/upload?kind=image`). Every
+        check runs before the first write. `group.updated` fans out on the WS.
       security:
         - bearerJWT: []
         - sessionCookie: []
@@ -1727,6 +2149,9 @@ paths:
                 description:
                   type: string
                   maxLength: 500
+                photoAssetId:
+                  type: string
+                  description: A confirmed image asset the caller uploaded; "" removes the photo
       responses:
         '200':
           description: Updated
@@ -2298,6 +2723,128 @@ paths:
       responses:
         '204':
           description: Flipped to opened (or already opened)
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: My in-app notification inbox (newest first, cursor paged)
+      description: The caller's own rows only. Rows carry a registry kind, ids, display params
+        (names / notice titles — never chat or DM message bodies) and the rendered bn/en copy.
+        Mute settings affect push only; the inbox always records. Realtime arrives as
+        `notification.new` / `notification.read` on the caller's private WS room; clients
+        poll `unread-count` (60 s) as the fallback.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: before
+          in: query
+          required: false
+          description: Opaque cursor from a previous page's `nextBefore`
+          schema:
+            type: string
+            maxLength: 80
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: unread
+          in: query
+          required: false
+          description: Only unread rows
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: One page of the caller's inbox plus the current unread count
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/unread-count:
+    get:
+      operationId: getNotificationUnreadCount
+      tags: [notifications]
+      summary: Unread badge count for the caller's inbox
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: The caller's unread count
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationUnreadCountResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/{notificationId}/read:
+    post:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark one of my notifications read (idempotent)
+      description: Another user's id is NOT_FOUND (rows are never revealed across users).
+        Already-read rows return `updated = 0`.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Read state stored; the new unread count
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationReadResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark every unread notification of mine read
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Rows flipped and the new unread count (0)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationReadResult'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/school/notifications/deliveries:
@@ -5701,6 +6248,9 @@ components:
           $ref: '#/components/schemas/Locale'
         fullName:
           type: string
+        avatarUrl:
+          type: string
+          description: present when the account has an avatar (owner 2026-10-19, profile photo)
         maskedPhone:
           type: string
           description: e.g. `+8801XXXXXX789` — present when the account has a phone
@@ -6225,8 +6775,9 @@ components:
           format: date-time
         lastMessageKind:
           type: string
-          description: Kind of the latest message (text|image|pdf|voice|doc|sheet|csv|poll|system),
-            or `deleted` for a tombstone — clients render attachment/tombstone previews from it
+          description: Kind of the latest message
+            (text|image|pdf|voice|doc|sheet|csv|poll|gif|sticker|system), or `deleted` for a
+            tombstone — clients render attachment/GIF/sticker/tombstone previews from it
         lastMessageSenderId:
           type: string
         lastMessageSenderName:
@@ -6235,10 +6786,14 @@ components:
         description:
           type: string
           maxLength: 500
+        photoAssetId:
+          type: string
+          description: Group photo (an image asset) — members fetch it with
+            `POST /api/v1/media/{assetId}/download-url`; absent = initials avatar
         managed:
           type: boolean
           description: Server-created group kept in sync automatically (Kushol Admin, institution
-            staff) — no rename, leave or manual roster edits
+            staff) — no leave or manual roster edits; only Kushol admins rename it
         createdAt:
           type: string
           format: date-time
@@ -6519,7 +7074,56 @@ components:
             $ref: '#/components/schemas/ChatExploreGroup'
     ChatMessageKind:
       type: string
-      enum: [text, image, pdf, voice, doc, sheet, csv, system, poll]
+      enum: [text, image, pdf, voice, doc, sheet, csv, system, poll, gif, sticker]
+    ChatKlipyMedia:
+      type: object
+      description: A KLIPY GIF/sticker (kind gif|sticker) — clients load `url` straight from
+        KLIPY, unaltered. Sends accept https URLs on static.klipy.com, static1.klipy.com and
+        static2.klipy.com only.
+      required: [slug, url, width, height]
+      properties:
+        slug:
+          type: string
+          maxLength: 200
+        title:
+          type: string
+          maxLength: 200
+        url:
+          type: string
+          maxLength: 1000
+        width:
+          type: integer
+          minimum: 1
+          maximum: 4096
+        height:
+          type: integer
+          minimum: 1
+          maximum: 4096
+    ChatKlipyConfig:
+      type: object
+      required: [enabled, customerId, locale, contentFilter]
+      properties:
+        enabled:
+          type: boolean
+        appKey:
+          type: string
+          description: KLIPY client app key (it travels in KLIPY request paths); absent when off
+        customerId:
+          type: string
+          description: Stable opaque per-user id for KLIPY's `customer_id` (a hash, not the user id)
+        locale:
+          type: string
+          description: KLIPY `locale` request param (ISO 3166 alpha-2)
+        contentFilter:
+          type: string
+          enum: ['off', low, medium, high]
+          description: KLIPY `content_filter` request param
+    ChatKlipyConfigResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/ChatKlipyConfig'
     ChatMediaRef:
       type: object
       description: The referenced confirmed asset (message render data)
@@ -6564,6 +7168,8 @@ components:
           maxLength: 4000
         media:
           $ref: '#/components/schemas/ChatMediaRef'
+        klipy:
+          $ref: '#/components/schemas/ChatKlipyMedia'
         clientMsgId:
           type: string
           format: uuid
@@ -6604,6 +7210,21 @@ components:
           description: Aggregated emoji reactions
           items:
             $ref: '#/components/schemas/ChatReactionSummary'
+        mentions:
+          type: array
+          maxItems: 50
+          description: Member ids the sender tagged (@mentions; deduped, each a member of the
+            group when sent/edited). Clients resolve names from the group roster and highlight
+            the matching "@name" text in the body. Same for every viewer, so it rides WS
+            message.new / message.updated. Absent on tombstones and on forwarded copies.
+          items:
+            type: string
+        starred:
+          type: boolean
+          description: PER-VIEWER — the caller starred this message. Set only on REST reads
+            (history pages and the starred list); never present on WS frames or on mutation
+            responses (edit/pin/react/vote), so clients keep their own value when merging
+            those. Absent ⇒ not starred (on a history read).
         poll:
           $ref: '#/components/schemas/ChatPoll'
         createdAt:
@@ -6638,13 +7259,13 @@ components:
           type: string
         kind:
           type: string
-          enum: [text, image, pdf, voice, doc, sheet, csv, poll]
+          enum: [text, image, pdf, voice, doc, sheet, csv, poll, gif, sticker]
         body:
           type: string
           minLength: 1
           maxLength: 4000
           description: Text messages — the text; attachments (image|pdf|doc|sheet|csv) — an
-            optional caption; voice and poll carry none
+            optional caption; voice, poll, gif and sticker carry none
         mediaAssetId:
           type: string
           description: Required for image|pdf|doc|sheet|csv|voice; the asset must be `confirmed`
@@ -6673,6 +7294,172 @@ components:
                 maxLength: 80
             allowMultiple:
               type: boolean
+        klipy:
+          $ref: '#/components/schemas/ChatKlipyMedia'
+        mentions:
+          type: array
+          maxItems: 50
+          description: Member ids to @mention — text messages and captioned attachments only
+            (any other kind, or an attachment without a caption, is VALIDATION_FAILED). Every id
+            must be a current member of the group (VALIDATION_FAILED otherwise); duplicates are
+            collapsed and at most 50 distinct ids are accepted. Each mentioned member except the
+            sender gets a `chat_mention` push (class `chat`, mute respected; never in DMs), once
+            per fresh insert — an idempotent replay never re-pushes.
+          items:
+            type: string
+            format: uuid
+    ChatStarState:
+      type: object
+      required: [starred]
+      properties:
+        starred:
+          type: boolean
+        starredAt:
+          type: string
+          format: date-time
+          description: When the star was set (absent once unstarred)
+    ChatStarredEntry:
+      type: object
+      required: [message, starredAt]
+      properties:
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        starredAt:
+          type: string
+          format: date-time
+    ChatStarredPage:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatStarredEntry'
+        nextBefore:
+          type: string
+          description: Opaque cursor for the next (older) page; absent when exhausted
+    PlatformPermission:
+      type: object
+      required: [module, action]
+      properties:
+        module:
+          type: string
+        action:
+          type: string
+    PlatformModule:
+      type: object
+      required: [key, actions]
+      properties:
+        key:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+    PlatformModules:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformModule'
+    PlatformRoleInput:
+      type: object
+      required: [key, name]
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z_]{1,39}$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 60
+        description:
+          type: string
+          maxLength: 200
+    PlatformRoleUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 60
+        description:
+          type: string
+          maxLength: 200
+    PlatformRole:
+      type: object
+      required: [id, key, name, isSystem, grantedCount, permissions, createdAt]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        isSystem:
+          type: boolean
+          description: System roles cannot be renamed, re-permissioned or deleted
+        grantedCount:
+          type: integer
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformPermission'
+        createdAt:
+          type: string
+          format: date-time
+    PlatformRoleList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformRole'
+    PlatformPermissionList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformPermission'
+    PlatformUser:
+      type: object
+      required: [userId, roleId, roleKey, roleName, name, accountRole, status, grantedAt]
+      properties:
+        userId:
+          type: string
+        roleId:
+          type: string
+        roleKey:
+          type: string
+        roleName:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        accountRole:
+          type: string
+        status:
+          type: string
+        grantedAt:
+          type: string
+          format: date-time
+    PlatformUserList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformUser'
     ChatReadInput:
       type: object
       required: [lastReadMessageId]
@@ -7132,6 +7919,109 @@ components:
               type: integer
             total:
               type: integer
+    NotificationKind:
+      type: string
+      description: In-app notification kind (06 registry, additive only — clients must render
+        unknown kinds from titleBn/titleEn and fall back to the inbox screen).
+      enum:
+        - chat.mention
+        - chat.member_added
+        - chat.club_pending
+        - chat.club_approved
+        - chat.message_request
+        - chat.message_request_accepted
+        - notices.published
+        - verification.approved
+        - verification.rejected
+        - verification.sla_pending
+        - institution.request_submitted
+    InboxNotificationClass:
+      type: string
+      description: The push class of the kind (account = system notices that cannot be muted)
+      enum: [notices, chat, campaigns, account]
+    InboxNotification:
+      type: object
+      required: [id, kind, class, titleBn, titleEn, bodyBn, bodyEn, params, link, createdAt]
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: '#/components/schemas/NotificationKind'
+        class:
+          $ref: '#/components/schemas/InboxNotificationClass'
+        titleBn:
+          type: string
+        titleEn:
+          type: string
+        bodyBn:
+          type: string
+        bodyEn:
+          type: string
+        params:
+          type: object
+          description: Ids and display names / notice titles only — never message bodies
+          additionalProperties:
+            type: string
+        entityType:
+          type: string
+          description: chat_group | notice | message_request | verification_request |
+            school_request | school
+        entityId:
+          type: string
+        actorId:
+          type: string
+        schoolId:
+          type: string
+        link:
+          type: string
+          description: App deep link (06 map); empty when the target has no app screen
+        readAt:
+          type: string
+          format: date-time
+          description: Absent while unread
+        createdAt:
+          type: string
+          format: date-time
+    NotificationPage:
+      type: object
+      required: [data, unreadCount]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboxNotification'
+        nextBefore:
+          type: string
+          description: Opaque cursor for the next (older) page; absent when exhausted
+        unreadCount:
+          type: integer
+          minimum: 0
+    NotificationUnreadCountResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [count]
+          properties:
+            count:
+              type: integer
+              minimum: 0
+    NotificationReadResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [updated, unreadCount]
+          properties:
+            updated:
+              type: integer
+              minimum: 0
+              description: Rows flipped to read by this call (0 when already read)
+            unreadCount:
+              type: integer
+              minimum: 0
     TestPushInput:
       type: object
       required: [class, target]

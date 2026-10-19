@@ -2,11 +2,13 @@
 // incoming = card bubble with soft shadow + square outer corner, outgoing = teal with square
 // outer corner, group messages carry the author avatar + primary-coloured name, reply quotes
 // name their author and jump to the original, 1–3 emoji render large without a bubble, the meta
-// row shows "edited", the pin mark, time and ticks. Long-press reports the bubble's window rect
+// row shows "edited", the pin mark, the viewer's star, time and ticks; @mentions are highlighted
+// and a bubble that tags the viewer is tinted (owner 2026-10-19). Long-press reports the window rect
 // so the focus menu can lift it; `preview` renders the same bubble inside that menu.
 import { useRef, type ReactNode } from "react";
 import { Image, Pressable, View, type DimensionValue } from "react-native";
 import {
+  BarChart3,
   Ban,
   Check,
   CheckCheck,
@@ -16,6 +18,7 @@ import {
   Pause,
   Pin,
   Play,
+  Star,
   TriangleAlert,
 } from "lucide-react-native";
 
@@ -24,9 +27,11 @@ import { Text } from "@/components/ui/text";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { stickerEmoji, type ChatMessage } from "@/fixtures/chat";
 import { mediaFixtures } from "@/fixtures/media";
-import { useT } from "@/i18n/locale-provider";
+import { useLocale, useT } from "@/i18n/locale-provider";
 import { reactionChips, useChatState } from "@/lib/chat/chat-state";
+import { mentionSegments, type MentionMember } from "@/lib/chat/mentions";
 import { documentBadge, isDocumentKind, isEmojiOnly } from "@/lib/chat/message-utils";
+import { pollShares } from "@/lib/chat/poll";
 import { forwardLabelKey } from "@/lib/chat/receipts";
 import { useVoicePlayback } from "@/lib/chat/voice-playback";
 import { cn } from "@/lib/utils";
@@ -36,6 +41,35 @@ export type BubbleSendState = "sending" | "sent" | "delivered" | "seen" | "faile
 
 /** The bubble's rectangle in window coordinates (for the long-press focus menu). */
 export type BubbleAnchor = { x: number; y: number; width: number; height: number };
+
+/**
+ * Body text with its @mentions highlighted (owner 2026-10-19): "@Full Name" runs of the
+ * message's mentioned members (resolved from the roster by the screen) render bold in the accent
+ * colour — white + underlined on the teal own bubble. Unresolved names stay plain text.
+ */
+function withMentions(
+  body: string,
+  members: ReadonlyArray<MentionMember> | undefined,
+  onTeal: boolean,
+): ReactNode {
+  const segments = mentionSegments(body, members);
+  if (segments.length === 1 && !segments[0]?.mention) return body;
+  return segments.map((segment, index) =>
+    segment.mention ? (
+      <Text
+        key={String(index)}
+        className={cn(
+          "font-semibold",
+          onTeal ? "text-primary-foreground underline" : "text-primary",
+        )}
+      >
+        {segment.text}
+      </Text>
+    ) : (
+      segment.text
+    ),
+  );
+}
 
 // Spartens corner grammar: the outer corner (away from the speaker) is square.
 const INCOMING_DM = "rounded-tl-xl rounded-tr-xl rounded-br-xl rounded-bl-none";
@@ -50,11 +84,15 @@ export function MessageBubble({
   isGroup,
   replyAuthor,
   preview = false,
+  starred = false,
+  mentionMembers,
+  mentionsMe = false,
   onLongPress,
   onOpenMedia,
   onToggleReaction,
   onPressReply,
   onRetry,
+  onVotePoll,
 }: {
   message: ChatMessage;
   sendState?: BubbleSendState;
@@ -66,6 +104,12 @@ export function MessageBubble({
   replyAuthor?: string;
   /** Rendered inside the long-press focus menu: full width of the lifted rect, no handlers. */
   preview?: boolean;
+  /** The viewer starred this message (private bookmark, owner 2026-10-19) — meta star. */
+  starred?: boolean;
+  /** Roster rows of this message's @mentions — their "@Full Name" text is highlighted. */
+  mentionMembers?: ReadonlyArray<MentionMember> | undefined;
+  /** Someone else's message tags the viewer — the incoming bubble is tinted. */
+  mentionsMe?: boolean;
   /** `remeasure` reads the rect again — e.g. after the keyboard has gone down. */
   onLongPress?: (
     message: ChatMessage,
@@ -78,6 +122,8 @@ export function MessageBubble({
   onPressReply?: (messageId: string) => void;
   /** Tap on a failed bubble → resend (US-002: the input is never lost). */
   onRetry?: (message: ChatMessage) => void;
+  /** Tap on a poll option → vote (single choice withdraws on a repeat tap). */
+  onVotePoll?: (message: ChatMessage, optionIndex: number) => void;
 }) {
   const t = useT();
   const ref = useRef<View>(null);
@@ -137,16 +183,23 @@ export function MessageBubble({
 
   const state = isOwn ? (sendState ?? "sent") : undefined;
   const time = formatTime(message.createdAt);
-  const isMediaBubble = message.kind === "image" || isDocumentKind(message.kind);
+  const klipyGif = message.kind === "gif" && message.klipy ? message.klipy : null;
+  const isMediaBubble = message.kind === "image" || isDocumentKind(message.kind) || !!klipyGif;
   const showAuthor = !isOwn && (isGroup || showSender);
   const edited = Boolean(message.editedAt);
   const pinned = Boolean(message.pinnedAt);
   const bigEmoji = message.kind === "text" && !message.replyTo && isEmojiOnly(message.body);
-  const meta = { time, state, isOwn, edited, pinned };
   const forwardKey = forwardLabelKey(message.forwardCount);
-  // Screen readers hear the receipt (the tick icons themselves are decorative).
+  const meta = { time, state, isOwn, edited, pinned, starred };
+  // Screen readers hear the receipt (the tick icons themselves are decorative), the star and
+  // a mention of the viewer.
   const receiptLabel =
     state === "sent" || state === "delivered" || state === "seen" ? t(`chat.bubble.${state}`) : "";
+  const tagged = mentionsMe && !isOwn;
+  const extraLabels = [
+    tagged ? t("chat.mention.mentions_you") : "",
+    starred ? t("chat.starred.badge") : "",
+  ];
   const quoteDeleted = message.replyKind === "deleted";
 
   const avatar =
@@ -166,9 +219,17 @@ export function MessageBubble({
               {message.senderName}
             </Text>
           ) : null}
-          <Text className="text-5xl">
-            {message.kind === "sticker" ? stickerEmoji(message.stickerId ?? "") : message.body}
-          </Text>
+          {message.kind === "sticker" && message.klipy ? (
+            <KlipyImage
+              uri={message.klipy.url}
+              label={message.klipy.title ?? t("chat.preview.sticker")}
+              sticker
+            />
+          ) : (
+            <Text className="text-5xl">
+              {message.kind === "sticker" ? stickerEmoji(message.stickerId ?? "") : message.body}
+            </Text>
+          )}
           <View className="rounded-full bg-card px-2 py-0.5 shadow-sm">
             <MetaRow {...meta} />
           </View>
@@ -184,6 +245,8 @@ export function MessageBubble({
             "min-w-0 shrink items-start gap-1 shadow-sm",
             corners,
             isOwn ? "bg-primary p-2" : "bg-card px-3 py-2",
+            // @mention of the viewer: soft accent fill + accent edge (owner 2026-10-19).
+            tagged && "border border-primary bg-primary-soft",
             isMediaBubble && "p-1",
           )}
         >
@@ -267,6 +330,7 @@ export function MessageBubble({
               message={message}
               isOwn={isOwn}
               meta={meta}
+              mentionMembers={mentionMembers}
               onLongPress={lift}
               onPress={() => {
                 if (!preview) onOpenMedia?.(message);
@@ -286,6 +350,23 @@ export function MessageBubble({
           {message.kind === "voice" ? (
             <VoiceNoteInline message={message} isOwn={isOwn} onLongPress={lift} />
           ) : null}
+          {klipyGif ? (
+            <KlipyImage
+              uri={klipyGif.url}
+              label={klipyGif.title ?? t("chat.preview.gif")}
+              ratio={klipyGif.width / klipyGif.height}
+            />
+          ) : null}
+          {message.kind === "poll" && message.poll ? (
+            <PollCard
+              poll={message.poll}
+              isOwn={isOwn}
+              disabled={preview || !onVotePoll}
+              onVote={(index) => {
+                onVotePoll?.(message, index);
+              }}
+            />
+          ) : null}
           {message.kind === "text" ||
           message.kind === "system" ||
           (isDocumentKind(message.kind) && message.body?.trim()) ? (
@@ -295,7 +376,7 @@ export function MessageBubble({
                 isOwn ? "text-primary-foreground" : "text-foreground",
               )}
             >
-              {message.body ?? ""}
+              {withMentions(message.body ?? "", mentionMembers, isOwn)}
             </Text>
           ) : null}
 
@@ -314,7 +395,9 @@ export function MessageBubble({
     >
       <Pressable
         ref={ref}
-        accessibilityLabel={[message.senderName, time, receiptLabel].filter(Boolean).join(", ")}
+        accessibilityLabel={[message.senderName, time, receiptLabel, ...extraLabels]
+          .filter(Boolean)
+          .join(", ")}
         accessibilityRole="button"
         accessibilityHint={onLongPress ? t("chat.actions.title") : undefined}
         delayLongPress={250}
@@ -379,24 +462,170 @@ export function MessageBubble({
   );
 }
 
+/** A KLIPY GIF (in the bubble, GIF badge) or sticker (no bubble), loaded straight from KLIPY. */
+function KlipyImage({
+  uri,
+  label,
+  sticker = false,
+  ratio = 1,
+}: {
+  uri: string;
+  label: string;
+  sticker?: boolean;
+  ratio?: number;
+}) {
+  if (sticker) {
+    return (
+      <Image
+        source={{ uri }}
+        accessibilityLabel={label}
+        accessibilityIgnoresInvertColors
+        resizeMode="contain"
+        className="size-32"
+      />
+    );
+  }
+  return (
+    <View className="relative overflow-hidden rounded-xl">
+      <Image
+        source={{ uri }}
+        accessibilityLabel={label}
+        accessibilityIgnoresInvertColors
+        resizeMode="cover"
+        className="w-56 bg-muted"
+        style={{ aspectRatio: Number.isFinite(ratio) && ratio > 0 ? ratio : 1 }}
+      />
+      <View
+        pointerEvents="none"
+        className="absolute left-1.5 top-1.5 rounded bg-foreground/60 px-1.5 py-0.5"
+      >
+        <Text className="text-xs font-bold text-background">GIF</Text>
+      </View>
+    </View>
+  );
+}
+
+/** A poll: question, options with live tallies and the viewer's votes; tap to vote. */
+function PollCard({
+  poll,
+  isOwn,
+  disabled,
+  onVote,
+}: {
+  poll: NonNullable<ChatMessage["poll"]>;
+  isOwn: boolean;
+  disabled: boolean;
+  onVote: (optionIndex: number) => void;
+}) {
+  const t = useT();
+  const { locale } = useLocale();
+  const shares = pollShares(poll.options.map((o) => o.votes));
+  const total = poll.options.reduce((sum, o) => sum + o.votes, 0);
+  const voted = new Set(poll.userVoted ?? []);
+  return (
+    <View className="w-64 max-w-full gap-2 py-0.5">
+      <View className="flex-row items-start gap-1.5">
+        <BarChart3 size={16} color={isOwn ? color["primary-foreground"] : color.primary} />
+        <Text
+          className={cn(
+            "flex-1 text-sm font-semibold leading-5",
+            isOwn ? "text-primary-foreground" : "text-foreground",
+          )}
+        >
+          {poll.question}
+        </Text>
+      </View>
+      <Text
+        className={cn("text-xs", isOwn ? "text-primary-foreground/80" : "text-muted-foreground")}
+      >
+        {t(poll.allowMultiple ? "chat.poll.select_many" : "chat.poll.select_one")}
+      </Text>
+      {poll.options.map((option, index) => {
+        const mine = voted.has(index);
+        return (
+          <Pressable
+            key={`${String(index)}-${option.text}`}
+            accessibilityRole={poll.allowMultiple ? "checkbox" : "radio"}
+            accessibilityState={{ checked: mine, disabled }}
+            accessibilityLabel={t("chat.poll.option_a11y", {
+              option: option.text,
+              votes: toBnDigits(String(option.votes), locale),
+            })}
+            disabled={disabled}
+            onPress={() => {
+              onVote(index);
+            }}
+            className={cn(
+              "overflow-hidden rounded-lg border",
+              mine
+                ? "border-primary-foreground bg-primary-foreground/20"
+                : isOwn
+                  ? "border-primary-foreground/40"
+                  : "border-border bg-muted",
+              mine && !isOwn && "border-primary bg-primary-soft",
+            )}
+          >
+            <View
+              pointerEvents="none"
+              className={cn(
+                "absolute inset-y-0 left-0",
+                isOwn ? "bg-primary-foreground/20" : "bg-primary/15",
+              )}
+              style={{ width: `${String(shares[index] ?? 0)}%` as DimensionValue }}
+            />
+            <View className="flex-row items-center justify-between gap-2 px-2.5 py-2">
+              <Text
+                className={cn(
+                  "flex-1 text-sm",
+                  isOwn ? "text-primary-foreground" : "text-foreground",
+                  mine && "font-semibold",
+                )}
+              >
+                {option.text}
+              </Text>
+              <Text
+                className={cn(
+                  "text-xs font-semibold",
+                  isOwn ? "text-primary-foreground" : "text-primary",
+                )}
+              >
+                {toBnDigits(String(option.votes), locale)}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+      <Text
+        className={cn("text-xs", isOwn ? "text-primary-foreground/80" : "text-muted-foreground")}
+      >
+        {t("chat.poll.votes", { count: toBnDigits(String(total), locale) })}
+      </Text>
+    </View>
+  );
+}
+
 type Meta = {
   time: string;
   state?: BubbleSendState;
   isOwn: boolean;
   edited: boolean;
   pinned: boolean;
+  starred: boolean;
 };
 
 function ImageBubble({
   message,
   isOwn,
   meta,
+  mentionMembers,
   onPress,
   onLongPress,
 }: {
   message: ChatMessage;
   isOwn: boolean;
   meta: Meta;
+  /** Captions carry @mentions too (owner 2026-10-19). */
+  mentionMembers?: ReadonlyArray<MentionMember> | undefined;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
@@ -446,7 +675,7 @@ function ImageBubble({
             isOwn ? "text-primary-foreground" : "text-foreground",
           )}
         >
-          {caption}
+          {withMentions(caption, mentionMembers, isOwn)}
         </Text>
       ) : null}
     </Pressable>
@@ -515,6 +744,7 @@ function MetaRow({
   isOwn,
   edited,
   pinned,
+  starred,
   inside,
   overlay,
   className,
@@ -552,6 +782,7 @@ function MetaRow({
       )}
     >
       {pinned ? <Pin size={11} color={stroke} /> : null}
+      {starred ? <Star size={11} color={stroke} fill={stroke} /> : null}
       {edited ? <Text className={cn("text-xs", muted)}>{t("chat.bubble.edited")}</Text> : null}
       <Text className={cn("text-xs", muted)}>{time}</Text>
       {state === "sending" ? <Clock size={11} color={stroke} /> : null}

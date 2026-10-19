@@ -54,6 +54,8 @@ export function GroupRow({
       voice: t("chat.preview.voice"),
       deleted: t("chat.deleted"),
       you: t("chat.you"),
+      gif: t("chat.preview.gif"),
+      sticker: t("chat.preview.sticker"),
     },
     me.userId,
   );
@@ -94,6 +96,7 @@ export function GroupRow({
         name={title}
         size="lg"
         online={isDm ? (online ?? false) : undefined}
+        photoAssetId={isDm ? undefined : group.photoAssetId}
       />
       <View className="min-w-0 flex-1 gap-1">
         <View className="flex-row items-center gap-1.5">

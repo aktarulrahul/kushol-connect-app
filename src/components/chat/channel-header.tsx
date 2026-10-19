@@ -1,17 +1,32 @@
 // Conversation chrome in the Spartens ChannelHeader language (owner 2026-10-09): back circle ·
 // centred avatar + name (tap → chat info) · info circle; the pinned-message bar under it; the
-// chat-info sheet.
-import { ArrowLeft, Info, Pin } from "lucide-react-native";
+// chat-info sheet (with "Edit group" for those who may change the group settings and the
+// "Starred messages" row, owner 2026-10-19).
+import { useState } from "react";
+import { ArrowLeft, ChevronRight, Info, Pencil, Pin, Star } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChatAvatar, type ChatAvatarKind } from "@/components/chat/chat-avatar";
+import { toBnDigits } from "@/components/chat/group-row";
+import { GroupSettingsSheet } from "@/components/chat/group-settings-sheet";
+import { Button } from "@/components/ui/button";
 import { GlassSurface } from "@/components/ui/glass-surface";
 import { Icon } from "@/components/ui/icon";
 import { CircleAction } from "@/components/ui/screen-header";
 import { Sheet } from "@/components/ui/sheet";
 import { Text } from "@/components/ui/text";
-import { useT } from "@/i18n/locale-provider";
+import { useToast } from "@/components/ui/toast";
+import { useLocale, useT } from "@/i18n/locale-provider";
+import { useAuthStore } from "@/lib/auth/auth-store";
+import {
+  groupSettingsRights,
+  groupSettingsSaveError,
+  NO_GROUP_SETTINGS_RIGHTS,
+  useSaveGroupSettings,
+  type GroupSettingsEdit,
+} from "@/lib/chat/group-settings";
+import { useChatGroups } from "@/lib/chat/use-chat";
 import { cn } from "@/lib/utils";
 
 export function ChannelHeader({
@@ -20,6 +35,7 @@ export function ChannelHeader({
   subtitleActive = false,
   avatarKind,
   avatarId,
+  photoAssetId,
   onBack,
   onOpenInfo,
 }: {
@@ -29,6 +45,8 @@ export function ChannelHeader({
   subtitleActive?: boolean;
   avatarKind: ChatAvatarKind;
   avatarId: string;
+  /** Group photo (set from the web console's group settings). */
+  photoAssetId?: string | undefined;
   onBack: () => void;
   onOpenInfo: () => void;
 }) {
@@ -52,7 +70,13 @@ export function ChannelHeader({
           onPress={onOpenInfo}
           className="min-w-0 flex-1 flex-row items-center justify-center gap-2"
         >
-          <ChatAvatar kind={avatarKind} id={avatarId} name={title} size="md" />
+          <ChatAvatar
+            kind={avatarKind}
+            id={avatarId}
+            name={title}
+            size="md"
+            photoAssetId={photoAssetId}
+          />
           <View className="min-w-0 shrink">
             <Text numberOfLines={1} className="text-base font-medium leading-6 text-foreground">
               {title}
@@ -120,34 +144,147 @@ export function PinnedBar({
   );
 }
 
-export function ChatInfoSheet({
+type ChatInfoSheetProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  avatarKind: ChatAvatarKind;
+  /** The group id for groups; the peer's id in a DM. */
+  avatarId: string;
+  /** Group photo (group settings — web console or the app's Edit group sheet). */
+  photoAssetId?: string | undefined;
+  /** Lines under the name — kind, member count, presence. */
+  details: readonly string[];
+  /**
+   * "Starred messages" row (owner 2026-10-19): opens the screen's starred sheet. The count is
+   * the loaded stars (`starredMore` ⇒ older pages exist, shown as "N+").
+   */
+  onOpenStarred?: (() => void) | undefined;
+  starredCount?: number | undefined;
+  starredMore?: boolean | undefined;
+};
+
+export function ChatInfoSheet(props: ChatInfoSheetProps) {
+  return props.avatarKind === "dm" ? <ChatInfoBody {...props} /> : <GroupInfoSheet {...props} />;
+}
+
+/**
+ * Groups (05 G-28): "Edit group" for an account that may change the settings — rights from the
+ * cached group row and the account role — opening the group settings sheet; the save refreshes
+ * the list, the title and the avatars.
+ */
+function GroupInfoSheet(props: ChatInfoSheetProps) {
+  const t = useT();
+  const toast = useToast();
+  const groupId = props.avatarId;
+  const group = useChatGroups().data?.find((g) => g.id === groupId);
+  const accountRole = useAuthStore((s) => s.me?.role);
+  const rights = group ? groupSettingsRights(group, accountRole) : NO_GROUP_SETTINGS_RIGHTS;
+  const saveSettings = useSaveGroupSettings(groupId);
+  const [editOpen, setEditOpen] = useState(false);
+  const { onOpenChange } = props;
+
+  const save = (edit: GroupSettingsEdit): Promise<boolean> =>
+    saveSettings
+      .mutateAsync(edit)
+      .then(() => {
+        toast({ title: t("chat.settings.saved"), variant: "success" });
+        return true;
+      })
+      .catch((error: unknown) => {
+        toast({ title: t(groupSettingsSaveError(error)), variant: "error" });
+        return false;
+      });
+
+  return (
+    <>
+      <ChatInfoBody
+        {...props}
+        onEdit={
+          rights.canRename || rights.canEditInfo
+            ? () => {
+                onOpenChange(false);
+                setEditOpen(true);
+              }
+            : undefined
+        }
+      />
+      <GroupSettingsSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        group={group}
+        title={props.title}
+        avatarKind={props.avatarKind}
+        rights={rights}
+        onSave={save}
+      />
+    </>
+  );
+}
+
+function ChatInfoBody({
   open,
   onOpenChange,
   title,
   avatarKind,
   avatarId,
   details,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  avatarKind: ChatAvatarKind;
-  avatarId: string;
-  /** Lines under the name — kind, member count, presence. */
-  details: readonly string[];
-}) {
+  photoAssetId,
+  onEdit,
+  onOpenStarred,
+  starredCount,
+  starredMore = false,
+}: ChatInfoSheetProps & { onEdit?: (() => void) | undefined }) {
   const t = useT();
+  const { locale } = useLocale();
+  const countLabel =
+    starredCount === undefined
+      ? ""
+      : `${toBnDigits(String(starredCount), locale)}${starredMore ? "+" : ""}`;
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={t("chat.header.info")}>
       <View className="items-center gap-2 pb-2">
-        <ChatAvatar kind={avatarKind} id={avatarId} name={title} size="xl" />
+        <ChatAvatar
+          kind={avatarKind}
+          id={avatarId}
+          name={title}
+          size="xl"
+          photoAssetId={photoAssetId}
+        />
         <Text className="text-center text-lg font-semibold text-foreground">{title}</Text>
         {details.map((line) => (
           <Text key={line} className="text-center text-sm text-muted-foreground">
             {line}
           </Text>
         ))}
+        {onEdit ? (
+          <Button variant="outline" size="sm" className="mt-2 rounded-full" onPress={onEdit}>
+            <Icon as={Pencil} size={14} className="text-foreground" />
+            <Text>{t("chat.settings.edit")}</Text>
+          </Button>
+        ) : null}
       </View>
+      {onOpenStarred ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            countLabel ? `${t("chat.starred.title")}, ${countLabel}` : t("chat.starred.title")
+          }
+          onPress={onOpenStarred}
+          className="mb-2 mt-1 flex-row items-center gap-3 rounded-xl border border-border px-3 py-3 active:bg-muted"
+        >
+          <View className="size-8 items-center justify-center rounded-full bg-primary-soft">
+            <Icon as={Star} size={16} className="text-primary" />
+          </View>
+          <Text className="min-w-0 flex-1 text-base text-foreground">
+            {t("chat.starred.title")}
+          </Text>
+          {countLabel ? (
+            <Text className="text-sm text-muted-foreground">{countLabel}</Text>
+          ) : null}
+          <Icon as={ChevronRight} size={18} className="text-muted-foreground" />
+        </Pressable>
+      ) : null}
     </Sheet>
   );
 }

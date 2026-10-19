@@ -7,6 +7,7 @@ import type {
   DeliveryPage,
   DevicePlatform,
   DeviceRegistered,
+  InboxNotification,
   NotificationClass,
   PreferenceRow,
 } from "@/lib/notifications/model";
@@ -129,5 +130,31 @@ export async function sendTestPushLive(
     client.POST("/api/v1/admin/notifications/test", { body: input }),
   );
   if (data) return data.data;
+  throw err(problemCode(error, response));
+}
+
+/** GET /api/v1/notifications — the caller's in-app inbox (NTF-BE-006; owner 2026-10-19). */
+export async function listInboxLive(
+  limit: number,
+  client: Client,
+): Promise<{ data: InboxNotification[]; unreadCount: number }> {
+  const { data, error, response } = await call(() =>
+    client.GET("/api/v1/notifications", { params: { query: { limit } } }),
+  );
+  if (data) return { data: [...data.data], unreadCount: data.unreadCount };
+  throw err(problemCode(error, response));
+}
+
+/** POST /api/v1/notifications/{id}/read — marks one inbox row read; returns the unread count. */
+export async function markInboxReadLive(
+  notificationId: string,
+  client: Client,
+): Promise<number> {
+  const { data, error, response } = await call(() =>
+    client.POST("/api/v1/notifications/{notificationId}/read", {
+      params: { path: { notificationId } },
+    }),
+  );
+  if (data) return data.data.unreadCount;
   throw err(problemCode(error, response));
 }

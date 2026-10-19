@@ -1,11 +1,13 @@
-// Query hooks over the notifications backend (NTF-AP-003/005/008). Live sessions hit the
-// generated client; fixture sessions hit the seam — the selector decides (backend.ts).
+﻿// Query hooks over the notifications backend (NTF-AP-003/005/008). Live sessions hit the
+// generated client; fixture sessions hit the seam â€” the selector decides (backend.ts).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   deleteDevice,
   getPreferences,
   listDeliveries,
+  listInbox,
+  markInboxRead as markInboxReadBackend,
   markOpened,
   patchPreference,
   registerDevice,
@@ -19,6 +21,7 @@ type PreferenceRows = Awaited<ReturnType<typeof getPreferences>>;
 export const ntfKeys = {
   prefs: ["notifications", "prefs"] as const,
   deliveries: (page: number) => ["notifications", "deliveries", page] as const,
+  inbox: ["notifications", "inbox"] as const,
 };
 
 export function useNotificationPreferences() {
@@ -52,7 +55,7 @@ export function useNotificationDeliveries(page: number) {
   return useQuery({ queryKey: ntfKeys.deliveries(page), queryFn: () => listDeliveries(page) });
 }
 
-/** Fire-and-forget opened report (NTF-AP-008) — failures never surface. */
+/** Fire-and-forget opened report (NTF-AP-008) â€” failures never surface. */
 export function reportOpened(deliveryId: string): void {
   void markOpened(deliveryId).catch(() => undefined);
 }
@@ -77,4 +80,14 @@ export function useDeleteDevice() {
 
 export function useSendTestPush() {
   return useMutation({ mutationFn: sendTestPush });
+}
+
+/** The caller's in-app inbox (NTF-BE-006; owner 2026-10-19) â€” newest first. */
+export function useInbox(limit = 20) {
+  return useQuery({ queryKey: ntfKeys.inbox, queryFn: () => listInbox(limit) });
+}
+
+/** Marks one inbox row read (fire-and-forget); the list query refetches on next focus. */
+export function markInboxReadNotification(notificationId: string): void {
+  markInboxReadBackend(notificationId).catch(() => undefined);
 }

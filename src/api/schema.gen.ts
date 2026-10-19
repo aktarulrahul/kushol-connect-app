@@ -546,7 +546,8 @@ export interface paths {
      *     non-member rooms are ignored + logged. Heartbeat ping ≤ 30 s (2 missed → close);
      *     presence keys TTL 60 s.
      *     x-ws-events (client→server): subscribe {rooms[]} · unsubscribe {rooms[]} ·
-     *     message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?} ·
+     *     message.send {clientMsgId, groupId, kind, body?, mediaAssetId?, replyTo?, poll?, klipy?,
+     *     mentions?} (same rules as the REST send — mentions must be current members) ·
      *     message.read {groupId, lastReadMessageId} · message.delivered {groupId,
      *     lastDeliveredMessageId} (send on receiving another member's message.new) · typing
      *     {groupId, state start|stop} · ping.
@@ -556,11 +557,18 @@ export interface paths {
      *     ack just moved — never to the group room; the values are that sender's own horizons,
      *     exactly as the history page's readUpTo/deliveredUpTo, absent = not reached by every
      *     other member yet; receipt pointers only move forward and read implies delivered) ·
-     *     message.deleted {groupId, id, deletedAt} · message.updated {groupId, message} (edit, pin,
-     *     reaction, poll vote — receivers refetch per-viewer fields) · group.updated {groupId}
+     *     message.deleted {groupId, id, deletedAt} (the tombstone also drops its mentions and every
+     *     member's star) · message.updated {groupId, message} (edit, pin, reaction, poll vote —
+     *     receivers refetch per-viewer fields). message.new and message.updated carry `mentions`
+     *     (the same for every member) but NEVER the per-viewer `starred` flag; starring/unstarring
+     *     publishes no event at all (stars are private — REST only) · group.updated {groupId}
      *     (rename, description, roster; also sent to an added/removed user's private room) ·
      *     presence.update {groupId, userId, online} (a snapshot of who is online is sent on each
-     *     subscribe) · typing {groupId, userId, state} · notice.new (Notice summary) · error
+     *     subscribe) · typing {groupId, userId, state} · notice.new (Notice summary) ·
+     *     notification.new {notification: InboxNotification, unreadCount?} and notification.read
+     *     {ids?, all?, unreadCount} (06 in-app inbox — private user room only; produced by the api
+     *     process; rows written by background jobs reach clients through the 60 s unread-count
+     *     poll) · error
      *     (RFC-7807-shaped {type, title, status}). Every room the user may read is subscribed
      *     automatically at connect and when membership changes; `subscribe` remains for clients
      *     that re-subscribe explicitly. Browsers authenticate with the session cookie (same-origin
@@ -607,7 +615,7 @@ export interface paths {
     };
     /**
      * Group history, 50/page, cursor `before`
-     * @description Member guard (`FORBIDDEN` otherwise); tombstones are included and marked so renderers can swap them.
+     * @description Member guard (`FORBIDDEN` otherwise); tombstones are included and marked so renderers can swap them. Rows are the caller's view — `starred` (per-viewer) is set on the messages the caller starred; `mentions` is the same for everyone.
      */
     get: operations["listChatMessages"];
     put?: never;
@@ -709,6 +717,26 @@ export interface paths {
      * @description Verified users of the caller's school; Kushol super admins also see every super admin and institution admin, institution admins also see the super admins. Name + role only (no phone/email).
      */
     get: operations["listChatContacts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/klipy": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * KLIPY GIF/sticker config for the signed-in user
+     * @description KLIPY's integration requirements put search, trending and media loads on the end-user client (no partner proxy, no re-hosting), so clients call `https://api.klipy.com/api/v1/{appKey}/{gifs|stickers}/…` themselves with these values and send the picked item as a `gif`/`sticker` message. `enabled` is false (and `appKey` absent) while the api has no `KLIPY_APP_KEY` — the pickers stay hidden.
+     */
+    get: operations["getChatKlipyConfig"];
     put?: never;
     post?: never;
     delete?: never;
@@ -820,7 +848,10 @@ export interface paths {
     delete: operations["deleteChatMessage"];
     options?: never;
     head?: never;
-    /** Edit a text message (author only; polls are not editable) */
+    /**
+     * Edit a text message (author only; polls are not editable)
+     * @description The author must still be a member. `mentions` follows PATCH semantics — absent keeps the stored @mentions, an array replaces them (`[]` clears) under the same rules as sending (current members only, deduped, max 50 → VALIDATION_FAILED otherwise). An edit never sends mention pushes. The response is the author's view without the per-viewer `starred` flag (the same DTO fans out as WS `message.updated`).
+     */
     patch: operations["editChatMessage"];
     trace?: never;
   };
@@ -910,10 +941,160 @@ export interface paths {
     put?: never;
     /**
      * Forward a message into chats I am a member of
-     * @description Caller must be able to read the source message. Copies keep the text, caption, attachment or poll (fresh votes) but not the quote, and carry `forwardCount` (source + 1). WhatsApp limits — up to 5 chats per forward; a message already forwarded 5+ times ("Forwarded many times") goes to 1 chat at a time.
+     * @description Caller must be able to read the source message. Copies keep the text, caption, attachment or poll (fresh votes) but not the quote, the @mentions (the text stays, nobody in the target chat is tagged or pushed) or anyone's star, and carry `forwardCount` (source + 1). WhatsApp limits — up to 5 chats per forward; a message already forwarded 5+ times ("Forwarded many times") goes to 1 chat at a time.
      */
     post: operations["forwardChatMessage"];
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/messages/{messageId}/star": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Star (bookmark) a message — private to the caller, WhatsApp "Starred"
+     * @description Idempotent — re-starring keeps the original starredAt. Member-guarded (a non-member gets FORBIDDEN, an unknown message NOT_FOUND); starring a deleted message is CONFLICT. Stars are per-viewer and invisible to other members — they fan out nothing (no WS event, no push). Deleting a message for everyone removes every star on it, and groups the caller left drop out of the starred list (it re-checks live membership). Session-cookie (web) callers must send the `X-CSRF-Token` double-submit header (FORBIDDEN otherwise); bearer-token callers do not.
+     */
+    put: operations["starChatMessage"];
+    post?: never;
+    /**
+     * Remove the caller's star (idempotent)
+     * @description Member-guarded like starring (FORBIDDEN for a non-member, NOT_FOUND for an unknown message); unstarring a message that is not starred (or was deleted) answers starred=false. No WS event, no push. Session-cookie (web) callers must send `X-CSRF-Token` like starring.
+     */
+    delete: operations["unstarChatMessage"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/chat/starred": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * The caller's starred messages (newest star first; optional group filter)
+     * @description Entries carry the full message DTO (viewed by the caller — `starred` is true, reactions/poll carry the caller's own marks) + starredAt. Without `groupId` the list spans every group; groups the caller is no longer a member of are filtered out server-side. With `groupId` (the group-info "Starred" section) the caller must still be a member (FORBIDDEN otherwise). Deleted messages never appear (their stars are removed). Keyset-paged on (starredAt, messageId) via `before`/`nextBefore`.
+     */
+    get: operations["listStarredChatMessages"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/modules": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The static module × action registry (Kushol admins only) */
+    get: operations["listPlatformModules"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/roles": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Platform roles with their permission sets (Kushol admins only) */
+    get: operations["listPlatformRoles"];
+    put?: never;
+    /** Create a dynamic platform role (Kushol admins only) */
+    post: operations["createPlatformRole"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/roles/{roleId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Delete a dynamic, ungranted role (403 system, 409 granted) */
+    delete: operations["deletePlatformRole"];
+    options?: never;
+    head?: never;
+    /** Rename/describe a dynamic role (system roles are immutable — 403) */
+    patch: operations["updatePlatformRole"];
+    trace?: never;
+  };
+  "/api/v1/platform/roles/{roleId}/permissions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** One role's permission set (Kushol admins only) */
+    get: operations["getPlatformRolePermissions"];
+    /** Replace a role's permission set (system roles immutable; registry-validated) */
+    put: operations["replacePlatformRolePermissions"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/users": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Accounts holding platform roles (Kushol admins only) */
+    get: operations["listPlatformUsers"];
+    put?: never;
+    /** Assign a platform role to an account by email (idempotent) */
+    post: operations["grantPlatformUser"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/users/{userId}/roles/{roleId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke a role grant (409 when revoking the last super_admin) */
+    delete: operations["revokePlatformUser"];
     options?: never;
     head?: never;
     patch?: never;
@@ -933,8 +1114,8 @@ export interface paths {
     options?: never;
     head?: never;
     /**
-     * Edit group info — rename a custom club and/or set the description
-     * @description Name — custom, unmanaged groups (owner/moderator; School Admin anytime). Description — any non-dm group (owner/moderator; School Admin anytime); an empty string clears it. `group.updated` fans out on the WS.
+     * Group settings — name, description and photo
+     * @description Name — Kushol admins only (super_admin), custom groups including the managed ones; official names follow the section. Description and photo — any non-dm group (owner/moderator, School Admin or Kushol admin); an empty string clears either. The photo is an image the caller uploaded (`POST /api/v1/media/upload?kind=image`). Every check runs before the first write. `group.updated` fans out on the WS.
      */
     patch: operations["renameChatGroup"];
     trace?: never;
@@ -1225,6 +1406,80 @@ export interface paths {
     put?: never;
     /** Report a directed push opened (write-once, idempotent on retry) */
     post: operations["markNotificationOpened"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * My in-app notification inbox (newest first, cursor paged)
+     * @description The caller's own rows only. Rows carry a registry kind, ids, display params (names / notice titles — never chat or DM message bodies) and the rendered bn/en copy. Mute settings affect push only; the inbox always records. Realtime arrives as `notification.new` / `notification.read` on the caller's private WS room; clients poll `unread-count` (60 s) as the fallback.
+     */
+    get: operations["listNotifications"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/unread-count": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Unread badge count for the caller's inbox */
+    get: operations["getNotificationUnreadCount"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/{notificationId}/read": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Mark one of my notifications read (idempotent)
+     * @description Another user's id is NOT_FOUND (rows are never revealed across users). Already-read rows return `updated = 0`.
+     */
+    post: operations["markNotificationRead"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/read-all": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Mark every unread notification of mine read */
+    post: operations["markAllNotificationsRead"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2983,6 +3238,8 @@ export interface components {
       status: components["schemas"]["UserStatus"];
       locale: components["schemas"]["Locale"];
       fullName: string;
+      /** @description present when the account has an avatar (owner 2026-10-19, profile photo) */
+      avatarUrl?: string;
       /** @description e.g. `+8801XXXXXX789` — present when the account has a phone */
       maskedPhone?: string;
       /** @description present when the account has an email */
@@ -3258,13 +3515,15 @@ export interface components {
       lastMessagePreview?: string;
       /** Format: date-time */
       lastMessageAt?: string;
-      /** @description Kind of the latest message (text|image|pdf|voice|doc|sheet|csv|poll|system), or `deleted` for a tombstone — clients render attachment/tombstone previews from it */
+      /** @description Kind of the latest message (text|image|pdf|voice|doc|sheet|csv|poll|gif|sticker|system), or `deleted` for a tombstone — clients render attachment/GIF/sticker/tombstone previews from it */
       lastMessageKind?: string;
       lastMessageSenderId?: string;
       /** @description Author of the latest message (group list rows show "Name - preview") */
       lastMessageSenderName?: string;
       description?: string;
-      /** @description Server-created group kept in sync automatically (Kushol Admin, institution staff) — no rename, leave or manual roster edits */
+      /** @description Group photo (an image asset) — members fetch it with `POST /api/v1/media/{assetId}/download-url`; absent = initials avatar */
+      photoAssetId?: string;
+      /** @description Server-created group kept in sync automatically (Kushol Admin, institution staff) — no leave or manual roster edits; only Kushol admins rename it */
       managed?: boolean;
       /** Format: date-time */
       createdAt: string;
@@ -3408,7 +3667,42 @@ export interface components {
     };
     /** @enum {string} */
     ChatMessageKind:
-      "text" | "image" | "pdf" | "voice" | "doc" | "sheet" | "csv" | "system" | "poll";
+      | "text"
+      | "image"
+      | "pdf"
+      | "voice"
+      | "doc"
+      | "sheet"
+      | "csv"
+      | "system"
+      | "poll"
+      | "gif"
+      | "sticker";
+    /** @description A KLIPY GIF/sticker (kind gif|sticker) — clients load `url` straight from KLIPY, unaltered. Sends accept https URLs on static.klipy.com, static1.klipy.com and static2.klipy.com only. */
+    ChatKlipyMedia: {
+      slug: string;
+      title?: string;
+      url: string;
+      width: number;
+      height: number;
+    };
+    ChatKlipyConfig: {
+      enabled: boolean;
+      /** @description KLIPY client app key (it travels in KLIPY request paths); absent when off */
+      appKey?: string;
+      /** @description Stable opaque per-user id for KLIPY's `customer_id` (a hash, not the user id) */
+      customerId: string;
+      /** @description KLIPY `locale` request param (ISO 3166 alpha-2) */
+      locale: string;
+      /**
+       * @description KLIPY `content_filter` request param
+       * @enum {string}
+       */
+      contentFilter: "off" | "low" | "medium" | "high";
+    };
+    ChatKlipyConfigResult: {
+      data: components["schemas"]["ChatKlipyConfig"];
+    };
     /** @description The referenced confirmed asset (message render data) */
     ChatMediaRef: {
       assetId: string;
@@ -3430,6 +3724,7 @@ export interface components {
       kind: components["schemas"]["ChatMessageKind"];
       body?: string;
       media?: components["schemas"]["ChatMediaRef"];
+      klipy?: components["schemas"]["ChatKlipyMedia"];
       /** Format: uuid */
       clientMsgId: string;
       /** @description id of the quoted same-group message */
@@ -3460,6 +3755,10 @@ export interface components {
       pinnedBy?: string;
       /** @description Aggregated emoji reactions */
       reactions?: components["schemas"]["ChatReactionSummary"][];
+      /** @description Member ids the sender tagged (@mentions; deduped, each a member of the group when sent/edited). Clients resolve names from the group roster and highlight the matching "@name" text in the body. Same for every viewer, so it rides WS message.new / message.updated. Absent on tombstones and on forwarded copies. */
+      mentions?: string[];
+      /** @description PER-VIEWER — the caller starred this message. Set only on REST reads (history pages and the starred list); never present on WS frames or on mutation responses (edit/pin/react/vote), so clients keep their own value when merging those. Absent ⇒ not starred (on a history read). */
+      starred?: boolean;
       poll?: components["schemas"]["ChatPoll"];
       /** Format: date-time */
       createdAt: string;
@@ -3482,8 +3781,9 @@ export interface components {
     ChatMessageSendInput: {
       groupId: string;
       /** @enum {string} */
-      kind: "text" | "image" | "pdf" | "voice" | "doc" | "sheet" | "csv" | "poll";
-      /** @description Text messages — the text; attachments (image|pdf|doc|sheet|csv) — an optional caption; voice and poll carry none */
+      kind:
+        "text" | "image" | "pdf" | "voice" | "doc" | "sheet" | "csv" | "poll" | "gif" | "sticker";
+      /** @description Text messages — the text; attachments (image|pdf|doc|sheet|csv) — an optional caption; voice, poll, gif and sticker carry none */
       body?: string;
       /** @description Required for image|pdf|doc|sheet|csv|voice; the asset must be `confirmed` and its kind must equal the message kind */
       mediaAssetId?: string;
@@ -3496,6 +3796,80 @@ export interface components {
         options: string[];
         allowMultiple?: boolean;
       };
+      klipy?: components["schemas"]["ChatKlipyMedia"];
+      /** @description Member ids to @mention — text messages and captioned attachments only (any other kind, or an attachment without a caption, is VALIDATION_FAILED). Every id must be a current member of the group (VALIDATION_FAILED otherwise); duplicates are collapsed and at most 50 distinct ids are accepted. Each mentioned member except the sender gets a `chat_mention` push (class `chat`, mute respected; never in DMs), once per fresh insert — an idempotent replay never re-pushes. */
+      mentions?: string[];
+    };
+    ChatStarState: {
+      starred: boolean;
+      /**
+       * Format: date-time
+       * @description When the star was set (absent once unstarred)
+       */
+      starredAt?: string;
+    };
+    ChatStarredEntry: {
+      message: components["schemas"]["ChatMessage"];
+      /** Format: date-time */
+      starredAt: string;
+    };
+    ChatStarredPage: {
+      data: components["schemas"]["ChatStarredEntry"][];
+      /** @description Opaque cursor for the next (older) page; absent when exhausted */
+      nextBefore?: string;
+    };
+    PlatformPermission: {
+      module: string;
+      action: string;
+    };
+    PlatformModule: {
+      key: string;
+      actions: string[];
+    };
+    PlatformModules: {
+      data: components["schemas"]["PlatformModule"][];
+    };
+    PlatformRoleInput: {
+      key: string;
+      name: string;
+      description?: string;
+    };
+    PlatformRoleUpdate: {
+      name?: string;
+      description?: string;
+    };
+    PlatformRole: {
+      id: string;
+      key: string;
+      name: string;
+      description?: string;
+      /** @description System roles cannot be renamed, re-permissioned or deleted */
+      isSystem: boolean;
+      grantedCount: number;
+      permissions: components["schemas"]["PlatformPermission"][];
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PlatformRoleList: {
+      data: components["schemas"]["PlatformRole"][];
+    };
+    PlatformPermissionList: {
+      data: components["schemas"]["PlatformPermission"][];
+    };
+    PlatformUser: {
+      userId: string;
+      roleId: string;
+      roleKey: string;
+      roleName: string;
+      name: string;
+      email?: string;
+      accountRole: string;
+      status: string;
+      /** Format: date-time */
+      grantedAt: string;
+    };
+    PlatformUserList: {
+      data: components["schemas"]["PlatformUser"][];
     };
     ChatReadInput: {
       lastReadMessageId: string;
@@ -3733,6 +4107,72 @@ export interface components {
         number: number;
         size: number;
         total: number;
+      };
+    };
+    /**
+     * @description In-app notification kind (06 registry, additive only — clients must render unknown kinds from titleBn/titleEn and fall back to the inbox screen).
+     * @enum {string}
+     */
+    NotificationKind:
+      | "chat.mention"
+      | "chat.member_added"
+      | "chat.club_pending"
+      | "chat.club_approved"
+      | "chat.message_request"
+      | "chat.message_request_accepted"
+      | "notices.published"
+      | "verification.approved"
+      | "verification.rejected"
+      | "verification.sla_pending"
+      | "institution.request_submitted";
+    /**
+     * @description The push class of the kind (account = system notices that cannot be muted)
+     * @enum {string}
+     */
+    InboxNotificationClass: "notices" | "chat" | "campaigns" | "account";
+    InboxNotification: {
+      id: string;
+      kind: components["schemas"]["NotificationKind"];
+      class: components["schemas"]["InboxNotificationClass"];
+      titleBn: string;
+      titleEn: string;
+      bodyBn: string;
+      bodyEn: string;
+      /** @description Ids and display names / notice titles only — never message bodies */
+      params: {
+        [key: string]: string;
+      };
+      /** @description chat_group | notice | message_request | verification_request | school_request | school */
+      entityType?: string;
+      entityId?: string;
+      actorId?: string;
+      schoolId?: string;
+      /** @description App deep link (06 map); empty when the target has no app screen */
+      link: string;
+      /**
+       * Format: date-time
+       * @description Absent while unread
+       */
+      readAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    NotificationPage: {
+      data: components["schemas"]["InboxNotification"][];
+      /** @description Opaque cursor for the next (older) page; absent when exhausted */
+      nextBefore?: string;
+      unreadCount: number;
+    };
+    NotificationUnreadCountResult: {
+      data: {
+        count: number;
+      };
+    };
+    NotificationReadResult: {
+      data: {
+        /** @description Rows flipped to read by this call (0 when already read) */
+        updated: number;
+        unreadCount: number;
       };
     };
     TestPushInput: {
@@ -6280,6 +6720,31 @@ export interface operations {
       default: components["responses"]["Problem"];
     };
   };
+  getChatKlipyConfig: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The caller's KLIPY config */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatKlipyConfigResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
   openDm: {
     parameters: {
       query?: never;
@@ -6487,6 +6952,8 @@ export interface operations {
       content: {
         "application/json": {
           body: string;
+          /** @description Replaces the @mentions (current members only); absent keeps them */
+          mentions?: string[];
         };
       };
     };
@@ -6690,6 +7157,366 @@ export interface operations {
       default: components["responses"]["Problem"];
     };
   };
+  starChatMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The star state (starred true + when) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatStarState"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  unstarChatMessage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        messageId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The star state (starred false) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatStarState"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listStarredChatMessages: {
+    parameters: {
+      query?: {
+        /** @description Restrict to one group (the group-info "Starred" section) */
+        groupId?: string;
+        /** @description Opaque cursor from the previous page's `nextBefore` (older stars) */
+        before?: string;
+        /** @description Page size (default 50, max 100) */
+        limit?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The starred page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatStarredPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listPlatformModules: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The registry */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformModules"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listPlatformRoles: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The roles */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformRoleList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createPlatformRole: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformRoleInput"];
+      };
+    };
+    responses: {
+      /** @description The created role */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformRole"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deletePlatformRole: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        roleId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updatePlatformRole: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        roleId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformRoleUpdate"];
+      };
+    };
+    responses: {
+      /** @description The updated role */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformRole"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getPlatformRolePermissions: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        roleId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The permission set */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformPermissionList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  replacePlatformRolePermissions: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        roleId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          permissions: components["schemas"]["PlatformPermission"][];
+        };
+      };
+    };
+    responses: {
+      /** @description Replaced */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listPlatformUsers: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The platform users */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformUserList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  grantPlatformUser: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          /** Format: email */
+          email: string;
+          roleId: string;
+        };
+      };
+    };
+    responses: {
+      /** @description The grant */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformUser"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  revokePlatformUser: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        userId: string;
+        roleId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Revoked */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
   renameChatGroup: {
     parameters: {
       query?: never;
@@ -6707,6 +7534,8 @@ export interface operations {
         "application/json": {
           name?: string;
           description?: string;
+          /** @description A confirmed image asset the caller uploaded; "" removes the photo */
+          photoAssetId?: string;
         };
       };
     };
@@ -7233,6 +8062,114 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listNotifications: {
+    parameters: {
+      query?: {
+        /** @description Opaque cursor from a previous page's `nextBefore` */
+        before?: string;
+        limit?: number;
+        /** @description Only unread rows */
+        unread?: boolean;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One page of the caller's inbox plus the current unread count */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getNotificationUnreadCount: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description The caller's unread count */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationUnreadCountResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  markNotificationRead: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        notificationId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Read state stored; the new unread count */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationReadResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  markAllNotificationsRead: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Rows flipped and the new unread count (0) */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NotificationReadResult"];
+        };
       };
       default: components["responses"]["Problem"];
     };

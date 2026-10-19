@@ -37,3 +37,5 @@ export type ForegroundPayload = {
   payloadKey: string;
   deepLink: string;
 };
+
+export type InboxNotification = Schemas["InboxNotification"];

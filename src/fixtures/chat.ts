@@ -7,7 +7,7 @@
 // Types come only from the api's OpenAPI spec (src/api/schema.gen.ts) so the swap is
 // type-checked. Mock behaviour is clearly fictional ("ডেমো উচ্চ বিদ্যালয় / Demo High School",
 // prompt.txt §12) and driven by a flag switcher + simulated latency for demo and tests.
-import type { components } from "@/api/schema.gen";
+import type { components, operations } from "@/api/schema.gen";
 
 type Schemas = components["schemas"];
 export type ChatGroup = Schemas["ChatGroup"];
@@ -33,7 +33,16 @@ export type MessageRequest = Schemas["MessageRequest"];
 export type MessageRequestInput = Schemas["MessageRequestInput"];
 export type MessageRequestDecision = Schemas["MessageRequestDecision"]["data"];
 export type ChatGroupCreateInput = Schemas["ChatGroupCreateInput"];
+/** Group settings save (05 · owner 2026-10-18): absent fields stay, "" clears description/photo. */
+export type ChatGroupUpdateInput =
+  operations["renameChatGroup"]["requestBody"]["content"]["application/json"];
 export type ChatMediaRef = Schemas["ChatMediaRef"];
+/** A message the viewer starred and when (GET /chat/starred · 05 owner 2026-10-19). */
+export type StarredEntry = { message: ChatMessage; starredAt: string };
+/** One page of the viewer's stars, newest first; `nextBefore` pages older stars. */
+export type StarredPage = { data: StarredEntry[]; nextBefore?: string };
+/** One roster row (GET /chat/groups/{id}/members) as the @mention picker uses it. */
+export type ChatRosterMember = { userId: string; name: string };
 
 import { mediaFixtures } from "@/fixtures/media";
 import { ChatFixtureError } from "@/fixtures/chat-error";
@@ -52,6 +61,7 @@ export { ChatFixtureError } from "@/fixtures/chat-error";
 // shipped screens keep their imports (ADR-3) while the live backend avoids the import cycle.
 import { stickerEmoji } from "@/lib/chat/stickers";
 import { forwardLimit } from "@/lib/chat/receipts";
+import { MAX_MENTIONS } from "@/lib/chat/mentions";
 export { DEMO_STICKERS, type DemoStickerId, stickerEmoji } from "@/lib/chat/stickers";
 
 /** Quick reactions offered on long-press (WhatsApp-style row). */
@@ -247,6 +257,14 @@ const GROUPS: DemoGroup[] = [
   },
 ];
 
+/** Seeded group settings — demo saves change them; `resetChatFixtures` puts them back. */
+const GROUP_SETTINGS_SEED = new Map(
+  GROUPS.map((g) => [
+    g.id,
+    { name: g.name, description: g.description, photoAssetId: g.photoAssetId },
+  ]),
+);
+
 type DemoMessage = ChatMessage;
 
 /** Newest last — history pagination walks this array backwards. */
@@ -325,7 +343,9 @@ const MESSAGES: DemoMessage[] = [
     senderId: "user_demo_rahima",
     senderName: "মিসেস রহিমা (শিক্ষক)",
     kind: "text",
-    body: "এই যে গত সপ্তাহের ল্যাবের ছবি —",
+    // Seeded @mention of the demo teacher (owner 2026-10-19): the bubble shows the tint.
+    body: "@ডেমো শিক্ষক এই যে গত সপ্তাহের ল্যাবের ছবি —",
+    mentions: [DEMO_ME.userId],
     clientMsgId: "00000000-0000-4000-8000-000000000104",
     replyTo: "msg_102",
     replyPreview: "ইনশাআল্লাহ আজ বিকেলে দেব। সবাই খাতা…",
@@ -576,7 +596,16 @@ export async function listChatMessages(
   const start = cutoff === -1 ? 0 : Math.max(0, cutoff - limit);
   const page = all.slice(start, cutoff === -1 ? 0 : cutoff).slice(-limit);
   const nextBefore = start > 0 ? (page[0]?.id ?? undefined) : undefined;
-  return { data: [...page].reverse().map((m) => ({ ...m })), nextBefore };
+  return { data: [...page].reverse().map(viewOf), nextBefore };
+}
+
+/** The viewer's copy of a stored message: per-viewer `starred` on, nothing of a tombstone. */
+function viewOf(m: ChatMessage): ChatMessage {
+  const copy: ChatMessage = { ...m };
+  if (m.mentions) copy.mentions = [...m.mentions];
+  if (m.deletedAt) delete copy.mentions;
+  if (STARS.has(m.id)) copy.starred = true;
+  return copy;
 }
 
 function assertMember(groupId: string): void {
@@ -604,12 +633,16 @@ export async function sendChatMessage(input: ChatMessageSendInput): Promise<Chat
   if (input.kind === "text" && (!input.body || !input.body.trim())) {
     throw new ChatFixtureError("VALIDATION_FAILED");
   }
-  if (input.kind === "sticker" && !input.stickerId) {
+  if (input.kind === "sticker" && !input.stickerId && !input.klipy) {
     throw new ChatFixtureError("VALIDATION_FAILED");
   }
-  if (input.kind !== "text" && input.kind !== "sticker" && !input.mediaAssetId) {
+  if (input.kind === "gif" && !input.klipy) throw new ChatFixtureError("VALIDATION_FAILED");
+  if (input.kind === "poll" && !input.poll) throw new ChatFixtureError("VALIDATION_FAILED");
+  const noMedia = ["text", "sticker", "gif", "poll"];
+  if (!noMedia.includes(input.kind) && !input.mediaAssetId) {
     throw new ChatFixtureError("VALIDATION_FAILED");
   }
+  const mentions = checkMentions(input.groupId, input.kind, input.body, input.mentions);
   if (mode === "not_verified") throw new ChatFixtureError("NOT_VERIFIED");
   if (mode === "rate_limited") throw new ChatFixtureError("RATE_LIMITED");
 
@@ -628,11 +661,24 @@ export async function sendChatMessage(input: ChatMessageSendInput): Promise<Chat
     senderId: DEMO_ME.userId,
     senderName: DEMO_ME.name,
     kind: input.kind,
-    ...(input.kind === "text" ? { body: input.body } : {}),
+    // Text, or an attachment's caption (WhatsApp); voice notes carry none.
+    ...(input.body && input.kind !== "voice" ? { body: input.body } : {}),
     ...(input.kind === "sticker" && input.stickerId ? { stickerId: input.stickerId } : {}),
+    ...(input.klipy ? { klipy: { ...input.klipy } } : {}),
+    ...(input.poll
+      ? {
+          poll: {
+            question: input.poll.question,
+            options: input.poll.options.map((text) => ({ text, votes: 0 })),
+            ...(input.poll.allowMultiple ? { allowMultiple: true } : {}),
+            userVoted: [],
+          },
+        }
+      : {}),
     ...(media ? { media } : {}),
     clientMsgId: input.clientMsgId,
     ...(input.replyTo ? { replyTo: input.replyTo, replyPreview: preview(replied) } : {}),
+    ...(mentions.length > 0 ? { mentions } : {}),
     createdAt: new Date().toISOString(),
   };
   MESSAGES.push(message);
@@ -650,6 +696,38 @@ export async function sendChatMessage(input: ChatMessageSendInput): Promise<Chat
   return { ...message };
 }
 
+/**
+ * Poll vote (05 · owner 2026-10-18): live → the api; demo → the local tally (single-choice
+ * polls move or withdraw the vote, multi-choice toggles the option).
+ */
+export async function votePollMessage(messageId: string, optionIndex: number): Promise<void> {
+  if (await chatLiveActive()) {
+    await liveChat.votePoll(messageId, optionIndex);
+    return;
+  }
+  await latency(120);
+  const message = MESSAGES.find((m) => m.id === messageId);
+  const poll = message?.poll;
+  const option = poll?.options[optionIndex];
+  if (!message || !poll || !option) throw new ChatFixtureError("NOT_FOUND");
+  const mine = new Set(poll.userVoted ?? []);
+  if (mine.has(optionIndex)) {
+    mine.delete(optionIndex);
+    option.votes = Math.max(0, option.votes - 1);
+  } else {
+    if (!poll.allowMultiple) {
+      for (const index of mine) {
+        const previous = poll.options[index];
+        if (previous) previous.votes = Math.max(0, previous.votes - 1);
+      }
+      mine.clear();
+    }
+    mine.add(optionIndex);
+    option.votes += 1;
+  }
+  poll.userVoted = [...mine].sort((a, b) => a - b);
+}
+
 function preview(m?: ChatMessage | null): string {
   if (!m) return "";
   if (m.deletedAt) return "";
@@ -661,7 +739,11 @@ function preview(m?: ChatMessage | null): string {
     case "voice":
       return "🎤";
     case "sticker":
-      return stickerEmoji(m.stickerId ?? "");
+      return m.klipy ? "💟" : stickerEmoji(m.stickerId ?? "");
+    case "gif":
+      return "GIF";
+    case "poll":
+      return `📊 ${m.poll?.question ?? ""}`;
     default:
       return m.body ?? "";
   }
@@ -812,6 +894,9 @@ export async function deleteChatMessage(
     throw new ChatFixtureError("CONFLICT");
   }
   message.deletedAt = new Date().toISOString();
+  // The tombstone drops its @mentions and every member's star (owner 2026-10-19).
+  delete message.mentions;
+  STARS.delete(message.id);
   emit({
     type: "message.deleted",
     groupId: message.groupId,
@@ -828,8 +913,13 @@ export const MAX_PINNED_MESSAGES = 5;
  * Fixture-only edit (Spartens parity, owner 2026-10-09; no OpenAPI path yet — `TODO: Confirm`,
  * 08-gaps G-7): the author rewrites their own text message; it keeps its id and shows "edited".
  */
-export async function editChatMessage(messageId: string, body: string): Promise<ChatMessage> {
-  if (await chatLiveActive()) return liveChat.editChatMessage(messageId, body);
+export async function editChatMessage(
+  messageId: string,
+  body: string,
+  /** @mentions (owner 2026-10-19): absent keeps the stored ones, a list replaces them. */
+  mentions?: string[],
+): Promise<ChatMessage> {
+  if (await chatLiveActive()) return liveChat.editChatMessage(messageId, body, mentions);
   await latency(200);
   requireOnline();
   assertMemberOfMessage(messageId);
@@ -840,8 +930,14 @@ export async function editChatMessage(messageId: string, body: string): Promise<
   }
   const trimmed = body.trim();
   if (!trimmed) throw new ChatFixtureError("VALIDATION_FAILED");
+  const nextMentions =
+    mentions === undefined ? undefined : checkMentions(message.groupId, "text", trimmed, mentions);
   message.body = trimmed;
   message.editedAt = new Date().toISOString();
+  if (nextMentions !== undefined) {
+    if (nextMentions.length > 0) message.mentions = nextMentions;
+    else delete message.mentions;
+  }
   const group = GROUPS.find((g) => g.id === message.groupId);
   const newest = MESSAGES.filter((m) => m.groupId === message.groupId).at(-1);
   if (group && newest?.id === message.id) group.lastMessagePreview = previewFor(message);
@@ -1046,14 +1142,203 @@ export async function createChatGroup(input: ChatGroupCreateInput): Promise<Chat
   return { ...group };
 }
 
-// ─── Reset (tests) ────────────────────────────────────────────────────────────────────────────
+// ─── Group settings (05 · owner 2026-10-18) ──────────────────────────────────────────────────
+
+/**
+ * PATCH /chat/groups/{id} — photo, name and description; absent fields stay, "" clears the
+ * description or the photo. The demo checks the shape rules the api does (no dm settings, archived
+ * groups refused, only custom groups take a name, 3–60 / ≤ 500 chars, a confirmed image as the
+ * photo). Who may change what is the screen's gate (`groupSettingsRights`) — the demo identity has
+ * no account role here. Emits `group.updated` like the gateway.
+ */
+export async function updateChatGroup(
+  groupId: string,
+  input: ChatGroupUpdateInput,
+): Promise<ChatGroup> {
+  if (await chatLiveActive()) return liveChat.updateChatGroup(groupId, input);
+  await latency(300);
+  requireOnline();
+  assertMember(groupId);
+  const group = GROUPS.find((g) => g.id === groupId);
+  if (!group) throw new ChatFixtureError("NOT_FOUND");
+  const { name, description, photoAssetId } = input;
+  if (name === undefined && description === undefined && photoAssetId === undefined) {
+    throw new ChatFixtureError("VALIDATION_FAILED");
+  }
+  if (group.kind === "dm") throw new ChatFixtureError("VALIDATION_FAILED");
+  if (group.status === "archived") throw new ChatFixtureError("CONFLICT");
+  const nextName = name?.trim();
+  if (nextName !== undefined) {
+    const length = Array.from(nextName).length; // code points, as the api counts
+    if (group.kind !== "custom" || length < 3 || length > 60) {
+      throw new ChatFixtureError("VALIDATION_FAILED");
+    }
+    const clash = GROUPS.some(
+      (g) =>
+        g.id !== groupId && g.kind === "custom" && g.status === "active" && g.name === nextName,
+    );
+    if (clash) throw new ChatFixtureError("CONFLICT");
+  }
+  const nextDescription = description?.trim();
+  if (nextDescription !== undefined && Array.from(nextDescription).length > 500) {
+    throw new ChatFixtureError("VALIDATION_FAILED");
+  }
+  if (photoAssetId && mediaFixtures.kindOf(photoAssetId) !== "image") {
+    throw new ChatFixtureError("VALIDATION_FAILED");
+  }
+  if (nextName !== undefined) group.name = nextName;
+  if (nextDescription !== undefined) group.description = nextDescription || undefined;
+  if (photoAssetId !== undefined) group.photoAssetId = photoAssetId || undefined;
+  emit({ type: "group.updated", groupId });
+  return { ...group };
+}
+
+// ─── Reset (tests)────────────────────────────────────────────────────────────────────────────
 
 /** Clears mutable seam state (tests only). */
 export function resetChatFixtures(): void {
   chatFixtureFlags.reset();
   eventListeners.clear();
   reportedRead.clear();
+  resetStars();
   mediaFixtures.reset();
+  for (const group of GROUPS) {
+    const seed = GROUP_SETTINGS_SEED.get(group.id);
+    if (seed) Object.assign(group, seed);
+  }
+}
+
+// ─── @mentions + starred messages (05 · owner 2026-10-19) ────────────────────────────────────
+
+/**
+ * The demo roster (GET /chat/groups/{id}/members — includes the caller): a DM is me + the peer;
+ * a group is me, the demo cast and everyone who wrote in it.
+ */
+function rosterFor(groupId: string): ChatRosterMember[] {
+  const me = { userId: DEMO_ME.userId, name: DEMO_ME.name };
+  const group = GROUPS.find((g) => g.id === groupId);
+  if (group?.kind === "dm") {
+    return group.peer ? [me, { userId: group.peer.userId, name: group.peer.name }] : [me];
+  }
+  const roster = new Map<string, ChatRosterMember>([[me.userId, me]]);
+  for (const m of DEMO_GROUP_MEMBERS) roster.set(m.userId, { ...m });
+  for (const m of MESSAGES) {
+    if (m.groupId === groupId && !roster.has(m.senderId)) {
+      roster.set(m.senderId, { userId: m.senderId, name: m.senderName });
+    }
+  }
+  return [...roster.values()];
+}
+
+/**
+ * The api's mention rules: text messages and captioned attachments only, current members only,
+ * duplicates collapsed, at most MAX_MENTIONS distinct ids — VALIDATION_FAILED otherwise.
+ */
+function checkMentions(
+  groupId: string,
+  kind: ChatMessageSendInput["kind"],
+  body: string | undefined,
+  mentions: readonly string[] | undefined,
+): string[] {
+  if (!mentions || mentions.length === 0) return [];
+  const captioned = ["image", "pdf", "doc", "sheet", "csv"].includes(kind) && !!body?.trim();
+  if (kind !== "text" && !captioned) throw new ChatFixtureError("VALIDATION_FAILED", "mentions");
+  const unique = [...new Set(mentions)];
+  if (unique.length > MAX_MENTIONS) throw new ChatFixtureError("VALIDATION_FAILED", "mentions");
+  const members = new Set(rosterFor(groupId).map((m) => m.userId));
+  if (unique.some((userId) => !members.has(userId))) {
+    throw new ChatFixtureError("VALIDATION_FAILED", "mention_not_member");
+  }
+  return unique;
+}
+
+/** The room roster — the @mention picker and name resolution (live: the api; demo: the cast). */
+export async function listChatGroupMembers(groupId: string): Promise<ChatRosterMember[]> {
+  if (await chatLiveActive()) return liveChat.listChatGroupMembers(groupId);
+  await latency(100);
+  requireOnline();
+  assertMember(groupId);
+  return rosterFor(groupId);
+}
+
+/** Seeded star: the demo teacher bookmarked the syllabus PDF in class ten. */
+const STAR_SEED: ReadonlyArray<readonly [string, string]> = [["msg_103", iso(500, 1)]];
+/** messageId → starredAt — the demo viewer's private stars. */
+const STARS = new Map<string, string>(STAR_SEED);
+
+function resetStars(): void {
+  STARS.clear();
+  for (const [messageId, at] of STAR_SEED) STARS.set(messageId, at);
+}
+
+/**
+ * PUT /chat/messages/{id}/star — idempotent (a re-star keeps the first starredAt), member-guarded
+ * (NOT_FOUND / FORBIDDEN), CONFLICT on a deleted message. Private: no event, no push.
+ */
+export async function starChatMessage(
+  messageId: string,
+): Promise<{ starred: boolean; starredAt?: string }> {
+  if (await chatLiveActive()) return liveChat.starChatMessage(messageId);
+  await latency(120);
+  requireOnline();
+  assertMemberOfMessage(messageId);
+  const message = MESSAGES.find((m) => m.id === messageId);
+  if (!message) throw new ChatFixtureError("NOT_FOUND");
+  if (message.deletedAt) throw new ChatFixtureError("CONFLICT");
+  const starredAt = STARS.get(messageId) ?? new Date().toISOString();
+  STARS.set(messageId, starredAt);
+  return { starred: true, starredAt };
+}
+
+/** DELETE /chat/messages/{id}/star — idempotent, member-guarded like starring. */
+export async function unstarChatMessage(messageId: string): Promise<{ starred: boolean }> {
+  if (await chatLiveActive()) return liveChat.unstarChatMessage(messageId);
+  await latency(120);
+  requireOnline();
+  assertMemberOfMessage(messageId);
+  STARS.delete(messageId);
+  return { starred: false };
+}
+
+/**
+ * GET /chat/starred — the viewer's stars, newest first, keyset-paged on (starredAt, messageId)
+ * through the opaque `before`/`nextBefore`; `groupId` scopes it to one chat (member-guarded).
+ * Deleted messages never appear.
+ */
+export async function listStarredChatMessages(
+  params: { groupId?: string; before?: string; limit?: number } = {},
+): Promise<StarredPage> {
+  if (await chatLiveActive()) return liveChat.listStarredChatMessages(params);
+  await latency(120);
+  requireOnline();
+  if (params.groupId) assertMember(params.groupId);
+  const limit = Math.min(Math.max(params.limit ?? 50, 1), 100);
+  const rows: StarredEntry[] = [];
+  for (const [messageId, starredAt] of STARS) {
+    const message = MESSAGES.find((m) => m.id === messageId);
+    if (!message || message.deletedAt) continue;
+    if (params.groupId && message.groupId !== params.groupId) continue;
+    rows.push({ message, starredAt });
+  }
+  rows.sort(
+    (a, b) =>
+      b.starredAt.localeCompare(a.starredAt) || b.message.id.localeCompare(a.message.id),
+  );
+  const [beforeAt, beforeId] = (params.before ?? "").split("|");
+  const older =
+    beforeAt && beforeId
+      ? rows.filter(
+          (r) => r.starredAt < beforeAt || (r.starredAt === beforeAt && r.message.id < beforeId),
+        )
+      : rows;
+  const page = older.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    data: page.map((r) => ({ message: viewOf(r.message), starredAt: r.starredAt })),
+    ...(older.length > limit && last
+      ? { nextBefore: `${last.starredAt}|${last.message.id}` }
+      : {}),
+  };
 }
 
 // mediaFixtures lives in `@/fixtures/media` — do not re-export from here (breaks chat↔media cycle).

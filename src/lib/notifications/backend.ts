@@ -20,6 +20,8 @@ import {
   deleteDeviceLive,
   getPreferencesLive,
   listDeliveriesLive,
+  listInboxLive,
+  markInboxReadLive,
   markOpenedLive,
   patchPreferenceLive,
   registerDeviceLive,
@@ -32,6 +34,7 @@ import {
   type DevicePlatform,
   type DeviceRegistered,
   type ForegroundPayload,
+  type InboxNotification,
   type NotificationClass,
   type PreferenceRow,
 } from "@/lib/notifications/model";
@@ -42,6 +45,7 @@ export type {
   DevicePlatform,
   DeviceRegistered,
   ForegroundPayload,
+  InboxNotification,
   NotificationClass,
   PreferenceRow,
 };
@@ -118,4 +122,22 @@ export async function sendTestPush(input: {
     return sendTestPushLive(input, liveClient());
   }
   return sendTestPushFixture(input);
+}
+
+/** The caller's in-app inbox (NTF-BE-006; owner 2026-10-19). Demo previews carry no inbox. */
+export async function listInbox(
+  limit = 20,
+): Promise<{ data: InboxNotification[]; unreadCount: number }> {
+  if (await isLiveSession()) {
+    return listInboxLive(limit, liveClient());
+  }
+  return { data: [], unreadCount: 0 };
+}
+
+/** Marks one inbox row read; returns the fresh unread count. */
+export async function markInboxRead(notificationId: string): Promise<number> {
+  if (await isLiveSession()) {
+    return markInboxReadLive(notificationId, liveClient());
+  }
+  return 0;
 }
