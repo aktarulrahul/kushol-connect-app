@@ -51,8 +51,22 @@ import {
   chatLiveActive,
   chatLiveModeSync,
   liveChat,
+  sendLiveRead,
+  sendLiveTyping,
   subscribeLiveChatEvents,
 } from "@/lib/chat/live-chat";
+
+export function sendChatTyping(groupId: string, state: "start" | "stop"): void {
+  if (chatLiveModeSync()) {
+    sendLiveTyping(groupId, state);
+  }
+}
+
+export function sendChatRead(groupId: string, lastReadMessageId: string): void {
+  if (chatLiveModeSync()) {
+    sendLiveRead(groupId, lastReadMessageId);
+  }
+}
 
 export type { ChatFixtureErrorCode } from "@/fixtures/chat-error";
 export { ChatFixtureError } from "@/fixtures/chat-error";

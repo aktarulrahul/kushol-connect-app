@@ -666,6 +666,28 @@ export function ackDelivered(groupId: string, messageId: string): void {
   void liveChat.markChatDelivered(groupId, messageId).catch(() => undefined);
 }
 
+/**
+ * Typing state frame ("start" | "stop") on the open socket (COM-US-007).
+ */
+export function sendLiveTyping(groupId: string, state: "start" | "stop"): void {
+  try {
+    socket?.send("typing", { groupId, state });
+  } catch {
+    // socket not open or best-effort
+  }
+}
+
+/**
+ * Read ack (blue double ticks) on the open socket for fast real-time receipt delivery.
+ */
+export function sendLiveRead(groupId: string, messageId: string): void {
+  try {
+    socket?.send("message.read", { groupId, lastReadMessageId: messageId });
+  } catch {
+    // socket not open
+  }
+}
+
 /** Live-mode subscription: fixture listeners keep the bus; this attaches the gateway socket. */
 export function subscribeLiveChatEvents(listener: EventListener): () => void {
   wsListeners.add(listener);

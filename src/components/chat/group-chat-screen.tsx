@@ -60,6 +60,8 @@ import {
   DEMO_STICKERS,
   forwardChatMessage,
   MAX_PINNED_MESSAGES,
+  sendChatRead,
+  sendChatTyping,
   votePollMessage,
   type ChatGroup,
   type ChatMessage,
@@ -180,6 +182,7 @@ export function GroupChatScreen({
   const setDraft = useChatState((s) => s.setDraft);
 
   const listRef = useRef<FlatList<Row>>(null);
+  const typingSentAtRef = useRef(0);
   const [focusKey, setFocusKey] = useState(0);
   // The unread pill is captured once, when the room opens; reading clears the row's count.
   const [unreadAtOpen] = useState(() => group?.unreadCount ?? 0);
@@ -325,9 +328,18 @@ export function GroupChatScreen({
   // Read pointer follows the newest incoming message while the room is open (US-006).
   const newestIncoming = [...messages].reverse().find((m) => m.senderId !== ME);
   useEffect(() => {
-    if (newestIncoming) markRead.mutate(newestIncoming.id);
+    if (newestIncoming) {
+      markRead.mutate(newestIncoming.id);
+      sendChatRead(groupId, newestIncoming.id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newestIncoming?.id]);
+
+  useEffect(() => {
+    return () => {
+      sendChatTyping(groupId, "stop");
+    };
+  }, [groupId]);
 
   useEffect(() => {
     const show = Keyboard.addListener(
@@ -499,6 +511,7 @@ export function GroupChatScreen({
     if (tooManyMentions(mentions)) return;
     setDraft(groupId, "");
     pickedMentions.current = [];
+    sendChatTyping(groupId, "stop");
     doSend({ kind: "text", body, ...(mentions.length > 0 ? { mentions } : {}) });
   };
 
@@ -872,7 +885,19 @@ export function GroupChatScreen({
           value={editing ? editing.text : draft}
           onChangeText={(text) => {
             if (editing) setEditing({ ...editing, text });
-            else setDraft(groupId, text);
+            else {
+              setDraft(groupId, text);
+              if (text.trim().length > 0) {
+                const now = Date.now();
+                if (now - typingSentAtRef.current > 2_500) {
+                  typingSentAtRef.current = now;
+                  sendChatTyping(groupId, "start");
+                }
+              } else if (typingSentAtRef.current > 0) {
+                typingSentAtRef.current = 0;
+                sendChatTyping(groupId, "stop");
+              }
+            }
           }}
           onSend={submitText}
           disabled={readOnly}
