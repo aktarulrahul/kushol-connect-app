@@ -573,6 +573,7 @@ function normalizeMessage(m: Record<string, unknown>): ChatMessage {
     groupId: str(m.groupId),
     senderId: str(m.senderId),
     senderName: str(m.senderName),
+    ...(typeof m.senderAvatarUrl === "string" ? { senderAvatarUrl: m.senderAvatarUrl } : {}),
     kind: str(m.kind, "text") as ChatMessage["kind"],
     ...(typeof m.body === "string" ? { body: m.body } : {}),
     ...(media ? { media } : {}),

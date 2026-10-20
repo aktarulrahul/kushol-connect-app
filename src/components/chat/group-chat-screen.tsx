@@ -726,9 +726,13 @@ export function GroupChatScreen({
       <MessageBubble
         message={message}
         isOwn={own}
-        showSender={!own}
+        showSender={!own && isGroup}
         isGroup={isGroup}
-        senderAvatarUrl={message.senderAvatarUrl || memberAvatarMap.get(message.senderId)}
+        senderAvatarUrl={
+          message.senderAvatarUrl ||
+          memberAvatarMap.get(message.senderId) ||
+          (avatarKind === "dm" ? (group?.peer?.avatarUrl || group?.avatarUrl) : undefined)
+        }
         sendState={row.sendState}
         starred={message.starred === true}
         mentionMembers={mentionedMembers(message.mentions, roster.data)}

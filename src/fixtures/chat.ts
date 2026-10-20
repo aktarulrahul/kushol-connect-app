@@ -10,7 +10,11 @@
 import type { components, operations } from "@/api/schema.gen";
 
 type Schemas = components["schemas"];
-export type ChatGroup = Schemas["ChatGroup"];
+export type ChatPeer = Schemas["ChatPeer"] & { avatarUrl?: string };
+export type ChatGroup = Omit<Schemas["ChatGroup"], "peer"> & {
+  avatarUrl?: string;
+  peer?: ChatPeer;
+};
 export type ChatGroupKind = Schemas["ChatGroupKind"];
 export type ChatMemberRole = Schemas["ChatMemberRole"];
 /** Schema kinds + Stage-2 fixture-only `sticker` (OpenAPI gains it in Stage 4). */

@@ -205,7 +205,7 @@ export function MessageBubble({
   const quoteDeleted = message.replyKind === "deleted";
 
   const avatar =
-    !isOwn && isGroup ? (
+    !isOwn ? (
       <UserAvatar
         name={message.senderName}
         id={message.senderId}
@@ -252,7 +252,7 @@ export function MessageBubble({
           className={cn(
             "min-w-0 shrink items-start gap-1 shadow-sm",
             corners,
-            isOwn ? "bg-primary p-2" : "bg-card px-3 py-2",
+            isOwn ? "min-w-[80px] bg-primary p-2" : "min-w-[80px] bg-card px-3 py-2",
             // @mention of the viewer: soft accent fill + accent edge (owner 2026-10-19).
             tagged && "border border-primary bg-primary-soft",
             isMediaBubble && "p-1",
@@ -426,7 +426,7 @@ export function MessageBubble({
           className={cn(
             "mt-1 flex-row flex-wrap gap-1",
             isOwn ? "justify-end" : "justify-start",
-            !isOwn && isGroup && "pl-10",
+            !isOwn && "pl-10",
           )}
         >
           {chips.map((chip) => (
