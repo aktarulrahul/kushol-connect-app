@@ -3,7 +3,7 @@
 // chat-info sheet (with "Edit group" for those who may change the group settings and the
 // "Starred messages" row, owner 2026-10-19).
 import { useState } from "react";
-import { ArrowLeft, ChevronRight, Info, Pencil, Pin, Star } from "lucide-react-native";
+import { ArrowLeft, AtSign, ChevronRight, Info, Pencil, Pin, Star } from "lucide-react-native";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -143,6 +143,53 @@ export function PinnedBar({
           {preview}
         </Text>
       </View>
+    </Pressable>
+  );
+}
+
+/** Mentioned-message strip: tap jumps to the mention and advances to the next. */
+export function MentionBar({
+  previews,
+  activeIndex,
+  onPress,
+}: {
+  previews: readonly string[];
+  activeIndex: number;
+  onPress: () => void;
+}) {
+  const t = useT();
+  if (previews.length === 0) return null;
+  const index = activeIndex % previews.length;
+  const preview = previews[index] ?? "";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Mention: ${preview}`}
+      onPress={onPress}
+      className="flex-row items-center gap-2 border-b border-[#00a884]/20 bg-[#f4fbf7] px-4 py-1.5 active:bg-[#e7fce3]"
+    >
+      {previews.length > 1 ? (
+        <View className="items-center justify-center gap-0.5" accessibilityElementsHidden>
+          {previews.map((_, i) => (
+            <View
+              key={i}
+              className={cn("size-1 rounded-full", i === index ? "bg-[#00a884]" : "bg-border")}
+            />
+          ))}
+        </View>
+      ) : null}
+      <View className="size-8 items-center justify-center rounded-full bg-[#00a884]/15">
+        <Icon as={AtSign} size={16} className="text-[#00a884]" />
+      </View>
+      <View className="min-w-0 flex-1">
+        <Text className="text-xs font-semibold leading-4 text-[#00a884]">
+          {t("notifications.banner.chat.mention") ?? "You were mentioned"}
+        </Text>
+        <Text numberOfLines={1} className="text-sm leading-5 text-foreground">
+          {preview}
+        </Text>
+      </View>
+      <Icon as={ChevronRight} size={16} className="text-muted-foreground" />
     </Pressable>
   );
 }

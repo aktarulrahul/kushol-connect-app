@@ -42,6 +42,7 @@ describe("GroupChatScreen", () => {
       await screen.findByText("কেউ খাতা জমা দেয়নি?", {}, { timeout: 4000 }),
     ).toBeOnTheScreen();
     expect(screen.getByText("Pinned message")).toBeOnTheScreen();
+    expect(screen.getByText("You were mentioned")).toBeOnTheScreen();
     expect(screen.getAllByText("অর্ধবার্ষিক-সিলেবাস.pdf").length).toBeGreaterThan(0);
     expect(screen.getByText("2 new unread messages")).toBeOnTheScreen();
   });

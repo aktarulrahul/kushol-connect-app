@@ -53,6 +53,23 @@ const SIZES = {
 
 export type AvatarPlaceholder = "initials" | "person" | "group";
 
+export function resolveAvatarUri(uri?: string | null): string | undefined {
+  if (!uri) return undefined;
+  if (
+    uri.startsWith("http://") ||
+    uri.startsWith("https://") ||
+    uri.startsWith("data:") ||
+    uri.startsWith("blob:")
+  ) {
+    return uri;
+  }
+  const apiBase = process.env.EXPO_PUBLIC_API_URL || "";
+  if (apiBase) {
+    return `${apiBase.replace(/\/$/, "")}${uri.startsWith("/") ? "" : "/"}${uri}`;
+  }
+  return uri;
+}
+
 type UserAvatarProps = {
   name: string;
   /** Stable seed for palette hash; falls back to `name`. Prefer chat/user id when known. */
@@ -81,6 +98,7 @@ function UserAvatar({
   const tint = avatarTintFor(id ?? name);
   const label = [name, verified ? t("common.verified") : ""].filter(Boolean).join(" — ");
   const IconGlyph = placeholder === "group" ? UsersRound : UserRound;
+  const resolvedUri = resolveAvatarUri(uri);
 
   return (
     <View
@@ -90,7 +108,7 @@ function UserAvatar({
       accessibilityLabel={label}
     >
       <Avatar alt={name} className={s.box}>
-        {uri ? <AvatarImage source={{ uri }} /> : null}
+        {resolvedUri ? <AvatarImage source={{ uri: resolvedUri }} /> : null}
         <AvatarFallback style={{ backgroundColor: tint.bg }}>
           {placeholder !== "initials" ? (
             // Direct Lucide — avoid Icon's `text-foreground` fighting the hashed tint.fg.

@@ -11,6 +11,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { useT } from "@/i18n/locale-provider";
 import { toBnDigits } from "@/components/chat/group-row";
 import { motion } from "@/theme/tokens";
+import { cn } from "@/lib/utils";
 
 const enter = FadeInDown.duration(motion.duration.base).reduceMotion(ReduceMotion.System);
 const exit = FadeOutDown.duration(motion.duration.fast).reduceMotion(ReduceMotion.System);
@@ -90,10 +91,14 @@ export function UnreadPill({ count }: { count: number }) {
   const t = useT();
   if (count <= 0) return null;
   return (
-    <View className="items-center py-1">
-      <View className="rounded-full bg-primary-soft px-3 py-1">
-        <Text className="text-xs text-primary">{t("chat.unread.count", { count })}</Text>
+    <View className="my-2.5 flex-row items-center justify-center px-4">
+      <View className="h-px flex-1 bg-border/60" />
+      <View className="mx-3 rounded-full bg-card border border-border/80 px-3.5 py-1 shadow-xs">
+        <Text className="text-[11px] font-semibold uppercase tracking-wider text-[#00a884]">
+          {t("chat.unread.count", { count })}
+        </Text>
       </View>
+      <View className="h-px flex-1 bg-border/60" />
     </View>
   );
 }
@@ -102,9 +107,11 @@ export function UnreadPill({ count }: { count: number }) {
 export function ScrollToBottomButton({
   visible,
   onPress,
+  unreadCount,
 }: {
   visible: boolean;
   onPress: () => void;
+  unreadCount?: number;
 }) {
   const t = useT();
   if (!visible) return null;
@@ -115,9 +122,51 @@ export function ScrollToBottomButton({
         accessibilityLabel={t("chat.scroll_bottom")}
         onPress={onPress}
         hitSlop={6}
-        className="size-9 items-center justify-center rounded-full bg-primary shadow-md active:opacity-80"
+        className="size-10 items-center justify-center rounded-full bg-card border border-border shadow-md active:opacity-80 relative"
       >
-        <Icon as={ChevronDown} size={18} className="text-primary-foreground" />
+        <Icon as={ChevronDown} size={20} className="text-foreground" />
+        {unreadCount && unreadCount > 0 ? (
+          <View className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-[#25D366] px-1 items-center justify-center shadow-xs">
+            <Text className="text-[10px] font-bold text-white leading-none">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </Text>
+          </View>
+        ) : null}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/** Floating @ button to jump to the next mention */
+export function MentionJumpButton({
+  count,
+  onPress,
+  bottomOffset = "bottom-14",
+}: {
+  count: number;
+  onPress: () => void;
+  bottomOffset?: string;
+}) {
+  if (count <= 0) return null;
+  return (
+    <Animated.View
+      entering={enter}
+      exiting={exit}
+      className={cn("absolute right-4", bottomOffset)}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Jump to mention"
+        onPress={onPress}
+        hitSlop={6}
+        className="size-10 items-center justify-center rounded-full bg-card border border-[#00a884]/40 shadow-md active:opacity-80 relative"
+      >
+        <Text className="text-base font-bold text-[#00a884]">@</Text>
+        <View className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-[#00a884] px-1 items-center justify-center shadow-xs">
+          <Text className="text-[10px] font-bold text-white leading-none">
+            {count > 99 ? "99+" : count}
+          </Text>
+        </View>
       </Pressable>
     </Animated.View>
   );

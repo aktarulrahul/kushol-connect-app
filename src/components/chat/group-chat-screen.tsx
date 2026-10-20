@@ -24,12 +24,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReducedMotion } from "react-native-reanimated";
 
 import { AttachmentCaptionSheet } from "@/components/chat/attachment-caption-sheet";
-import { ChannelHeader, ChatInfoSheet, PinnedBar } from "@/components/chat/channel-header";
+import { ChannelHeader, ChatInfoSheet, MentionBar, PinnedBar } from "@/components/chat/channel-header";
 import { ChatWallpaper } from "@/components/chat/chat-wallpaper";
 import type { ChatAvatarKind } from "@/components/chat/chat-avatar";
 import {
   DateSeparator,
   EmptyConversation,
+  MentionJumpButton,
   OfflineBanner,
   ScrollToBottomButton,
   TypingIndicator,
@@ -208,7 +209,10 @@ export function GroupChatScreen({
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [activePin, setActivePin] = useState(0);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const [showJump, setShowJump] = useState(false);
+  const [newMessagesBelow, setNewMessagesBelow] = useState(0);
+  const prevMessagesLenRef = useRef(0);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [stickerOpen, setStickerOpen] = useState(false);
@@ -241,6 +245,10 @@ export function GroupChatScreen({
   const unreadMarker = useMemo(
     () => (showUnread ? firstUnreadId(messages, unreadAtOpen, ME) : null),
     [messages, unreadAtOpen, showUnread, ME],
+  );
+  const unreadMarkerTime = useMemo(
+    () => (unreadMarker ? messages.find((m) => m.id === unreadMarker)?.createdAt : null),
+    [messages, unreadMarker],
   );
 
   // History rows + optimistic sends not yet in history, newest first for the inverted list.
@@ -305,6 +313,25 @@ export function GroupChatScreen({
         .sort((a, b) => Date.parse(b.pinnedAt ?? "") - Date.parse(a.pinnedAt ?? "")),
     [messages],
   );
+
+  const mentions = useMemo(
+    () =>
+      messages.filter(
+        (m) => !m.deletedAt && m.mentions && m.mentions.includes(ME),
+      ),
+    [messages, ME],
+  );
+
+  useEffect(() => {
+    if (prevMessagesLenRef.current > 0 && messages.length > prevMessagesLenRef.current) {
+      const added = messages.slice(prevMessagesLenRef.current);
+      const incoming = added.filter((m) => m.senderId !== ME);
+      if (incoming.length > 0 && showJump) {
+        setNewMessagesBelow((prev) => prev + incoming.length);
+      }
+    }
+    prevMessagesLenRef.current = messages.length;
+  }, [messages, ME, showJump]);
 
   const typers = useMemo(() => {
     const names = new Map(messages.map((m) => [m.senderId, m.senderName]));
@@ -378,6 +405,7 @@ export function GroupChatScreen({
   }, [highlighted]);
 
   const scrollToLatest = () => {
+    setNewMessagesBelow(0);
     listRef.current?.scrollToOffset({ offset: 0, animated: !reducedMotion });
   };
 
@@ -782,15 +810,20 @@ export function GroupChatScreen({
     // rows are newest-first: the chronologically previous message is the next row.
     const previous = rows[index + 1]?.message;
     const newDay = !previous || !isSameDay(previous.createdAt, message.createdAt);
+    const isUnreadMessage = Boolean(unreadMarkerTime && !own && message.createdAt >= unreadMarkerTime);
     return (
       <View className="px-4 py-1.5">
         {newDay ? <DateSeparator iso={message.createdAt} /> : null}
         {message.id === unreadMarker ? <UnreadPill count={unreadAtOpen} /> : null}
         <View
           className={cn(
-            "rounded-xl",
+            "rounded-xl transition-colors",
             newDay || message.id === unreadMarker ? "mt-2" : undefined,
-            highlighted === message.id && "bg-primary-soft",
+            highlighted === message.id
+              ? "bg-[#00a884]/20 border border-[#00a884]/50"
+              : isUnreadMessage
+                ? "border-l-2 border-l-[#00a884] pl-1"
+                : undefined,
           )}
         >
           <SwipeToReply
@@ -834,6 +867,15 @@ export function GroupChatScreen({
           if (pins.length > 1) setActivePin((i) => (i + 1) % pins.length);
         }}
       />
+      <MentionBar
+        previews={mentions.map((m) => `${authorOf(m)}: ${previewOf(m)}`)}
+        activeIndex={activeMentionIndex}
+        onPress={() => {
+          const target = mentions[activeMentionIndex % Math.max(mentions.length, 1)];
+          if (target) jumpTo(target.id);
+          if (mentions.length > 1) setActiveMentionIndex((i) => (i + 1) % mentions.length);
+        }}
+      />
       {/* Overlap-based padding: safe whether or not Android resizes the window (edge-to-edge). */}
       <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View className="flex-1 bg-muted">
@@ -871,6 +913,9 @@ export function GroupChatScreen({
               onScroll={(event) => {
                 const away = event.nativeEvent.contentOffset.y > JUMP_AFTER;
                 setShowJump((prev) => (prev === away ? prev : away));
+                if (!away) {
+                  setNewMessagesBelow(0);
+                }
               }}
               onScrollToIndexFailed={(info) => {
                 listRef.current?.scrollToOffset({
@@ -887,7 +932,20 @@ export function GroupChatScreen({
               }}
             />
           )}
-          <ScrollToBottomButton visible={showJump} onPress={scrollToLatest} />
+          <MentionJumpButton
+            count={mentions.length}
+            bottomOffset={showJump ? "bottom-14" : "bottom-2"}
+            onPress={() => {
+              const target = mentions[activeMentionIndex % Math.max(mentions.length, 1)];
+              if (target) jumpTo(target.id);
+              if (mentions.length > 1) setActiveMentionIndex((i) => (i + 1) % mentions.length);
+            }}
+          />
+          <ScrollToBottomButton
+            visible={showJump}
+            unreadCount={newMessagesBelow > 0 ? newMessagesBelow : undefined}
+            onPress={scrollToLatest}
+          />
         </View>
 
         <View className="bg-muted">
