@@ -1,4 +1,4 @@
-﻿// Query hooks over the notifications backend (NTF-AP-003/005/008). Live sessions hit the
+// Query hooks over the notifications backend (NTF-AP-003/005/008). Live sessions hit the
 // generated client; fixture sessions hit the seam â€” the selector decides (backend.ts).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 

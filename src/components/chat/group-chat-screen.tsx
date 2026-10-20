@@ -170,6 +170,13 @@ export function GroupChatScreen({
   // mention ids to names in bubbles; picked members ride the next send/edit while their
   // "@Full Name" is still in the text.
   const roster = useChatGroupMembers(groupId, avatarKind !== "dm");
+  const memberAvatarMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of roster.data ?? []) {
+      if (m.avatarUrl) map.set(m.userId, m.avatarUrl);
+    }
+    return map;
+  }, [roster.data]);
   const pickedMentions = useRef<MentionMember[]>([]);
   const typing = useChatState((s) => s.typing[groupId]) ?? EMPTY_TYPING;
   const outgoing = useChatState((s) => s.outgoing);
@@ -721,6 +728,7 @@ export function GroupChatScreen({
         isOwn={own}
         showSender={!own}
         isGroup={isGroup}
+        senderAvatarUrl={message.senderAvatarUrl || memberAvatarMap.get(message.senderId)}
         sendState={row.sendState}
         starred={message.starred === true}
         mentionMembers={mentionedMembers(message.mentions, roster.data)}
@@ -804,6 +812,7 @@ export function GroupChatScreen({
         avatarKind={avatarKind}
         avatarId={peerId ?? groupId}
         photoAssetId={group?.photoAssetId}
+        imageUri={avatarKind === "dm" ? (group?.peer as { avatarUrl?: string })?.avatarUrl : undefined}
         onBack={() => {
           router.back();
         }}
@@ -1127,6 +1136,7 @@ export function GroupChatScreen({
         avatarId={peerId ?? groupId}
         details={infoDetails}
         photoAssetId={group?.photoAssetId}
+        imageUri={avatarKind === "dm" ? (group?.peer as { avatarUrl?: string })?.avatarUrl : undefined}
         onOpenStarred={() => {
           setInfoOpen(false);
           afterMenu(() => {

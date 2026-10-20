@@ -82,6 +82,7 @@ export function MessageBubble({
   isOwn,
   showSender,
   isGroup,
+  senderAvatarUrl,
   replyAuthor,
   preview = false,
   starred = false,
@@ -100,6 +101,7 @@ export function MessageBubble({
   showSender: boolean;
   /** Group rooms show the author avatar + name on incoming (Spartens isGroup branch). */
   isGroup?: boolean;
+  senderAvatarUrl?: string | null;
   /** Author of the quoted message ("You" for own) — resolved by the screen from history. */
   replyAuthor?: string;
   /** Rendered inside the long-press focus menu: full width of the lifted rect, no handlers. */
@@ -204,7 +206,13 @@ export function MessageBubble({
 
   const avatar =
     !isOwn && isGroup ? (
-      <UserAvatar name={message.senderName} id={message.senderId} size="sm" placeholder="person" />
+      <UserAvatar
+        name={message.senderName}
+        id={message.senderId}
+        size="sm"
+        placeholder="person"
+        uri={senderAvatarUrl || (message as { senderAvatarUrl?: string }).senderAvatarUrl}
+      />
     ) : null;
 
   let content: ReactNode;

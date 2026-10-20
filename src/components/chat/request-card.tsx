@@ -37,7 +37,13 @@ export function RequestCard({
   return (
     <View className="mx-3 mb-1.5 rounded-2xl border border-border bg-background p-2.5">
       <View className="flex-row items-center gap-2.5">
-        <ChatAvatar kind="dm" id={peer.userId} name={peer.name} size="lg" />
+        <ChatAvatar
+          kind="dm"
+          id={peer.userId}
+          name={peer.name}
+          size="lg"
+          imageUri={(peer as { avatarUrl?: string }).avatarUrl}
+        />
         <View className="flex-1">
           <Text className="font-semibold text-foreground">{peer.name}</Text>
           <Text className="text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
-// Conversation chrome in the Spartens ChannelHeader language (owner 2026-10-09): back circle ·
-// centred avatar + name (tap → chat info) · info circle; the pinned-message bar under it; the
+// Conversation chrome in the Spartens ChannelHeader language (owner 2026-10-09): back circle Â·
+// centred avatar + name (tap â†’ chat info) Â· info circle; the pinned-message bar under it; the
 // chat-info sheet (with "Edit group" for those who may change the group settings and the
 // "Starred messages" row, owner 2026-10-19).
 import { useState } from "react";
@@ -36,17 +36,19 @@ export function ChannelHeader({
   avatarKind,
   avatarId,
   photoAssetId,
+  imageUri,
   onBack,
   onOpenInfo,
 }: {
   title: string;
   subtitle?: string;
-  /** Teal subtitle (typing… / online) instead of muted. */
+  /** Teal subtitle (typingâ€¦ / online) instead of muted. */
   subtitleActive?: boolean;
   avatarKind: ChatAvatarKind;
   avatarId: string;
   /** Group photo (set from the web console's group settings). */
   photoAssetId?: string | undefined;
+  imageUri?: string | null;
   onBack: () => void;
   onOpenInfo: () => void;
 }) {
@@ -76,6 +78,7 @@ export function ChannelHeader({
             name={title}
             size="md"
             photoAssetId={photoAssetId}
+            imageUri={imageUri}
           />
           <View className="min-w-0 shrink">
             <Text numberOfLines={1} className="text-base font-medium leading-6 text-foreground">
@@ -151,13 +154,14 @@ type ChatInfoSheetProps = {
   avatarKind: ChatAvatarKind;
   /** The group id for groups; the peer's id in a DM. */
   avatarId: string;
-  /** Group photo (group settings — web console or the app's Edit group sheet). */
+  /** Group photo (group settings â€” web console or the app's Edit group sheet). */
   photoAssetId?: string | undefined;
-  /** Lines under the name — kind, member count, presence. */
+  imageUri?: string | null;
+  /** Lines under the name â€” kind, member count, presence. */
   details: readonly string[];
   /**
    * "Starred messages" row (owner 2026-10-19): opens the screen's starred sheet. The count is
-   * the loaded stars (`starredMore` ⇒ older pages exist, shown as "N+").
+   * the loaded stars (`starredMore` â‡’ older pages exist, shown as "N+").
    */
   onOpenStarred?: (() => void) | undefined;
   starredCount?: number | undefined;
@@ -165,12 +169,12 @@ type ChatInfoSheetProps = {
 };
 
 export function ChatInfoSheet(props: ChatInfoSheetProps) {
-  return props.avatarKind === "dm" ? <ChatInfoBody {...props} /> : <GroupInfoSheet {...props} />;
+  return props.avatarKind === "dm" ? <ChatInfoBody {...props} imageUri={props.imageUri} /> : <GroupInfoSheet {...props} imageUri={props.imageUri} />;
 }
 
 /**
- * Groups (05 G-28): "Edit group" for an account that may change the settings — rights from the
- * cached group row and the account role — opening the group settings sheet; the save refreshes
+ * Groups (05 G-28): "Edit group" for an account that may change the settings â€” rights from the
+ * cached group row and the account role â€” opening the group settings sheet; the save refreshes
  * the list, the title and the avatars.
  */
 function GroupInfoSheet(props: ChatInfoSheetProps) {
@@ -230,6 +234,7 @@ function ChatInfoBody({
   avatarId,
   details,
   photoAssetId,
+  imageUri,
   onEdit,
   onOpenStarred,
   starredCount,
@@ -250,6 +255,7 @@ function ChatInfoBody({
           name={title}
           size="xl"
           photoAssetId={photoAssetId}
+          imageUri={imageUri}
         />
         <Text className="text-center text-lg font-semibold text-foreground">{title}</Text>
         {details.map((line) => (

@@ -299,7 +299,11 @@ export const liveChat = {
         }),
       "NOT_FOUND",
     );
-    return data.data.map((m) => ({ userId: m.userId, name: m.name }));
+    return data.data.map((m) => ({
+      userId: m.userId,
+      name: m.name,
+      avatarUrl: (m as { avatarUrl?: string }).avatarUrl,
+    }));
   },
 
   /** "Message info": read by / delivered to (api order), members not reached, reactions. */
@@ -607,11 +611,37 @@ function dispatch(event: ChatRealtimeEvent): void {
   for (const listener of wsListeners) listener(event);
 }
 
+/**
+ * The access token for the next upgrade. The gateway checks the bearer only at the handshake, so
+ * a token past its 15-minute life would fail every reconnect (network change, background, api
+ * restart) until some REST call happened to rotate it: rotate first when it is due.
+ */
+async function socketAccessToken(): Promise<string | null> {
+  const tokens = await tokenStore.get();
+  if (!tokens || !accessTokenNeedsRefresh(tokens.accessToken, Date.now())) {
+    return tokens?.accessToken ?? null;
+  }
+  try {
+    await liveAuth().rotate();
+  } catch {
+    // Rejected: the store is cleared and the client waits for a sign-in. Transport error: the
+    // stored pair stays and the backoff tries again.
+  }
+  return (await tokenStore.get())?.accessToken ?? null;
+}
+
+// Set while the first token read is in flight, so concurrent subscribers never open two sockets.
+let socketStarting = false;
+
 function ensureSocket(): void {
-  if (socket) return;
+  if (socket || socketStarting) return;
+  socketStarting = true;
   void (async () => {
-    const tokens = await tokenStore.get();
-    cachedToken = tokens?.accessToken ?? null;
+    try {
+      cachedToken = await socketAccessToken();
+    } finally {
+      socketStarting = false;
+    }
     socket = createChatSocket({
       url: wsUrl(),
       getToken: () => cachedToken,
@@ -623,9 +653,10 @@ function ensureSocket(): void {
       onStateChange: (state) => {
         connectionSink?.(state);
         if (state === "offline") {
-          // Refresh before the backoff timer re-dials so a rotated token is used.
-          void tokenStore.get().then((t) => {
-            cachedToken = t?.accessToken ?? null;
+          // Rotate (when due) before the backoff timer re-dials, so the upgrade is never refused
+          // for an expired token.
+          void socketAccessToken().then((token) => {
+            cachedToken = token;
           });
         }
       },

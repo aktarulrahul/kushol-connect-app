@@ -146,7 +146,7 @@ export default function TabsLayout() {
               : tab.key === "feeds"
                 ? badges.feeds
                 : undefined,
-          avatar: tab.key === "you" ? { name: me.fullName } : undefined,
+          avatar: tab.key === "you" ? { name: me.fullName, uri: me.avatarUrl } : undefined,
         }))}
         active={active}
         onChange={(key) => {

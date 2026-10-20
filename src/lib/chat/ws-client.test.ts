@@ -1,6 +1,6 @@
 // Unit tests for the WS client state machine (COM-AP-002): backoff growth with cap, jitter
 // bounds, re-subscribe + catch-up ordering on reconnect, heartbeat cadence, manual disconnect.
-import { createChatSocket, type ChatSocketLike } from "@/lib/chat/ws-client";
+import { createChatSocket, STALE_AFTER_MS, type ChatSocketLike } from "@/lib/chat/ws-client";
 
 type FakeSocket = {
   send: jest.Mock<void, [string]>;
@@ -69,6 +69,7 @@ function makeTimers() {
 }
 
 function setup() {
+  const clock = { now: 1_000_000 };
   const fakes: FakeSocket[] = [];
   const onEvent = jest.fn();
   const onStateChange = jest.fn();
@@ -88,6 +89,7 @@ function setup() {
     },
     setTimeoutFn,
     clearTimeoutFn,
+    now: () => clock.now,
   });
   const first = (): FakeSocket => {
     const fake = fakes[0];
@@ -99,7 +101,7 @@ function setup() {
     if (!fake) throw new Error("no socket");
     return fake;
   };
-  return { socket, fakes, first, last, onEvent, onStateChange, onReconnect, timers, runNext };
+  return { socket, fakes, first, last, onEvent, onStateChange, onReconnect, timers, runNext, clock };
 }
 
 describe("chat ws client", () => {
@@ -150,6 +152,39 @@ describe("chat ws client", () => {
     socket.disconnect();
     expect(first().close).toHaveBeenCalled();
     expect(timers.length).toBe(0);
+  });
+
+  it("keeps a link that answers its pings", () => {
+    const { socket, fakes, first, runNext, clock } = setup();
+    socket.connect();
+    open(first());
+    for (let i = 0; i < 4; i += 1) {
+      clock.now += 25_000;
+      deliver(first(), { type: "pong" });
+      expect(runNext()).toBe(25_000); // heartbeat tick
+    }
+    expect(first().close).not.toHaveBeenCalled();
+    expect(fakes.length).toBe(1);
+    expect(first().send).toHaveBeenLastCalledWith(JSON.stringify({ type: "ping" }));
+  });
+
+  it("drops a silently dead link and re-dials; its late close is ignored", () => {
+    const { socket, fakes, first, last, runNext, timers, clock, onStateChange } = setup();
+    socket.connect();
+    open(first());
+    clock.now += 25_000;
+    runNext(); // ping, no answer
+    clock.now += STALE_AFTER_MS;
+    runNext(); // watchdog
+    expect(first().close).toHaveBeenCalled();
+    expect(onStateChange).toHaveBeenLastCalledWith("offline");
+    expect(timers.length).toBe(1); // only the reconnect timer
+    runNext();
+    expect(fakes.length).toBe(2);
+    open(last());
+    closeFromServer(first()); // the dead socket's close finally arrives
+    expect(timers.length).toBe(1); // the new socket's heartbeat only — no extra reconnect
+    expect(onStateChange).toHaveBeenLastCalledWith("online");
   });
 
   it("ignores malformed frames and parses valid ones", () => {

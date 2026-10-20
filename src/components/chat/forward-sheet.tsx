@@ -119,6 +119,7 @@ export function ForwardSheet({
                   id={group.id}
                   size="sm"
                   photoAssetId={group.photoAssetId}
+                  imageUri={group.kind === "dm" ? (group.peer as { avatarUrl?: string })?.avatarUrl : undefined}
                 />
                 <Text numberOfLines={1} className="flex-1 text-base text-foreground">
                   {title}

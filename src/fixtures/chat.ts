@@ -19,6 +19,7 @@ export type ChatMessage = Omit<Schemas["ChatMessage"], "kind"> & {
   kind: ChatMessageKind;
   /** Present when `kind === "sticker"` — id into `DEMO_STICKERS`. */
   stickerId?: string;
+  senderAvatarUrl?: string;
   /** Fixture-only (Spartens channel parity, owner 2026-10-09): set ⇒ "edited". No OpenAPI
    * field yet — `TODO: Confirm` before Stage 5 (05 `08-gaps.md` G-7). */
   editedAt?: string;
@@ -42,7 +43,7 @@ export type StarredEntry = { message: ChatMessage; starredAt: string };
 /** One page of the viewer's stars, newest first; `nextBefore` pages older stars. */
 export type StarredPage = { data: StarredEntry[]; nextBefore?: string };
 /** One roster row (GET /chat/groups/{id}/members) as the @mention picker uses it. */
-export type ChatRosterMember = { userId: string; name: string };
+export type ChatRosterMember = { userId: string; name: string; avatarUrl?: string };
 
 import { mediaFixtures } from "@/fixtures/media";
 import { ChatFixtureError } from "@/fixtures/chat-error";

@@ -30,10 +30,18 @@ export type ChatSocketOptions = {
   /** Injectable timers (tests). */
   setTimeoutFn?: (fn: () => void, delay: number) => Timer;
   clearTimeoutFn?: (id: Timer) => void;
+  /** Injectable clock (tests). */
+  now?: () => number;
 };
 
 const HEARTBEAT_MS = 25_000;
 const MAX_BACKOFF_MS = 30_000;
+/**
+ * No frame at all (not even the `pong` to our `ping`) for this long means the link died without
+ * a close event (Wi-Fi ↔ mobile switch, NAT drop): the socket is dropped and re-dialled instead of
+ * sitting "online" while every event is lost.
+ */
+export const STALE_AFTER_MS = 2 * HEARTBEAT_MS + 10_000;
 
 export function createChatSocket(options: ChatSocketOptions): {
   connect: () => void;
@@ -46,6 +54,7 @@ export function createChatSocket(options: ChatSocketOptions): {
   });
   const makeSocket: (url: string) => ChatSocketLike =
     options.makeSocket ?? ((url) => new WebSocket(url));
+  const now = options.now ?? Date.now;
 
   let socket: ChatSocketLike | null = null;
   let attempts = 0;
@@ -53,6 +62,7 @@ export function createChatSocket(options: ChatSocketOptions): {
   let reconnectTimer: Timer | null = null;
   let closedByUser = false;
   let everConnected = false;
+  let lastFrameAt = 0;
 
   function scheduleReconnect(): void {
     if (closedByUser || reconnectTimer) return;
@@ -69,9 +79,26 @@ export function createChatSocket(options: ChatSocketOptions): {
   function startHeartbeat(): void {
     stopHeartbeat();
     heartbeat = setTimeoutFn(() => {
+      heartbeat = null;
+      if (now() - lastFrameAt > STALE_AFTER_MS) {
+        dropStale();
+        return;
+      }
       send("ping", {});
       startHeartbeat();
     }, HEARTBEAT_MS);
+  }
+
+  /** The silent-dead link: forget it (its late close is ignored) and re-dial on the backoff. */
+  function dropStale(): void {
+    const dead = socket;
+    socket = null;
+    try {
+      dead?.close();
+    } catch {
+      // already gone
+    }
+    scheduleReconnect();
   }
 
   function stopHeartbeat(): void {
@@ -90,10 +117,14 @@ export function createChatSocket(options: ChatSocketOptions): {
       return;
     }
     options.onStateChange("connecting");
-    socket = makeSocket(`${options.url}?token=${encodeURIComponent(token)}`);
+    const current = makeSocket(`${options.url}?token=${encodeURIComponent(token)}`);
+    socket = current;
 
-    socket.addEventListener("open", () => {
+    // Every handler ignores a socket that was replaced (dropped as stale, or disconnected).
+    current.addEventListener("open", () => {
+      if (socket !== current) return;
       attempts = 0;
+      lastFrameAt = now();
       options.onStateChange("online");
       const isReconnect = everConnected;
       everConnected = true;
@@ -101,19 +132,22 @@ export function createChatSocket(options: ChatSocketOptions): {
       send("subscribe", { rooms: options.rooms() }); // …then re-subscribe (05 §2 reconnect contract)
       startHeartbeat();
     });
-    socket.addEventListener("message", (event) => {
+    current.addEventListener("message", (event) => {
+      if (socket !== current) return;
+      lastFrameAt = now();
       try {
         options.onEvent(JSON.parse(String(event?.data)) as WsServerEvent);
       } catch {
         // Malformed frames are ignored — unknown events are additive by contract (05 §7).
       }
     });
-    socket.addEventListener("close", () => {
+    current.addEventListener("close", () => {
+      if (socket !== current) return;
       stopHeartbeat();
       socket = null;
       scheduleReconnect();
     });
-    socket.addEventListener("error", () => {
+    current.addEventListener("error", () => {
       // close always follows error; nothing to do here but avoid unhandled noise.
     });
   }
