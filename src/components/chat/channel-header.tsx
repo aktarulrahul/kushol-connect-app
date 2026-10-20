@@ -17,6 +17,8 @@ import { CircleAction } from "@/components/ui/screen-header";
 import { Sheet } from "@/components/ui/sheet";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import type { ChatRosterMember } from "@/fixtures/chat";
 import { useLocale, useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import {
@@ -26,7 +28,7 @@ import {
   useSaveGroupSettings,
   type GroupSettingsEdit,
 } from "@/lib/chat/group-settings";
-import { useChatGroups } from "@/lib/chat/use-chat";
+import { useChatGroupMembers, useChatGroups } from "@/lib/chat/use-chat";
 import { cn } from "@/lib/utils";
 
 export function ChannelHeader({
@@ -234,6 +236,8 @@ function GroupInfoSheet(props: ChatInfoSheetProps) {
   const saveSettings = useSaveGroupSettings(groupId);
   const [editOpen, setEditOpen] = useState(false);
   const { onOpenChange } = props;
+  // Members with their profile photos (owner 2026-10-20) — fetched while the sheet is open.
+  const roster = useChatGroupMembers(groupId, props.open);
 
   const save = (edit: GroupSettingsEdit): Promise<boolean> =>
     saveSettings
@@ -251,6 +255,7 @@ function GroupInfoSheet(props: ChatInfoSheetProps) {
     <>
       <ChatInfoBody
         {...props}
+        members={roster.data}
         onEdit={
           rights.canRename || rights.canEditInfo
             ? () => {
@@ -286,7 +291,11 @@ function ChatInfoBody({
   onOpenStarred,
   starredCount,
   starredMore = false,
-}: ChatInfoSheetProps & { onEdit?: (() => void) | undefined }) {
+  members,
+}: ChatInfoSheetProps & {
+  onEdit?: (() => void) | undefined;
+  members?: ReadonlyArray<ChatRosterMember> | undefined;
+}) {
   const t = useT();
   const { locale } = useLocale();
   const countLabel =
@@ -337,6 +346,27 @@ function ChatInfoBody({
           ) : null}
           <Icon as={ChevronRight} size={18} className="text-muted-foreground" />
         </Pressable>
+      ) : null}
+      {members && members.length > 0 ? (
+        <View className="mt-2 gap-1">
+          <Text className="px-1 pb-1 text-xs font-medium text-muted-foreground">
+            {t("chat.group.members_count", { count: toBnDigits(String(members.length), locale) })}
+          </Text>
+          {members.map((member) => (
+            <View key={member.userId} className="flex-row items-center gap-3 px-1 py-1.5">
+              <UserAvatar
+                name={member.name}
+                id={member.userId}
+                size="md"
+                placeholder="person"
+                uri={member.avatarUrl}
+              />
+              <Text className="min-w-0 flex-1 text-base text-foreground" numberOfLines={1}>
+                {member.name}
+              </Text>
+            </View>
+          ))}
+        </View>
       ) : null}
     </Sheet>
   );

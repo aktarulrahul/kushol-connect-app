@@ -500,6 +500,66 @@ paths:
                 $ref: '#/components/schemas/MeResult'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/me/avatar:
+    post:
+      operationId: uploadMeAvatar
+      tags: [users]
+      summary: Upload user profile photo to Cloudflare R2 storage
+      description: |
+        The request body is the raw image file (JPEG, PNG, WebP) with an exact Content-Length.
+        The api verifies the image, streams it to Cloudflare R2, and sets avatar_url on the user.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: fileName
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 255
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Updated user profile with Cloudflare avatar URL
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResult'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deleteMeAvatar
+      tags: [users]
+      summary: Remove user profile photo
+      description: Clears avatar_url on the authenticated user.
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Updated user with cleared avatarUrl
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResult'
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/verification-requests:
     get:
       operationId: listVerificationRequests
@@ -1856,7 +1916,7 @@ paths:
     get:
       operationId: listPlatformModules
       tags: [platform]
-      summary: The static module × action registry (Kushol admins only)
+      summary: The module × action registry (Kushol admins only)
       security:
         - bearerJWT: []
         - sessionCookie: []
@@ -1872,6 +1932,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlatformModules'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createPlatformModule
+      tags: [platform]
+      summary: Register a new platform module (Kushol admins only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformModuleInput'
+      responses:
+        '201':
+          description: Created
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformModule'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/platform/modules/{moduleKey}:
+    patch:
+      operationId: updatePlatformModule
+      tags: [platform]
+      summary: Update a platform module (Kushol admins only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: moduleKey
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformModuleUpdate'
+      responses:
+        '200':
+          description: Updated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformModule'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deletePlatformModule
+      tags: [platform]
+      summary: Delete a custom platform module (Kushol admins only; system modules refused)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: moduleKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/platform/roles:
@@ -2076,6 +2215,8 @@ paths:
                   type: string
                   format: email
                 roleId:
+                  type: string
+                name:
                   type: string
       responses:
         '200':
@@ -6250,7 +6391,9 @@ components:
           type: string
         avatarUrl:
           type: string
-          description: present when the account has an avatar (owner 2026-10-19, profile photo)
+          description: present when the account has a photo (owner 2026-10-19) — the public
+            `/api/v1/users/{id}/avatar?v=…` path every viewer loads, so the owner sees exactly what
+            others see
         maskedPhone:
           type: string
           description: e.g. `+8801XXXXXX789` — present when the account has a phone
@@ -6454,7 +6597,9 @@ components:
           maxLength: 80
         avatarUrl:
           type: string
-          format: uri
+          maxLength: 2048
+          description: Only `""` (remove the photo) or the current value (no change) — a photo is
+            set by uploading it (`POST /api/v1/me/avatar`); any other value is VALIDATION_FAILED
     VerificationRequestStatus:
       type: string
       enum: [PENDING, APPROVED, REJECTED, CANCELLED]
@@ -6739,6 +6884,10 @@ components:
           type: string
         name:
           type: string
+        avatarUrl:
+          type: string
+          description: Profile photo — the public `/api/v1/users/{id}/avatar?v=…` path (resolve against
+            the api origin; a new photo is a new URL). Absent = no photo (initials avatar).
     ChatGroup:
       type: object
       required: [id, kind, status, myRole, memberCount, unreadCount, createdAt]
@@ -6824,6 +6973,10 @@ components:
           type: string
         name:
           type: string
+        avatarUrl:
+          type: string
+          description: Profile photo — the public `/api/v1/users/{id}/avatar?v=…` path (resolve against
+            the api origin; a new photo is a new URL). Absent = no photo (initials avatar).
         role:
           $ref: '#/components/schemas/ChatMemberRole'
         lastReadMessageId:
@@ -6841,13 +6994,18 @@ components:
             $ref: '#/components/schemas/ChatGroupMember'
     ChatContact:
       type: object
-      description: Someone the caller may add to a group or message directly (name + role only)
+      description: Someone the caller may add to a group or message directly (name, photo and
+        role only — no phone or email)
       required: [userId, name, role]
       properties:
         userId:
           type: string
         name:
           type: string
+        avatarUrl:
+          type: string
+          description: Profile photo — the public `/api/v1/users/{id}/avatar?v=…` path (resolve against
+            the api origin; a new photo is a new URL). Absent = no photo (initials avatar).
         role:
           type: string
           enum: [super_admin, school_admin, teacher, student, guardian, vendor]
@@ -7161,6 +7319,10 @@ components:
           type: string
         senderName:
           type: string
+        senderAvatarUrl:
+          type: string
+          description: The sender's profile photo (same public path as ChatPeer.avatarUrl); absent =
+            no photo. Rides WS message.new / message.updated too.
         kind:
           $ref: '#/components/schemas/ChatMessageKind'
         body:
@@ -7351,6 +7513,38 @@ components:
       required: [key, actions]
       properties:
         key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+        isSystem:
+          type: boolean
+    PlatformModuleInput:
+      type: object
+      required: [key, actions]
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z_]{1,39}$'
+        name:
+          type: string
+        description:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+    PlatformModuleUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
           type: string
         actions:
           type: array

@@ -318,6 +318,31 @@ export interface paths {
     patch: operations["patchMe"];
     trace?: never;
   };
+  "/api/v1/me/avatar": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Upload user profile photo to Cloudflare R2 storage
+     * @description The request body is the raw image file (JPEG, PNG, WebP) with an exact Content-Length.
+     *     The api verifies the image, streams it to Cloudflare R2, and sets avatar_url on the user.
+     */
+    post: operations["uploadMeAvatar"];
+    /**
+     * Remove user profile photo
+     * @description Clears avatar_url on the authenticated user.
+     */
+    delete: operations["deleteMeAvatar"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/verification-requests": {
     parameters: {
       query?: never;
@@ -1001,14 +1026,33 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** The static module × action registry (Kushol admins only) */
+    /** The module × action registry (Kushol admins only) */
     get: operations["listPlatformModules"];
     put?: never;
-    post?: never;
+    /** Register a new platform module (Kushol admins only) */
+    post: operations["createPlatformModule"];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/modules/{moduleKey}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Delete a custom platform module (Kushol admins only; system modules refused) */
+    delete: operations["deletePlatformModule"];
+    options?: never;
+    head?: never;
+    /** Update a platform module (Kushol admins only) */
+    patch: operations["updatePlatformModule"];
     trace?: never;
   };
   "/api/v1/platform/roles": {
@@ -3238,7 +3282,7 @@ export interface components {
       status: components["schemas"]["UserStatus"];
       locale: components["schemas"]["Locale"];
       fullName: string;
-      /** @description present when the account has an avatar (owner 2026-10-19, profile photo) */
+      /** @description present when the account has a photo (owner 2026-10-19) — the public `/api/v1/users/{id}/avatar?v=…` path every viewer loads, so the owner sees exactly what others see */
       avatarUrl?: string;
       /** @description e.g. `+8801XXXXXX789` — present when the account has a phone */
       maskedPhone?: string;
@@ -3352,7 +3396,7 @@ export interface components {
     MeUpdateInput: {
       locale?: components["schemas"]["Locale"];
       fullName?: string;
-      /** Format: uri */
+      /** @description Only `""` (remove the photo) or the current value (no change) — a photo is set by uploading it (`POST /api/v1/me/avatar`); any other value is VALIDATION_FAILED */
       avatarUrl?: string;
     };
     /** @enum {string} */
@@ -3497,6 +3541,8 @@ export interface components {
     ChatPeer: {
       userId: string;
       name: string;
+      /** @description Profile photo — the public `/api/v1/users/{id}/avatar?v=…` path (resolve against the api origin; a new photo is a new URL). Absent = no photo (initials avatar). */
+      avatarUrl?: string;
     };
     ChatGroup: {
       id: string;
@@ -3538,6 +3584,8 @@ export interface components {
     ChatGroupMember: {
       userId: string;
       name: string;
+      /** @description Profile photo — the public `/api/v1/users/{id}/avatar?v=…` path (resolve against the api origin; a new photo is a new URL). Absent = no photo (initials avatar). */
+      avatarUrl?: string;
       role: components["schemas"]["ChatMemberRole"];
       lastReadMessageId?: string;
       /** Format: date-time */
@@ -3546,10 +3594,12 @@ export interface components {
     ChatGroupMemberPage: {
       data: components["schemas"]["ChatGroupMember"][];
     };
-    /** @description Someone the caller may add to a group or message directly (name + role only) */
+    /** @description Someone the caller may add to a group or message directly (name, photo and role only — no phone or email) */
     ChatContact: {
       userId: string;
       name: string;
+      /** @description Profile photo — the public `/api/v1/users/{id}/avatar?v=…` path (resolve against the api origin; a new photo is a new URL). Absent = no photo (initials avatar). */
+      avatarUrl?: string;
       /** @enum {string} */
       role: "super_admin" | "school_admin" | "teacher" | "student" | "guardian" | "vendor";
     };
@@ -3721,6 +3771,8 @@ export interface components {
       groupId: string;
       senderId: string;
       senderName: string;
+      /** @description The sender's profile photo (same public path as ChatPeer.avatarUrl); absent = no photo. Rides WS message.new / message.updated too. */
+      senderAvatarUrl?: string;
       kind: components["schemas"]["ChatMessageKind"];
       body?: string;
       media?: components["schemas"]["ChatMediaRef"];
@@ -3824,7 +3876,21 @@ export interface components {
     };
     PlatformModule: {
       key: string;
+      name?: string;
+      description?: string;
       actions: string[];
+      isSystem?: boolean;
+    };
+    PlatformModuleInput: {
+      key: string;
+      name?: string;
+      description?: string;
+      actions: string[];
+    };
+    PlatformModuleUpdate: {
+      name?: string;
+      description?: string;
+      actions?: string[];
     };
     PlatformModules: {
       data: components["schemas"]["PlatformModule"][];
@@ -6087,6 +6153,62 @@ export interface operations {
       default: components["responses"]["Problem"];
     };
   };
+  uploadMeAvatar: {
+    parameters: {
+      query?: {
+        fileName?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/octet-stream": string;
+      };
+    };
+    responses: {
+      /** @description Updated user profile with Cloudflare avatar URL */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MeResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deleteMeAvatar: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Updated user with cleared avatarUrl */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MeResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
   listVerificationRequests: {
     parameters: {
       query?: {
@@ -7268,6 +7390,90 @@ export interface operations {
       default: components["responses"]["Problem"];
     };
   };
+  createPlatformModule: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformModuleInput"];
+      };
+    };
+    responses: {
+      /** @description Created */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformModule"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  deletePlatformModule: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        moduleKey: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Deleted */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updatePlatformModule: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        moduleKey: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformModuleUpdate"];
+      };
+    };
+    responses: {
+      /** @description Updated */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformModule"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
   listPlatformRoles: {
     parameters: {
       query?: never;
@@ -7475,6 +7681,7 @@ export interface operations {
           /** Format: email */
           email: string;
           roleId: string;
+          name?: string;
         };
       };
     };
