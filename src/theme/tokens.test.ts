@@ -1,17 +1,30 @@
 import config from "../../tailwind.config";
 
-import { avatarPalette, avatarTintFor, brand, color, hexToOklch, motion, neutral, steps, teal, text } from "./tokens";
+import {
+  avatarPalette,
+  avatarTintFor,
+  brand,
+  color,
+  hexToOklch,
+  motion,
+  neutral,
+  steps,
+  teal,
+  text,
+} from "./tokens";
 
 // DSN-UT-005 — token values pinned to docs/design-reference/README.md §2 (the web repo runs the
 // same pins), NativeWind theme built only from tokens (DSN-AP-001), and the light theme's
 // contrast (WCAG 2.2 AA).
 
 const REFERENCE = {
-  primary: "#095777",
-  secondary: "#386070",
+  primary: "#662D91",
+  secondary: "#F59E0B",
+  coral: "#F43F5E",
   swoosh: "#707070",
-  paper: "#FAFBFC",
-  ink: "#111827",
+  tint: "#FAF5FF",
+  paper: "#F8FAFC",
+  ink: "#1E1B4B",
 };
 
 function luminance(hex: string): number {
@@ -28,11 +41,12 @@ export function contrast(a: string, b: string): number {
 }
 
 describe("tokens", () => {
-  it("pin the design-reference palette", () => {
+  it("pin the owner palette v2 (2026-10-22)", () => {
     expect(brand).toEqual(REFERENCE);
-    expect(teal[800]).toBe(REFERENCE.primary);
-    expect(neutral[900]).toBe(REFERENCE.ink);
+    expect(teal[700]).toBe(REFERENCE.primary);
+    expect(neutral[800]).toBe(REFERENCE.ink);
     expect(color.primary).toBe(REFERENCE.primary);
+    expect(color["primary-soft"]).toBe(REFERENCE.tint);
     expect(color.background).toBe(REFERENCE.paper);
     expect(color.foreground).toBe(REFERENCE.ink);
   });

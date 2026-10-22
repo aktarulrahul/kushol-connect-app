@@ -7,30 +7,39 @@
 // one-off hex values"): OKLCH lightness steps like Tailwind's, with the brand colour pinned to the
 // step closest to its own lightness. tailwind.config.ts feeds these values to NativeWind.
 
-/** Reference palette (sampled from the logo PNG 2026-09-29 — `verify` against the SVG). */
+/** Owner-approved palette v2 (2026-10-22 — purple brand anchored at kushol-700 `#662D91`). */
 export const brand = {
-  /** Deep teal — wordmark, "CONNECT", swirl core. Primary buttons, links, active states. */
-  primary: "#095777",
-  /** Slate teal — swirl midpoint. Secondary surfaces, icons, chart series. */
-  secondary: "#386070",
+  /** Primary brand anchor — app header, primary CTAs, QR pass frame, logo. */
+  primary: "#662D91",
+  /** Amber gold — "Buy Now", flash-sale badges, star ratings, "Featured Event" tags. */
+  secondary: "#F59E0B",
+  /** Coral rose — urgency: "Closing Soon" timers, live indicators, discount %, unread badges. AA form: `#E11D48`. */
+  coral: "#F43F5E",
   /** Swoosh gray — brand graphic only, never a UI text colour. */
   swoosh: "#707070",
-  /** Paper — light background (proposed in the reference; owner to confirm). */
-  paper: "#FAFBFC",
-  /** Ink — primary text (proposed `#111827`-scale; owner to confirm). */
-  ink: "#111827",
+  /** Soft purple (kushol-50) — page backgrounds, subtle unread message row tint. */
+  tint: "#FAF5FF",
+  /** Crisp off-white — app background so white cards pop. */
+  paper: "#F8FAFC",
+  /** Deep indigo-slate — dark text/headings; never pure black. */
+  ink: "#1E1B4B",
 } as const;
 
 /**
- * Status colours. Not in the design reference — proposed here so admin tables, badges and toasts
- * never rely on colour alone without a token. `TODO: Confirm` with the owner (Rahul).
+ * Status colours. Success/check-in is the owner's emerald (2026-10-22); `color.success` carries
+ * the AA-readable text form (`#047857`) — the raw `#10B981` stays on soft surfaces and badges.
  */
 export const status = {
-  success: "#15803D",
-  warning: "#B45309",
+  success: "#10B981",
+  warning: "#B45309", // AA text form of the #F59E0B gold accent
   danger: "#B91C1C",
-  info: "#386070", // slate teal — keeps info on-brand
+  info: "#2563EB", // royal blue retained for informational accents
 } as const;
+
+/** AA-readable emerald for success text on light surfaces (the owner's #10B981 is badge/bg-only). */
+export const successText = "#047857";
+/** AA-readable coral for unread/urgency counts (the owner's #F43F5E is badge-only). */
+export const coralText = "#E11D48";
 
 // ─── OKLCH colour math (sRGB ↔ OKLab, Björn Ottosson) ───────────────────────────────────────
 
@@ -167,8 +176,28 @@ function soft(hex: string): string {
   return oklchToHex({ l: 0.965, c: c.c * 0.18, h: c.h });
 }
 
-export const teal = generateScale(brand.primary, "chromatic"); // brand.primary lands on 800
-export const neutral = generateScale(brand.ink, "gray"); // brand.ink lands on 900
+/**
+ * Owner-supplied kushol scale (2026-10-22) — kushol-700 `#662D91` is the primary brand anchor,
+ * 600 is the interactive highlight and 800 the pressed state. Hand-pinned: the OKLCH generator
+ * would land `#662D91` on step 800, so this scale is literal, not generated.
+ */
+export const teal = {
+  50: "#FAF5FF",
+  100: "#F3E8FF",
+  200: "#E9D5FF",
+  300: "#D8B4FE",
+  400: "#C084FC",
+  500: "#9333EA",
+  600: "#7E3AF2",
+  700: "#662D91",
+  800: "#532178",
+  900: "#3B1557",
+  950: "#220A33",
+} as const satisfies Scale;
+/** Muted slate (#64748B) behind the legacy slate-* surface/text classes. */
+const slateBase = "#64748B";
+export const slateTeal = generateScale(slateBase, "chromatic");
+export const neutral = generateScale(brand.ink, "gray"); // brand.ink lands on 800
 
 // ─── Semantic colours (light theme; names follow shadcn/ui so its components theme directly) ─
 
@@ -180,28 +209,28 @@ export const color = {
   "card-foreground": brand.ink,
   popover: "#FFFFFF",
   "popover-foreground": brand.ink,
-  // brand actions
-  primary: teal[800],
+  // brand actions (primary = owner royal blue; tint = owner soft ice blue)
+  primary: brand.primary,
   "primary-foreground": "#FFFFFF",
-  "primary-hover": teal[900],
-  "primary-soft": teal[50],
+  "primary-hover": teal[800],
+  "primary-soft": brand.tint,
   "primary-soft-foreground": teal[800],
-  // quiet surfaces (shadcn "secondary" = quiet button, not the brand's slate teal)
+  // quiet surfaces (shadcn "secondary" = quiet button, not the brand's action accent)
   secondary: neutral[100],
   "secondary-foreground": neutral[900],
   muted: neutral[100],
   "muted-foreground": neutral[600],
-  accent: teal[50],
+  accent: brand.tint,
   "accent-foreground": teal[900],
   // lines + focus (input/ring meet WCAG 1.4.11's 3:1 against card and background)
   border: neutral[200],
   input: neutral[500],
   ring: teal[700],
-  // status (`destructive` is shadcn's name for danger)
+  // status (`destructive` is shadcn's name for danger; success text uses the AA emerald)
   destructive: status.danger,
   "destructive-foreground": "#FFFFFF",
   "destructive-soft": soft(status.danger),
-  success: status.success,
+  success: successText,
   "success-foreground": "#FFFFFF",
   "success-soft": soft(status.success),
   warning: status.warning,
@@ -214,29 +243,30 @@ export const color = {
   "brand-primary": brand.primary,
   "brand-secondary": brand.secondary,
   "brand-swoosh": brand.swoosh,
+  "brand-tint": brand.tint,
   paper: brand.paper,
   ink: brand.ink,
   white: "#FFFFFF",
   black: "#000000",
-  // charts: teal family first (design-reference §2 "chart series")
-  "chart-1": teal[800],
+  // charts: blue family first (design-reference §2 "chart series")
+  "chart-1": teal[700],
   "chart-2": brand.secondary,
-  "chart-3": teal[500],
+  "chart-3": teal[400],
   "chart-4": teal[300],
   "chart-5": neutral[400],
-  // Command Center sidebar (design-reference §7.2: neutral shell, teal only for active nav)
+  // Command Center sidebar (design-reference §7.2: neutral shell, brand blue only for active nav)
   sidebar: "#FFFFFF",
   "sidebar-foreground": neutral[700],
-  "sidebar-primary": teal[800],
+  "sidebar-primary": brand.primary,
   "sidebar-primary-foreground": "#FFFFFF",
-  "sidebar-accent": teal[50],
+  "sidebar-accent": brand.tint,
   "sidebar-accent-foreground": teal[900],
   "sidebar-border": neutral[200],
   "sidebar-ring": teal[700],
-  // App shell (design-reference §6.1): floating tab bar on teal-950, header wash teal-50 → paper
+  // App shell (design-reference §6.1): floating tab bar on blue-950, header wash tint → paper
   tabbar: teal[950],
   "tabbar-foreground": "#FFFFFF",
-  wash: teal[50],
+  wash: brand.tint,
   presence: status.success,
   unread: status.danger,
 } as const;
