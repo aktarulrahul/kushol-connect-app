@@ -5129,6 +5129,1227 @@ paths:
                 $ref: '#/components/schemas/LeadCreated'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/vendor/profile:
+    get:
+      operationId: getVendorProfile
+      tags: [vendor]
+      summary: Get own vendor account details
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Vendor account details
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorAccount'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: updateVendorProfile
+      tags: [vendor]
+      summary: Update own vendor KYB profile details
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorProfileUpdateInput'
+      responses:
+        '200':
+          description: Updated vendor account
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorAccount'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/dashboard/metrics:
+    get:
+      operationId: getVendorDashboardMetrics
+      tags: [vendor]
+      summary: Get real-time KPIs for vendor dashboard
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Real-time dashboard KPI metrics
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorMetrics'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/members:
+    get:
+      operationId: listVendorMembers
+      tags: [vendor]
+      summary: List all team members of this vendor
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Vendor team members
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VendorMember'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/members/invite:
+    post:
+      operationId: inviteVendorMember
+      tags: [vendor]
+      summary: Invite or add a new team member
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorMemberInviteInput'
+      responses:
+        '201':
+          description: Member invited / added
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorMember'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/members/{memberId}:
+    patch:
+      operationId: updateVendorMember
+      tags: [vendor]
+      summary: Update member role or status
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorMemberUpdateInput'
+      responses:
+        '200':
+          description: Member updated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorMember'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: removeVendorMember
+      tags: [vendor]
+      summary: Remove member from vendor organization
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Member removed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/seats/usage:
+    get:
+      operationId: getVendorSeatUsage
+      tags: [vendor]
+      summary: Get team seat usage and quota info (5 free, billable beyond)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Seat usage
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorSeatUsage'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/institutions:
+    get:
+      operationId: listVendorInstitutions
+      tags: [vendor]
+      summary: List educational institutions onboarded by this vendor
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Onboarded institutions
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VendorInstitutionItem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: onboardVendorInstitution
+      tags: [vendor]
+      summary: Submit a new educational institution for onboarding
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorInstitutionOnboardInput'
+      responses:
+        '201':
+          description: Institution onboarding submitted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorInstitutionItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/institutions/{id}:
+    get:
+      operationId: getVendorInstitution
+      tags: [vendor]
+      summary: Get details of an institution onboarded by this vendor
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Institution details
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorInstitutionItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/registrations:
+    get:
+      operationId: listCampaignRegistrations
+      tags: [vendor]
+      summary: List registrants for a campaign/event
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [registered, checked_in, cancelled]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Registrants list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignRegistration'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: registerForCampaign
+      tags: [vendor]
+      summary: Register for a campaign / event
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignRegistrationInput'
+      responses:
+        '201':
+          description: Registered successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignRegistration'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/check-in:
+    post:
+      operationId: checkInCampaignRegistrant
+      tags: [vendor]
+      summary: Check in a registrant via check-in code or QR
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCheckInInput'
+      responses:
+        '200':
+          description: Check-in confirmed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignRegistration'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/audit-logs:
+    get:
+      operationId: listVendorAuditLogs
+      tags: [vendor]
+      summary: List immutable audit logs for this vendor (VENDOR_ADMIN only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: entityType
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Audit logs page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorAuditLogPage'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/finance/summary:
+    get:
+      operationId: getVendorFinanceSummary
+      tags: [vendor]
+      summary: Finance overview and balances (VENDOR_ADMIN only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Finance summary
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorFinanceSummary'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/finance/ledger:
+    get:
+      operationId: listVendorLedger
+      tags: [vendor]
+      summary: Double-entry ledger entries (VENDOR_ADMIN only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Ledger entries page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorLedgerPage'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/finance/payouts:
+    post:
+      operationId: requestVendorPayout
+      tags: [vendor]
+      summary: Request withdrawal to bKash / Nagad / Bank (VENDOR_ADMIN only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorPayoutRequestInput'
+      responses:
+        '201':
+          description: Payout request submitted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorPayoutRequestItem'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listVendorPayouts
+      tags: [vendor]
+      summary: List payout requests (VENDOR_ADMIN only)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Payout requests
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VendorPayoutRequestItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/referrals:
+    get:
+      operationId: getVendorReferrals
+      tags: [vendor]
+      summary: Get vendor referral code, link, XP balance, and referral history
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Referral summary and XP history
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorReferralSummary'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/referrals/redeem:
+    post:
+      operationId: redeemVendorXp
+      tags: [vendor]
+      summary: Redeem XP for paid banner impressions or seat credits
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VendorXpRedeemInput'
+      responses:
+        '200':
+          description: XP redeemed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorReferralSummary'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/team-chat:
+    get:
+      operationId: getVendorTeamChat
+      tags: [vendor]
+      summary: Get dedicated internal vendor team chat room
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Vendor team chat info
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorTeamChatInfo'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/unlock-extended:
+    post:
+      operationId: unlockCampaignExtendedFeatures
+      tags: [vendor]
+      summary: Unlock paid extended event features (participants roster, volunteer tasks, e-certs)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Extended features unlocked
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdsCampaign'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/participants:
+    get:
+      operationId: listCampaignParticipants
+      tags: [vendor]
+      summary: List event participants (paid extended feature)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [REGISTERED, PAID, CHECKED_IN, ATTENDED, NO_SHOW, CANCELLED]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Participants list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignParticipantItem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: addCampaignParticipant
+      tags: [vendor]
+      summary: Add or register a participant
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignParticipantCreateInput'
+      responses:
+        '201':
+          description: Participant added
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignParticipantItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/participants/{participantId}:
+    patch:
+      operationId: updateCampaignParticipantStatus
+      tags: [vendor]
+      summary: Update participant status
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: participantId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignParticipantUpdateInput'
+      responses:
+        '200':
+          description: Participant updated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignParticipantItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/participants/check-in:
+    post:
+      operationId: checkInCampaignParticipant
+      tags: [vendor]
+      summary: Check in participant by QR or code
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCheckInInput'
+      responses:
+        '200':
+          description: Participant checked in
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignParticipantItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/volunteers:
+    get:
+      operationId: listCampaignVolunteers
+      tags: [vendor]
+      summary: List campaign volunteers
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, CHECKED_IN, COMPLETED, REVOKED]
+      responses:
+        '200':
+          description: Volunteers list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignVolunteerItem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: inviteCampaignVolunteer
+      tags: [vendor]
+      summary: Invite or approve a volunteer
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignVolunteerInviteInput'
+      responses:
+        '201':
+          description: Volunteer invited
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignVolunteerItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/volunteers/{volunteerId}:
+    patch:
+      operationId: updateCampaignVolunteerStatus
+      tags: [vendor]
+      summary: Update volunteer status
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: volunteerId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignVolunteerUpdateInput'
+      responses:
+        '200':
+          description: Volunteer status updated
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignVolunteerItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/tasks:
+    get:
+      operationId: listCampaignTasks
+      tags: [vendor]
+      summary: List tasks for a campaign
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tasks list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createCampaignTask
+      tags: [vendor]
+      summary: Create volunteer task
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignTaskCreateInput'
+      responses:
+        '201':
+          description: Task created
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/tasks/{taskId}/review:
+    post:
+      operationId: reviewCampaignTaskSubmission
+      tags: [vendor]
+      summary: Review a task submission (APPROVE or REVISION_REQUESTED)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignTaskReviewInput'
+      responses:
+        '200':
+          description: Review saved
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/vendor/campaigns/{id}/certificates:
+    get:
+      operationId: listCampaignCertificates
+      tags: [vendor]
+      summary: List certificates issued for this campaign
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Certificates list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignCertificateItem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: issueCampaignCertificates
+      tags: [vendor]
+      summary: Bulk or individual certificate issuance
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCertificateIssueInput'
+      responses:
+        '200':
+          description: Certificates issued
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignCertificateItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/volunteer/tasks:
+    get:
+      operationId: listMyVolunteerTasks
+      tags: [volunteer]
+      summary: List tasks assigned to the volunteer or claimable pool tasks
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Volunteer tasks list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/volunteer/tasks/{taskId}/claim:
+    post:
+      operationId: claimVolunteerTask
+      tags: [volunteer]
+      summary: Claim a broadcast pool task
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task claimed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/volunteer/tasks/{taskId}/submit:
+    post:
+      operationId: submitVolunteerTask
+      tags: [volunteer]
+      summary: Submit task execution proof
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignTaskSubmitInput'
+      responses:
+        '200':
+          description: Task submitted for review
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/certificates/verify/{verificationCode}:
+    get:
+      operationId: verifyCertificatePublic
+      tags: [public]
+      summary: Public certificate authenticity verification
+      security: []
+      parameters:
+        - name: verificationCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Valid certificate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignCertificateItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/me/certificates:
+    get:
+      operationId: listMyCertificates
+      tags: [user]
+      summary: List certificates earned by the authenticated user
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: User certificates list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignCertificateItem'
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/vendor/register:
     post:
       operationId: registerVendor
@@ -6245,6 +7466,504 @@ paths:
                 $ref: '#/components/schemas/LmsSyncRunList'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/auth/partner/register:
+    post:
+      operationId: registerPartnerSelf
+      tags: [partner]
+      summary: Public partner self-registration and KYC document submission (free)
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerSelfRegisterInput'
+      responses:
+        '201':
+          description: Partner lead and KYC documents recorded successfully
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadSubmissionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/auth/partner/status:
+    get:
+      operationId: getPartnerApplicationStatus
+      tags: [partner]
+      summary: Query partner application / KYC review status
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: referenceCode
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: phone
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current review status
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadStatusResult'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/admin/partner-leads:
+    get:
+      operationId: listAdminPartnerLeads
+      tags: [partner]
+      summary: List partner registration leads (Super Admin)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Partner leads page
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadListPage'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/admin/partner-leads/{id}:
+    get:
+      operationId: getAdminPartnerLeadDetail
+      tags: [partner]
+      summary: Get partner lead detail with KYC docs and verification history
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lead detail
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadDetail'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/admin/partner-leads/{id}/schedule-meeting:
+    post:
+      operationId: schedulePartnerLeadMeeting
+      tags: [partner]
+      summary: Schedule physical visit or virtual meeting for KYC verification
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerLeadScheduleMeetingInput'
+      responses:
+        '200':
+          description: Meeting scheduled
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadDetail'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/admin/partner-leads/{id}/complete-verification:
+    post:
+      operationId: completePartnerLeadVerification
+      tags: [partner]
+      summary: Record physical/virtual verification notes, KYC checklist, and commission
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerLeadCompleteVerificationInput'
+      responses:
+        '200':
+          description: Verification completed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadDetail'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/admin/partner-leads/{id}/approve:
+    post:
+      operationId: approvePartnerLead
+      tags: [partner]
+      summary: Atomically approve partner, activate tenant, provision seat #1 and internal chat group
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Partner approved and provisioned
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadDetail'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/admin/partner-leads/{id}/reject:
+    post:
+      operationId: rejectPartnerLead
+      tags: [partner]
+      summary: Reject partner lead or request documentation changes
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PartnerLeadRejectInput'
+      responses:
+        '200':
+          description: Decision recorded
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartnerLeadDetail'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/campaigns/explore:
+    get:
+      operationId: exploreCampaigns
+      tags: [partner]
+      summary: Explore active campaigns and events for users/students (volunteer recruitment open)
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: schoolId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Active campaigns list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignExplorePage'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/campaigns/{id}/volunteers/apply:
+    post:
+      operationId: applyCampaignVolunteer
+      tags: [partner]
+      summary: Student/user applies as a volunteer for a campaign/event
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignVolunteerApplyInput'
+      responses:
+        '201':
+          description: Volunteer application submitted
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignVolunteerItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/me/volunteering:
+    get:
+      operationId: listMyVolunteering
+      tags: [partner]
+      summary: List volunteer applications and check-in codes for authenticated user
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: User volunteer assignments
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignVolunteerItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/me/volunteering/tasks:
+    get:
+      operationId: listMyVolunteeringTasks
+      tags: [partner]
+      summary: List volunteer tasks assigned to user or open in campaign pool
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: campaignId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tasks list
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/campaigns/tasks/{taskId}/claim:
+    post:
+      operationId: claimCampaignTask
+      tags: [partner]
+      summary: Volunteer claims a pool task
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task claimed
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/campaigns/tasks/{taskId}/submit:
+    post:
+      operationId: submitCampaignTaskProof
+      tags: [partner]
+      summary: Volunteer submits completed task proof photo for review
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignTaskSubmissionInput'
+      responses:
+        '200':
+          description: Task submitted for review
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTaskItem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/me/xp:
+    get:
+      operationId: getMyXpSummary
+      tags: [partner]
+      summary: Authenticated user total XP balance and history
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: XP summary
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserXpSummary'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/partner/dashboard/summary:
+    get:
+      operationId: getPartnerDashboardSummary
+      tags: [partner]
+      summary: Partner dashboard KPI summary
+      security:
+        - bearerJWT: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Partner metrics
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VendorMetrics'
+        default:
+          $ref: '#/components/responses/Problem'
+
 components:
   headers:
     XRequestId:
@@ -6354,10 +8073,13 @@ components:
           description: Present on readiness failures — names each dependency and its state
           items:
             $ref: '#/components/schemas/DependencyCheck'
+    VendorRole:
+      type: string
+      enum: [VENDOR_ADMIN, VENDOR_EXECUTIVE]
     UserRole:
       type: string
-      enum: [super_admin, school_admin, teacher, student, guardian, vendor]
-      description: '`vendor` is platform-scoped (`schoolId` null) and never self-registered'
+      enum: [super_admin, school_admin, teacher, student, guardian, vendor, partner]
+      description: '`partner` (and legacy `vendor`) is platform-scoped (`schoolId` null)'
     UserStatus:
       type: string
       enum: [PENDING, VERIFIED, SUSPENDED]
@@ -6407,6 +8129,10 @@ components:
           type: boolean
         plan:
           $ref: '#/components/schemas/Plan'
+        vendorId:
+          type: string
+        vendorRole:
+          $ref: '#/components/schemas/VendorRole'
     RegisterInput:
       type: object
       required: [locale, role, fullName, schoolId, sectionId]
@@ -8383,6 +10109,20 @@ components:
       type: object
       required: [companyName, contactName, phone, targeting]
       properties:
+        companyNameBn:
+          type: string
+        category:
+          type: string
+        tradeLicenseMediaId:
+          type: string
+        nidMediaId:
+          type: string
+        payoutMethod:
+          type: string
+        payoutAccount:
+          type: string
+        referralCode:
+          type: string
         companyName:
           type: string
           minLength: 3
@@ -8410,10 +10150,681 @@ components:
         utmCampaign:
           type: string
           maxLength: 120
+    VendorProfileUpdateInput:
+      type: object
+      properties:
+        companyNameBn:
+          type: string
+        category:
+          type: string
+        tradeLicenseMediaId:
+          type: string
+        nidMediaId:
+          type: string
+        payoutMethod:
+          type: string
+        payoutAccount:
+          type: string
+    VendorMetrics:
+      type: object
+      required: [activeStoreOrders, escrowBalanceBdt, withdrawableBalanceBdt, activeCampaignsTotal, activeCampaignsFree, activeCampaignsPaid, campaignRegistrationsTotal, teamSeatsUsed, teamSeatsFree, teamSeatsBillable, teamSeatsQuota, xpBalance]
+      properties:
+        activeStoreOrders:
+          type: integer
+        escrowBalanceBdt:
+          type: number
+        withdrawableBalanceBdt:
+          type: number
+        activeCampaignsTotal:
+          type: integer
+        activeCampaignsFree:
+          type: integer
+        activeCampaignsPaid:
+          type: integer
+        campaignRegistrationsTotal:
+          type: integer
+        teamSeatsUsed:
+          type: integer
+        teamSeatsFree:
+          type: integer
+        teamSeatsBillable:
+          type: integer
+        teamSeatsQuota:
+          type: integer
+        xpBalance:
+          type: integer
+    VendorMember:
+      type: object
+      required: [id, vendorId, userId, vendorRole, isBillable, status, fullName, createdAt]
+      properties:
+        id:
+          type: string
+        vendorId:
+          type: string
+        userId:
+          type: string
+        vendorRole:
+          $ref: '#/components/schemas/VendorRole'
+        isBillable:
+          type: boolean
+        status:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        maskedPhone:
+          type: string
+        avatarUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    VendorMemberInviteInput:
+      type: object
+      required: [fullName, email, vendorRole]
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        vendorRole:
+          $ref: '#/components/schemas/VendorRole'
+    VendorMemberUpdateInput:
+      type: object
+      properties:
+        vendorRole:
+          $ref: '#/components/schemas/VendorRole'
+        status:
+          type: string
+          enum: [active, suspended, removed]
+    VendorSeatUsage:
+      type: object
+      required: [totalSeats, freeSeatsUsed, billableSeatsUsed, freeQuota, pricePerBillableSeatBdt]
+      properties:
+        totalSeats:
+          type: integer
+        freeSeatsUsed:
+          type: integer
+        billableSeatsUsed:
+          type: integer
+        freeQuota:
+          type: integer
+        pricePerBillableSeatBdt:
+          type: number
+    VendorInstitutionOnboardInput:
+      type: object
+      required: [nameBn, nameEn, type, cityId, adminName, adminPhone]
+      properties:
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        type:
+          type: string
+          enum: [school, college]
+        cityId:
+          type: string
+        eiin:
+          type: string
+        adminName:
+          type: string
+        adminPhone:
+          type: string
+        adminEmail:
+          type: string
+          format: email
+        authorizationDocMediaId:
+          type: string
+    VendorInstitutionItem:
+      type: object
+      required: [id, nameBn, nameEn, type, status, vendorOnboardingStatus, createdAt]
+      properties:
+        id:
+          type: string
+        nameBn:
+          type: string
+        nameEn:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        vendorOnboardingStatus:
+          type: string
+        eiin:
+          type: string
+        adminName:
+          type: string
+        adminPhone:
+          type: string
+        adminEmail:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CampaignRegistration:
+      type: object
+      required: [id, campaignId, userId, status, checkInCode, createdAt]
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        userPhone:
+          type: string
+        formData:
+          type: object
+        status:
+          type: string
+          enum: [registered, checked_in, cancelled]
+        checkInCode:
+          type: string
+        checkedInAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CampaignRegistrationInput:
+      type: object
+      required: [formData]
+      properties:
+        formData:
+          type: object
+    CampaignCheckInInput:
+      type: object
+      required: [checkInCode]
+      properties:
+        checkInCode:
+          type: string
+    VendorAuditLog:
+      type: object
+      required: [id, vendorId, actorUserId, actorRole, action, entityType, entityId, createdAt]
+      properties:
+        id:
+          type: string
+        vendorId:
+          type: string
+        actorUserId:
+          type: string
+        actorName:
+          type: string
+        actorRole:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        changes:
+          type: object
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    VendorAuditLogPage:
+      type: object
+      required: [data, total, page, pageSize]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VendorAuditLog'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    VendorFinanceSummary:
+      type: object
+      required: [escrowBalanceBdt, withdrawableBalanceBdt, pendingPayoutsBdt, totalCommissionPaidBdt, totalCampaignSpendBdt]
+      properties:
+        escrowBalanceBdt:
+          type: number
+        withdrawableBalanceBdt:
+          type: number
+        pendingPayoutsBdt:
+          type: number
+        totalCommissionPaidBdt:
+          type: number
+        totalCampaignSpendBdt:
+          type: number
+    VendorLedgerEntry:
+      type: object
+      required: [id, vendorId, entryType, amountBdt, direction, balanceType, description, createdAt]
+      properties:
+        id:
+          type: string
+        vendorId:
+          type: string
+        entryType:
+          type: string
+        amountBdt:
+          type: number
+        direction:
+          type: string
+          enum: [CREDIT, DEBIT]
+        balanceType:
+          type: string
+          enum: [ESCROW, WITHDRAWABLE]
+        referenceId:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    VendorLedgerPage:
+      type: object
+      required: [data, total, page, pageSize]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/VendorLedgerEntry'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    VendorPayoutRequestInput:
+      type: object
+      required: [amountBdt, payoutMethod, payoutAccount]
+      properties:
+        amountBdt:
+          type: number
+        payoutMethod:
+          type: string
+          enum: [bkash, nagad, bank]
+        payoutAccount:
+          type: string
+    VendorPayoutRequestItem:
+      type: object
+      required: [id, vendorId, amountBdt, payoutMethod, payoutAccount, status, createdAt]
+      properties:
+        id:
+          type: string
+        vendorId:
+          type: string
+        amountBdt:
+          type: number
+        payoutMethod:
+          type: string
+        payoutAccount:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, settled]
+        rejectionReason:
+          type: string
+        settlementReference:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+    VendorReferralSummary:
+      type: object
+      required: [referralCode, referralLink, xpBalance, totalReferrals, history]
+      properties:
+        referralCode:
+          type: string
+        referralLink:
+          type: string
+        xpBalance:
+          type: integer
+        totalReferrals:
+          type: integer
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/VendorXpEntry'
+    VendorXpEntry:
+      type: object
+      required: [id, vendorId, xpAmount, actionType, notes, createdAt]
+      properties:
+        id:
+          type: string
+        vendorId:
+          type: string
+        xpAmount:
+          type: integer
+        actionType:
+          type: string
+        referenceId:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    VendorXpRedeemInput:
+      type: object
+      required: [rewardType, xpAmount]
+      properties:
+        rewardType:
+          type: string
+          enum: [BANNER_IMPRESSIONS, SEAT_CREDIT]
+        xpAmount:
+          type: integer
+          minimum: 100
+    VendorTeamChatInfo:
+      type: object
+      required: [groupId, groupName]
+      properties:
+        groupId:
+          type: string
+        groupName:
+          type: string
+    CampaignParticipantItem:
+      type: object
+      required: [id, campaignId, userId, status, checkInCode, createdAt]
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        userPhone:
+          type: string
+        userAvatarUrl:
+          type: string
+        status:
+          type: string
+          enum: [REGISTERED, PAID, CHECKED_IN, ATTENDED, NO_SHOW, CANCELLED]
+        formData:
+          type: object
+        checkInCode:
+          type: string
+        checkedInAt:
+          type: string
+          format: date-time
+        attendedAt:
+          type: string
+          format: date-time
+        rankOrRole:
+          type: string
+        notes:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CampaignParticipantCreateInput:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+        formData:
+          type: object
+        rankOrRole:
+          type: string
+        notes:
+          type: string
+    CampaignParticipantUpdateInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [REGISTERED, PAID, CHECKED_IN, ATTENDED, NO_SHOW, CANCELLED]
+        rankOrRole:
+          type: string
+        notes:
+          type: string
+    CampaignVolunteerItem:
+      type: object
+      required: [id, campaignId, userId, status, roleTitle, checkInCode, createdAt]
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        userPhone:
+          type: string
+        userAvatarUrl:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, CHECKED_IN, COMPLETED, REVOKED]
+        applicationNote:
+          type: string
+        roleTitle:
+          type: string
+        checkInCode:
+          type: string
+        checkedInAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CampaignVolunteerInviteInput:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: string
+        roleTitle:
+          type: string
+        applicationNote:
+          type: string
+    CampaignVolunteerUpdateInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [PENDING, APPROVED, CHECKED_IN, COMPLETED, REVOKED]
+        roleTitle:
+          type: string
+    CampaignTaskItem:
+      type: object
+      required: [id, campaignId, titleBn, titleEn, priority, status, xpReward, isPoolTask, createdAt]
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        campaignName:
+          type: string
+        titleBn:
+          type: string
+        titleEn:
+          type: string
+        descriptionBn:
+          type: string
+        descriptionEn:
+          type: string
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, URGENT]
+        status:
+          type: string
+          enum: [ASSIGNED, IN_PROGRESS, SUBMITTED_FOR_REVIEW, APPROVED, REVISION_REQUESTED, CANCELLED]
+        dueAt:
+          type: string
+          format: date-time
+        xpReward:
+          type: integer
+        requiresProof:
+          type: boolean
+        isPoolTask:
+          type: boolean
+        assignedToUserId:
+          type: string
+        assigneeName:
+          type: string
+        assigneeAvatarUrl:
+          type: string
+        claimedAt:
+          type: string
+          format: date-time
+        approvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CampaignTaskCreateInput:
+      type: object
+      required: [titleBn, titleEn]
+      properties:
+        titleBn:
+          type: string
+        titleEn:
+          type: string
+        descriptionBn:
+          type: string
+        descriptionEn:
+          type: string
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH, URGENT]
+        dueAt:
+          type: string
+          format: date-time
+        xpReward:
+          type: integer
+        requiresProof:
+          type: boolean
+        isPoolTask:
+          type: boolean
+        assignedToUserId:
+          type: string
+    CampaignTaskSubmitInput:
+      type: object
+      properties:
+        comment:
+          type: string
+        proofMediaId:
+          type: string
+    CampaignTaskReviewInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, REVISION_REQUESTED]
+        reviewFeedback:
+          type: string
+    CampaignCertificateItem:
+      type: object
+      required: [id, campaignId, certificateKind, verificationCode, titleBn, titleEn, recipientName, issuedAt]
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        campaignName:
+          type: string
+        vendorCompanyName:
+          type: string
+        userId:
+          type: string
+        recipientName:
+          type: string
+        institutionName:
+          type: string
+        rankOrRole:
+          type: string
+        roleType:
+          type: string
+          enum: [CAMPAIGN_PARTICIPANT, CAMPAIGN_VOLUNTEER]
+        certificateKind:
+          type: string
+          enum: [PARTICIPATION, ACHIEVEMENT, VOLUNTEER_APPRECIATION]
+        verificationCode:
+          type: string
+        titleBn:
+          type: string
+        titleEn:
+          type: string
+        pdfUrl:
+          type: string
+        issuedAt:
+          type: string
+          format: date-time
+    CampaignCertificateIssueInput:
+      type: object
+      required: [certificateKind, targetFilter]
+      properties:
+        certificateKind:
+          type: string
+          enum: [PARTICIPATION, ACHIEVEMENT, VOLUNTEER_APPRECIATION]
+        targetFilter:
+          type: string
+          enum: [ALL_ATTENDED_PARTICIPANTS, ALL_COMPLETED_VOLUNTEERS, SPECIFIC_USER]
+        userId:
+          type: string
+        titleBn:
+          type: string
+        titleEn:
+          type: string
+        rankOrRole:
+          type: string
     VendorAccount:
       type: object
       required: [id, companyName, contactName, phone, targeting, status, createdAt]
       properties:
+        companyNameBn:
+          type: string
+        category:
+          type: string
+        tradeLicenseMediaId:
+          type: string
+        nidMediaId:
+          type: string
+        payoutMethod:
+          type: string
+        payoutAccount:
+          type: string
+        referralCode:
+          type: string
+        registrationFeeBdt:
+          type: number
+        escrowBalanceBdt:
+          type: number
+        withdrawableBalanceBdt:
+          type: number
+        xpBalance:
+          type: integer
+        commissionRateBps:
+          type: integer
+        freeSeatQuota:
+          type: integer
         id:
           type: string
         companyName:
@@ -9635,6 +12046,9 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/CommerceOrderStatus'
+        escrowStatus:
+          type: string
+          enum: [held, released, refunded]
         totalBdt:
           type: number
           format: double
@@ -10163,6 +12577,13 @@ components:
         budgetBdt:
           type: number
           format: double
+        placementTier:
+          type: string
+          enum: [OWN_INSTITUTIONS_FREE, OTHER_INSTITUTIONS_PAID, GLOBAL_APP_BANNER_PAID]
+        targetSchoolIds:
+          type: array
+          items:
+            type: string
           minimum: 0.01
         creative:
           $ref: '#/components/schemas/AdsCreativeInput'
@@ -10192,6 +12613,13 @@ components:
         spendBdt:
           type: number
           format: double
+        hasExtendedFeatures:
+          type: boolean
+        extendedFeaturesFeeBdt:
+          type: number
+        extendedFeaturesUnlockedAt:
+          type: string
+          format: date-time
         creative:
           $ref: '#/components/schemas/AdsCreativeInput'
         createdAt:
@@ -10775,6 +13203,382 @@ components:
         page:     { type: integer }
         pageSize: { type: integer }
         total:    { type: integer }
+    PartnerSelfRegisterInput:
+      type: object
+      required: [contactName, phone, password, companyName, preferredVerificationMode]
+      properties:
+        contactName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        companyName:
+          type: string
+          minLength: 2
+          maxLength: 150
+        companyNameBn:
+          type: string
+        category:
+          type: string
+          enum: [BOOKSTORE, UNIFORMS, STATIONERY, EDTECH_COACHING, EVENT_ORGANIZER, OTHER]
+          default: OTHER
+        address:
+          type: string
+        cityId:
+          type: string
+        websiteUrl:
+          type: string
+        payoutMethod:
+          type: string
+          enum: [BKASH, NAGAD, BANK]
+        payoutAccount:
+          type: string
+        preferredVerificationMode:
+          type: string
+          enum: [PHYSICAL_VISIT, VIRTUAL_MEETING]
+          default: PHYSICAL_VISIT
+        preferredTimeSlot:
+          type: string
+        verificationNotes:
+          type: string
+        kycDocuments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerKycDocumentInput'
+
+    PartnerKycDocumentInput:
+      type: object
+      required: [docType, mediaId, fileUrl, fileName, mimeType, fileSizeBytes]
+      properties:
+        docType:
+          type: string
+          enum: [TRADE_LICENSE, NID_FRONT, NID_BACK, TIN_BIN, AUTHORIZATION_LETTER, OTHER]
+        mediaId:
+          type: string
+        fileUrl:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        fileSizeBytes:
+          type: integer
+
+    PartnerLeadSubmissionResult:
+      type: object
+      required: [leadId, referenceCode, status, messageBn, messageEn]
+      properties:
+        leadId:
+          type: string
+        referenceCode:
+          type: string
+        status:
+          type: string
+        messageBn:
+          type: string
+        messageEn:
+          type: string
+
+    PartnerLeadStatusResult:
+      type: object
+      required: [referenceCode, status, createdAt]
+      properties:
+        referenceCode:
+          type: string
+        status:
+          type: string
+          enum: [NEW_LEAD, UNDER_REVIEW, MEETING_SCHEDULED, VERIFICATION_COMPLETED, APPROVED, REJECTED, CHANGES_REQUESTED]
+        meetingScheduledAt:
+          type: string
+          format: date-time
+        meetingLinkOrLocation:
+          type: string
+        rejectionReason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    PartnerLeadItem:
+      type: object
+      required: [id, referenceCode, contactName, phone, companyName, category, status, preferredVerificationMode, agreedCommissionRateBps, createdAt]
+      properties:
+        id:
+          type: string
+        partnerId:
+          type: string
+        referenceCode:
+          type: string
+        contactName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        companyName:
+          type: string
+        companyNameBn:
+          type: string
+        category:
+          type: string
+        address:
+          type: string
+        cityId:
+          type: string
+        websiteUrl:
+          type: string
+        payoutMethod:
+          type: string
+        payoutAccount:
+          type: string
+        preferredVerificationMode:
+          type: string
+        preferredTimeSlot:
+          type: string
+        verificationNotes:
+          type: string
+        status:
+          type: string
+        assignedAdminId:
+          type: string
+        assignedAdminName:
+          type: string
+        meetingScheduledAt:
+          type: string
+          format: date-time
+        meetingLinkOrLocation:
+          type: string
+        agreedCommissionRateBps:
+          type: integer
+        rejectionReason:
+          type: string
+        approvedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    PartnerLeadListPage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerLeadItem'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    PartnerLeadDetail:
+      type: object
+      required: [lead, documents, verificationLogs]
+      properties:
+        lead:
+          $ref: '#/components/schemas/PartnerLeadItem'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerKycDocumentDetail'
+        verificationLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartnerVerificationLogDetail'
+
+    PartnerKycDocumentDetail:
+      type: object
+      required: [id, docType, mediaId, fileUrl, fileName, mimeType, fileSizeBytes, verificationStatus, createdAt]
+      properties:
+        id:
+          type: string
+        docType:
+          type: string
+        mediaId:
+          type: string
+        fileUrl:
+          type: string
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        fileSizeBytes:
+          type: integer
+        verificationStatus:
+          type: string
+        rejectionReason:
+          type: string
+        verifiedBy:
+          type: string
+        verifiedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    PartnerVerificationLogDetail:
+      type: object
+      required: [id, adminId, verificationMode, notes, meetingAt, createdAt]
+      properties:
+        id:
+          type: string
+        adminId:
+          type: string
+        adminName:
+          type: string
+        verificationMode:
+          type: string
+        notes:
+          type: string
+        meetingAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    PartnerLeadScheduleMeetingInput:
+      type: object
+      required: [meetingScheduledAt, meetingLinkOrLocation]
+      properties:
+        meetingScheduledAt:
+          type: string
+          format: date-time
+        meetingLinkOrLocation:
+          type: string
+        assignedAdminId:
+          type: string
+
+    PartnerLeadCompleteVerificationInput:
+      type: object
+      required: [notes, agreedCommissionRateBps, verificationMode]
+      properties:
+        notes:
+          type: string
+        agreedCommissionRateBps:
+          type: integer
+          minimum: 1500
+          maximum: 2000
+        verificationMode:
+          type: string
+          enum: [PHYSICAL_VISIT, VIRTUAL_MEETING, PHONE_CALL, DESK_REVIEW]
+
+    PartnerLeadRejectInput:
+      type: object
+      required: [reason, action]
+      properties:
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 1000
+        action:
+          type: string
+          enum: [REJECT, REQUEST_CHANGES]
+
+    CampaignExploreItem:
+      type: object
+      required: [id, name, placementTier, hasExtendedFeatures, vendorId, vendorCompanyName, totalParticipants, totalVolunteers]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        placementTier:
+          type: string
+        scheduleStart:
+          type: string
+          format: date-time
+        scheduleEnd:
+          type: string
+          format: date-time
+        hasExtendedFeatures:
+          type: boolean
+        vendorId:
+          type: string
+        vendorCompanyName:
+          type: string
+        totalParticipants:
+          type: integer
+        totalVolunteers:
+          type: integer
+        myVolunteerStatus:
+          type: string
+
+    CampaignExplorePage:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignExploreItem'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    CampaignVolunteerApplyInput:
+      type: object
+      properties:
+        applicationNote:
+          type: string
+        roleTitle:
+          type: string
+
+    CampaignTaskSubmissionInput:
+      type: object
+      properties:
+        notes:
+          type: string
+        proofMediaId:
+          type: string
+
+    UserXpLedgerItem:
+      type: object
+      required: [id, xpAmount, roleType, rewardType, rewardTitle, createdAt]
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        campaignName:
+          type: string
+        roleType:
+          type: string
+        rewardType:
+          type: string
+        xpAmount:
+          type: integer
+        rewardTitle:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    UserXpSummary:
+      type: object
+      required: [xpBalance, history]
+      properties:
+        xpBalance:
+          type: integer
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserXpLedgerItem'
+
   securitySchemes:
     bearerJWT:
       type: http

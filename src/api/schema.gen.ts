@@ -2693,6 +2693,542 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/vendor/profile": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get own vendor account details */
+    get: operations["getVendorProfile"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update own vendor KYB profile details */
+    patch: operations["updateVendorProfile"];
+    trace?: never;
+  };
+  "/api/v1/vendor/dashboard/metrics": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get real-time KPIs for vendor dashboard */
+    get: operations["getVendorDashboardMetrics"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/members": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List all team members of this vendor */
+    get: operations["listVendorMembers"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/members/invite": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Invite or add a new team member */
+    post: operations["inviteVendorMember"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/members/{memberId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Remove member from vendor organization */
+    delete: operations["removeVendorMember"];
+    options?: never;
+    head?: never;
+    /** Update member role or status */
+    patch: operations["updateVendorMember"];
+    trace?: never;
+  };
+  "/api/v1/vendor/seats/usage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get team seat usage and quota info (5 free, billable beyond) */
+    get: operations["getVendorSeatUsage"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/institutions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List educational institutions onboarded by this vendor */
+    get: operations["listVendorInstitutions"];
+    put?: never;
+    /** Submit a new educational institution for onboarding */
+    post: operations["onboardVendorInstitution"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/institutions/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get details of an institution onboarded by this vendor */
+    get: operations["getVendorInstitution"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/registrations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List registrants for a campaign/event */
+    get: operations["listCampaignRegistrations"];
+    put?: never;
+    /** Register for a campaign / event */
+    post: operations["registerForCampaign"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/check-in": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Check in a registrant via check-in code or QR */
+    post: operations["checkInCampaignRegistrant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/audit-logs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List immutable audit logs for this vendor (VENDOR_ADMIN only) */
+    get: operations["listVendorAuditLogs"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/finance/summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Finance overview and balances (VENDOR_ADMIN only) */
+    get: operations["getVendorFinanceSummary"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/finance/ledger": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Double-entry ledger entries (VENDOR_ADMIN only) */
+    get: operations["listVendorLedger"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/finance/payouts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List payout requests (VENDOR_ADMIN only) */
+    get: operations["listVendorPayouts"];
+    put?: never;
+    /** Request withdrawal to bKash / Nagad / Bank (VENDOR_ADMIN only) */
+    post: operations["requestVendorPayout"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/referrals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get vendor referral code, link, XP balance, and referral history */
+    get: operations["getVendorReferrals"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/referrals/redeem": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Redeem XP for paid banner impressions or seat credits */
+    post: operations["redeemVendorXp"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/team-chat": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get dedicated internal vendor team chat room */
+    get: operations["getVendorTeamChat"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/unlock-extended": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Unlock paid extended event features (participants roster, volunteer tasks, e-certs) */
+    post: operations["unlockCampaignExtendedFeatures"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/participants": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List event participants (paid extended feature) */
+    get: operations["listCampaignParticipants"];
+    put?: never;
+    /** Add or register a participant */
+    post: operations["addCampaignParticipant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/participants/{participantId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update participant status */
+    patch: operations["updateCampaignParticipantStatus"];
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/participants/check-in": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Check in participant by QR or code */
+    post: operations["checkInCampaignParticipant"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/volunteers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List campaign volunteers */
+    get: operations["listCampaignVolunteers"];
+    put?: never;
+    /** Invite or approve a volunteer */
+    post: operations["inviteCampaignVolunteer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/volunteers/{volunteerId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Update volunteer status */
+    patch: operations["updateCampaignVolunteerStatus"];
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/tasks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List tasks for a campaign */
+    get: operations["listCampaignTasks"];
+    put?: never;
+    /** Create volunteer task */
+    post: operations["createCampaignTask"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/tasks/{taskId}/review": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Review a task submission (APPROVE or REVISION_REQUESTED) */
+    post: operations["reviewCampaignTaskSubmission"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/vendor/campaigns/{id}/certificates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List certificates issued for this campaign */
+    get: operations["listCampaignCertificates"];
+    put?: never;
+    /** Bulk or individual certificate issuance */
+    post: operations["issueCampaignCertificates"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/volunteer/tasks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List tasks assigned to the volunteer or claimable pool tasks */
+    get: operations["listMyVolunteerTasks"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/volunteer/tasks/{taskId}/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Claim a broadcast pool task */
+    post: operations["claimVolunteerTask"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/volunteer/tasks/{taskId}/submit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Submit task execution proof */
+    post: operations["submitVolunteerTask"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/certificates/verify/{verificationCode}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Public certificate authenticity verification */
+    get: operations["verifyCertificatePublic"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/certificates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List certificates earned by the authenticated user */
+    get: operations["listMyCertificates"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/vendor/register": {
     parameters: {
       query?: never;
@@ -3207,6 +3743,278 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/auth/partner/register": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Public partner self-registration and KYC document submission (free) */
+    post: operations["registerPartnerSelf"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/partner/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Query partner application / KYC review status */
+    get: operations["getPartnerApplicationStatus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/partner-leads": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List partner registration leads (Super Admin) */
+    get: operations["listAdminPartnerLeads"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/partner-leads/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get partner lead detail with KYC docs and verification history */
+    get: operations["getAdminPartnerLeadDetail"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/partner-leads/{id}/schedule-meeting": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Schedule physical visit or virtual meeting for KYC verification */
+    post: operations["schedulePartnerLeadMeeting"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/partner-leads/{id}/complete-verification": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Record physical/virtual verification notes, KYC checklist, and commission */
+    post: operations["completePartnerLeadVerification"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/partner-leads/{id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Atomically approve partner, activate tenant, provision seat */
+    post: operations["approvePartnerLead"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/admin/partner-leads/{id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Reject partner lead or request documentation changes */
+    post: operations["rejectPartnerLead"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/campaigns/explore": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Explore active campaigns and events for users/students (volunteer recruitment open) */
+    get: operations["exploreCampaigns"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/campaigns/{id}/volunteers/apply": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Student/user applies as a volunteer for a campaign/event */
+    post: operations["applyCampaignVolunteer"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/volunteering": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List volunteer applications and check-in codes for authenticated user */
+    get: operations["listMyVolunteering"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/volunteering/tasks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List volunteer tasks assigned to user or open in campaign pool */
+    get: operations["listMyVolunteeringTasks"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/campaigns/tasks/{taskId}/claim": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Volunteer claims a pool task */
+    post: operations["claimCampaignTask"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/campaigns/tasks/{taskId}/submit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Volunteer submits completed task proof photo for review */
+    post: operations["submitCampaignTaskProof"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/me/xp": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Authenticated user total XP balance and history */
+    get: operations["getMyXpSummary"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/partner/dashboard/summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Partner dashboard KPI summary */
+    get: operations["getPartnerDashboardSummary"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3257,11 +4065,14 @@ export interface components {
       /** @description Present on readiness failures — names each dependency and its state */
       dependencies?: components["schemas"]["DependencyCheck"][];
     };
+    /** @enum {string} */
+    VendorRole: "VENDOR_ADMIN" | "VENDOR_EXECUTIVE";
     /**
-     * @description `vendor` is platform-scoped (`schoolId` null) and never self-registered
+     * @description `partner` (and legacy `vendor`) is platform-scoped (`schoolId` null)
      * @enum {string}
      */
-    UserRole: "super_admin" | "school_admin" | "teacher" | "student" | "guardian" | "vendor";
+    UserRole:
+      "super_admin" | "school_admin" | "teacher" | "student" | "guardian" | "vendor" | "partner";
     /** @enum {string} */
     UserStatus: "PENDING" | "VERIFIED" | "SUSPENDED";
     /** @enum {string} */
@@ -3291,6 +4102,8 @@ export interface components {
       schoolId?: string | null;
       isAmbassador: boolean;
       plan: components["schemas"]["Plan"];
+      vendorId?: string;
+      vendorRole?: components["schemas"]["VendorRole"];
     };
     /**
      * @description `phone`+`otpCode` are required for student/guardian (OTP purpose `register` proven).
@@ -4318,6 +5131,13 @@ export interface components {
     /** @enum {string} */
     VendorStatus: "pending" | "approved" | "rejected" | "suspended";
     VendorRegisterInput: {
+      companyNameBn?: string;
+      category?: string;
+      tradeLicenseMediaId?: string;
+      nidMediaId?: string;
+      payoutMethod?: string;
+      payoutAccount?: string;
+      referralCode?: string;
       companyName: string;
       contactName: string;
       phone: string;
@@ -4327,7 +5147,368 @@ export interface components {
       utmMedium?: string;
       utmCampaign?: string;
     };
+    VendorProfileUpdateInput: {
+      companyNameBn?: string;
+      category?: string;
+      tradeLicenseMediaId?: string;
+      nidMediaId?: string;
+      payoutMethod?: string;
+      payoutAccount?: string;
+    };
+    VendorMetrics: {
+      activeStoreOrders: number;
+      escrowBalanceBdt: number;
+      withdrawableBalanceBdt: number;
+      activeCampaignsTotal: number;
+      activeCampaignsFree: number;
+      activeCampaignsPaid: number;
+      campaignRegistrationsTotal: number;
+      teamSeatsUsed: number;
+      teamSeatsFree: number;
+      teamSeatsBillable: number;
+      teamSeatsQuota: number;
+      xpBalance: number;
+    };
+    VendorMember: {
+      id: string;
+      vendorId: string;
+      userId: string;
+      vendorRole: components["schemas"]["VendorRole"];
+      isBillable: boolean;
+      status: string;
+      fullName: string;
+      email?: string;
+      maskedPhone?: string;
+      avatarUrl?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    VendorMemberInviteInput: {
+      fullName: string;
+      /** Format: email */
+      email: string;
+      phone?: string;
+      vendorRole: components["schemas"]["VendorRole"];
+    };
+    VendorMemberUpdateInput: {
+      vendorRole?: components["schemas"]["VendorRole"];
+      /** @enum {string} */
+      status?: "active" | "suspended" | "removed";
+    };
+    VendorSeatUsage: {
+      totalSeats: number;
+      freeSeatsUsed: number;
+      billableSeatsUsed: number;
+      freeQuota: number;
+      pricePerBillableSeatBdt: number;
+    };
+    VendorInstitutionOnboardInput: {
+      nameBn: string;
+      nameEn: string;
+      /** @enum {string} */
+      type: "school" | "college";
+      cityId: string;
+      eiin?: string;
+      adminName: string;
+      adminPhone: string;
+      /** Format: email */
+      adminEmail?: string;
+      authorizationDocMediaId?: string;
+    };
+    VendorInstitutionItem: {
+      id: string;
+      nameBn: string;
+      nameEn: string;
+      type: string;
+      status: string;
+      vendorOnboardingStatus: string;
+      eiin?: string;
+      adminName?: string;
+      adminPhone?: string;
+      adminEmail?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CampaignRegistration: {
+      id: string;
+      campaignId: string;
+      userId: string;
+      userName?: string;
+      userEmail?: string;
+      userPhone?: string;
+      formData?: Record<string, never>;
+      /** @enum {string} */
+      status: "registered" | "checked_in" | "cancelled";
+      checkInCode: string;
+      /** Format: date-time */
+      checkedInAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CampaignRegistrationInput: {
+      formData: Record<string, never>;
+    };
+    CampaignCheckInInput: {
+      checkInCode: string;
+    };
+    VendorAuditLog: {
+      id: string;
+      vendorId: string;
+      actorUserId: string;
+      actorName?: string;
+      actorRole: string;
+      action: string;
+      entityType: string;
+      entityId: string;
+      changes?: Record<string, never>;
+      ipAddress?: string;
+      userAgent?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    VendorAuditLogPage: {
+      data: components["schemas"]["VendorAuditLog"][];
+      total: number;
+      page: number;
+      pageSize: number;
+    };
+    VendorFinanceSummary: {
+      escrowBalanceBdt: number;
+      withdrawableBalanceBdt: number;
+      pendingPayoutsBdt: number;
+      totalCommissionPaidBdt: number;
+      totalCampaignSpendBdt: number;
+    };
+    VendorLedgerEntry: {
+      id: string;
+      vendorId: string;
+      entryType: string;
+      amountBdt: number;
+      /** @enum {string} */
+      direction: "CREDIT" | "DEBIT";
+      /** @enum {string} */
+      balanceType: "ESCROW" | "WITHDRAWABLE";
+      referenceId?: string;
+      description: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    VendorLedgerPage: {
+      data: components["schemas"]["VendorLedgerEntry"][];
+      total: number;
+      page: number;
+      pageSize: number;
+    };
+    VendorPayoutRequestInput: {
+      amountBdt: number;
+      /** @enum {string} */
+      payoutMethod: "bkash" | "nagad" | "bank";
+      payoutAccount: string;
+    };
+    VendorPayoutRequestItem: {
+      id: string;
+      vendorId: string;
+      amountBdt: number;
+      payoutMethod: string;
+      payoutAccount: string;
+      /** @enum {string} */
+      status: "pending" | "approved" | "rejected" | "settled";
+      rejectionReason?: string;
+      settlementReference?: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      decidedAt?: string;
+    };
+    VendorReferralSummary: {
+      referralCode: string;
+      referralLink: string;
+      xpBalance: number;
+      totalReferrals: number;
+      history: components["schemas"]["VendorXpEntry"][];
+    };
+    VendorXpEntry: {
+      id: string;
+      vendorId: string;
+      xpAmount: number;
+      actionType: string;
+      referenceId?: string;
+      notes: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    VendorXpRedeemInput: {
+      /** @enum {string} */
+      rewardType: "BANNER_IMPRESSIONS" | "SEAT_CREDIT";
+      xpAmount: number;
+    };
+    VendorTeamChatInfo: {
+      groupId: string;
+      groupName: string;
+    };
+    CampaignParticipantItem: {
+      id: string;
+      campaignId: string;
+      userId: string;
+      userName?: string;
+      userEmail?: string;
+      userPhone?: string;
+      userAvatarUrl?: string;
+      /** @enum {string} */
+      status: "REGISTERED" | "PAID" | "CHECKED_IN" | "ATTENDED" | "NO_SHOW" | "CANCELLED";
+      formData?: Record<string, never>;
+      checkInCode: string;
+      /** Format: date-time */
+      checkedInAt?: string;
+      /** Format: date-time */
+      attendedAt?: string;
+      rankOrRole?: string;
+      notes?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CampaignParticipantCreateInput: {
+      userId: string;
+      formData?: Record<string, never>;
+      rankOrRole?: string;
+      notes?: string;
+    };
+    CampaignParticipantUpdateInput: {
+      /** @enum {string} */
+      status: "REGISTERED" | "PAID" | "CHECKED_IN" | "ATTENDED" | "NO_SHOW" | "CANCELLED";
+      rankOrRole?: string;
+      notes?: string;
+    };
+    CampaignVolunteerItem: {
+      id: string;
+      campaignId: string;
+      userId: string;
+      userName?: string;
+      userEmail?: string;
+      userPhone?: string;
+      userAvatarUrl?: string;
+      /** @enum {string} */
+      status: "PENDING" | "APPROVED" | "CHECKED_IN" | "COMPLETED" | "REVOKED";
+      applicationNote?: string;
+      roleTitle: string;
+      checkInCode: string;
+      /** Format: date-time */
+      checkedInAt?: string;
+      /** Format: date-time */
+      completedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CampaignVolunteerInviteInput: {
+      userId: string;
+      roleTitle?: string;
+      applicationNote?: string;
+    };
+    CampaignVolunteerUpdateInput: {
+      /** @enum {string} */
+      status: "PENDING" | "APPROVED" | "CHECKED_IN" | "COMPLETED" | "REVOKED";
+      roleTitle?: string;
+    };
+    CampaignTaskItem: {
+      id: string;
+      campaignId: string;
+      campaignName?: string;
+      titleBn: string;
+      titleEn: string;
+      descriptionBn?: string;
+      descriptionEn?: string;
+      /** @enum {string} */
+      priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+      /** @enum {string} */
+      status:
+        | "ASSIGNED"
+        | "IN_PROGRESS"
+        | "SUBMITTED_FOR_REVIEW"
+        | "APPROVED"
+        | "REVISION_REQUESTED"
+        | "CANCELLED";
+      /** Format: date-time */
+      dueAt?: string;
+      xpReward: number;
+      requiresProof?: boolean;
+      isPoolTask: boolean;
+      assignedToUserId?: string;
+      assigneeName?: string;
+      assigneeAvatarUrl?: string;
+      /** Format: date-time */
+      claimedAt?: string;
+      /** Format: date-time */
+      approvedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CampaignTaskCreateInput: {
+      titleBn: string;
+      titleEn: string;
+      descriptionBn?: string;
+      descriptionEn?: string;
+      /** @enum {string} */
+      priority?: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+      /** Format: date-time */
+      dueAt?: string;
+      xpReward?: number;
+      requiresProof?: boolean;
+      isPoolTask?: boolean;
+      assignedToUserId?: string;
+    };
+    CampaignTaskSubmitInput: {
+      comment?: string;
+      proofMediaId?: string;
+    };
+    CampaignTaskReviewInput: {
+      /** @enum {string} */
+      status: "APPROVED" | "REVISION_REQUESTED";
+      reviewFeedback?: string;
+    };
+    CampaignCertificateItem: {
+      id: string;
+      campaignId: string;
+      campaignName?: string;
+      vendorCompanyName?: string;
+      userId?: string;
+      recipientName: string;
+      institutionName?: string;
+      rankOrRole?: string;
+      /** @enum {string} */
+      roleType?: "CAMPAIGN_PARTICIPANT" | "CAMPAIGN_VOLUNTEER";
+      /** @enum {string} */
+      certificateKind: "PARTICIPATION" | "ACHIEVEMENT" | "VOLUNTEER_APPRECIATION";
+      verificationCode: string;
+      titleBn: string;
+      titleEn: string;
+      pdfUrl?: string;
+      /** Format: date-time */
+      issuedAt: string;
+    };
+    CampaignCertificateIssueInput: {
+      /** @enum {string} */
+      certificateKind: "PARTICIPATION" | "ACHIEVEMENT" | "VOLUNTEER_APPRECIATION";
+      /** @enum {string} */
+      targetFilter: "ALL_ATTENDED_PARTICIPANTS" | "ALL_COMPLETED_VOLUNTEERS" | "SPECIFIC_USER";
+      userId?: string;
+      titleBn?: string;
+      titleEn?: string;
+      rankOrRole?: string;
+    };
     VendorAccount: {
+      companyNameBn?: string;
+      category?: string;
+      tradeLicenseMediaId?: string;
+      nidMediaId?: string;
+      payoutMethod?: string;
+      payoutAccount?: string;
+      referralCode?: string;
+      registrationFeeBdt?: number;
+      escrowBalanceBdt?: number;
+      withdrawableBalanceBdt?: number;
+      xpBalance?: number;
+      commissionRateBps?: number;
+      freeSeatQuota?: number;
       id: string;
       companyName: string;
       contactName: string;
@@ -4946,6 +6127,8 @@ export interface components {
       fulfilment: components["schemas"]["CommerceFulfilment"];
       fulfilmentAddress?: string;
       status: components["schemas"]["CommerceOrderStatus"];
+      /** @enum {string} */
+      escrowStatus?: "held" | "released" | "refunded";
       /** Format: double */
       totalBdt: number;
       /** Format: double */
@@ -5241,6 +6424,10 @@ export interface components {
       scheduleEnd: string;
       /** Format: double */
       budgetBdt: number;
+      /** @enum {string} */
+      placementTier?:
+        "OWN_INSTITUTIONS_FREE" | "OTHER_INSTITUTIONS_PAID" | "GLOBAL_APP_BANNER_PAID";
+      targetSchoolIds?: string[];
       creative: components["schemas"]["AdsCreativeInput"];
     };
     AdsCampaign: {
@@ -5257,6 +6444,10 @@ export interface components {
       budgetBdt: number;
       /** Format: double */
       spendBdt: number;
+      hasExtendedFeatures?: boolean;
+      extendedFeaturesFeeBdt?: number;
+      /** Format: date-time */
+      extendedFeaturesUnlockedAt?: string;
       creative?: components["schemas"]["AdsCreativeInput"];
       /** Format: date-time */
       createdAt: string;
@@ -5666,6 +6857,200 @@ export interface components {
       page: number;
       pageSize: number;
       total: number;
+    };
+    PartnerSelfRegisterInput: {
+      contactName: string;
+      phone: string;
+      /** Format: email */
+      email?: string;
+      password: string;
+      companyName: string;
+      companyNameBn?: string;
+      /**
+       * @default OTHER
+       * @enum {string}
+       */
+      category:
+        "BOOKSTORE" | "UNIFORMS" | "STATIONERY" | "EDTECH_COACHING" | "EVENT_ORGANIZER" | "OTHER";
+      address?: string;
+      cityId?: string;
+      websiteUrl?: string;
+      /** @enum {string} */
+      payoutMethod?: "BKASH" | "NAGAD" | "BANK";
+      payoutAccount?: string;
+      /**
+       * @default PHYSICAL_VISIT
+       * @enum {string}
+       */
+      preferredVerificationMode: "PHYSICAL_VISIT" | "VIRTUAL_MEETING";
+      preferredTimeSlot?: string;
+      verificationNotes?: string;
+      kycDocuments?: components["schemas"]["PartnerKycDocumentInput"][];
+    };
+    PartnerKycDocumentInput: {
+      /** @enum {string} */
+      docType:
+        "TRADE_LICENSE" | "NID_FRONT" | "NID_BACK" | "TIN_BIN" | "AUTHORIZATION_LETTER" | "OTHER";
+      mediaId: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      fileSizeBytes: number;
+    };
+    PartnerLeadSubmissionResult: {
+      leadId: string;
+      referenceCode: string;
+      status: string;
+      messageBn: string;
+      messageEn: string;
+    };
+    PartnerLeadStatusResult: {
+      referenceCode: string;
+      /** @enum {string} */
+      status:
+        | "NEW_LEAD"
+        | "UNDER_REVIEW"
+        | "MEETING_SCHEDULED"
+        | "VERIFICATION_COMPLETED"
+        | "APPROVED"
+        | "REJECTED"
+        | "CHANGES_REQUESTED";
+      /** Format: date-time */
+      meetingScheduledAt?: string;
+      meetingLinkOrLocation?: string;
+      rejectionReason?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PartnerLeadItem: {
+      id: string;
+      partnerId?: string;
+      referenceCode: string;
+      contactName: string;
+      phone: string;
+      email?: string;
+      companyName: string;
+      companyNameBn?: string;
+      category: string;
+      address?: string;
+      cityId?: string;
+      websiteUrl?: string;
+      payoutMethod?: string;
+      payoutAccount?: string;
+      preferredVerificationMode: string;
+      preferredTimeSlot?: string;
+      verificationNotes?: string;
+      status: string;
+      assignedAdminId?: string;
+      assignedAdminName?: string;
+      /** Format: date-time */
+      meetingScheduledAt?: string;
+      meetingLinkOrLocation?: string;
+      agreedCommissionRateBps: number;
+      rejectionReason?: string;
+      /** Format: date-time */
+      approvedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PartnerLeadListPage: {
+      items: components["schemas"]["PartnerLeadItem"][];
+      total: number;
+      page: number;
+      pageSize: number;
+    };
+    PartnerLeadDetail: {
+      lead: components["schemas"]["PartnerLeadItem"];
+      documents: components["schemas"]["PartnerKycDocumentDetail"][];
+      verificationLogs: components["schemas"]["PartnerVerificationLogDetail"][];
+    };
+    PartnerKycDocumentDetail: {
+      id: string;
+      docType: string;
+      mediaId: string;
+      fileUrl: string;
+      fileName: string;
+      mimeType: string;
+      fileSizeBytes: number;
+      verificationStatus: string;
+      rejectionReason?: string;
+      verifiedBy?: string;
+      /** Format: date-time */
+      verifiedAt?: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PartnerVerificationLogDetail: {
+      id: string;
+      adminId: string;
+      adminName?: string;
+      verificationMode: string;
+      notes: string;
+      /** Format: date-time */
+      meetingAt: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PartnerLeadScheduleMeetingInput: {
+      /** Format: date-time */
+      meetingScheduledAt: string;
+      meetingLinkOrLocation: string;
+      assignedAdminId?: string;
+    };
+    PartnerLeadCompleteVerificationInput: {
+      notes: string;
+      agreedCommissionRateBps: number;
+      /** @enum {string} */
+      verificationMode: "PHYSICAL_VISIT" | "VIRTUAL_MEETING" | "PHONE_CALL" | "DESK_REVIEW";
+    };
+    PartnerLeadRejectInput: {
+      reason: string;
+      /** @enum {string} */
+      action: "REJECT" | "REQUEST_CHANGES";
+    };
+    CampaignExploreItem: {
+      id: string;
+      name: string;
+      placementTier: string;
+      /** Format: date-time */
+      scheduleStart?: string;
+      /** Format: date-time */
+      scheduleEnd?: string;
+      hasExtendedFeatures: boolean;
+      vendorId: string;
+      vendorCompanyName: string;
+      totalParticipants: number;
+      totalVolunteers: number;
+      myVolunteerStatus?: string;
+    };
+    CampaignExplorePage: {
+      items: components["schemas"]["CampaignExploreItem"][];
+      total: number;
+      page: number;
+      pageSize: number;
+    };
+    CampaignVolunteerApplyInput: {
+      applicationNote?: string;
+      roleTitle?: string;
+    };
+    CampaignTaskSubmissionInput: {
+      notes?: string;
+      proofMediaId?: string;
+    };
+    UserXpLedgerItem: {
+      id: string;
+      campaignId?: string;
+      campaignName?: string;
+      roleType: string;
+      rewardType: string;
+      xpAmount: number;
+      rewardTitle: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    UserXpSummary: {
+      xpBalance: number;
+      history: components["schemas"]["UserXpLedgerItem"][];
     };
   };
   responses: {
@@ -10489,6 +11874,1135 @@ export interface operations {
       default: components["responses"]["Problem"];
     };
   };
+  getVendorProfile: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Vendor account details */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorAccount"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateVendorProfile: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorProfileUpdateInput"];
+      };
+    };
+    responses: {
+      /** @description Updated vendor account */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorAccount"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getVendorDashboardMetrics: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Real-time dashboard KPI metrics */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorMetrics"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVendorMembers: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Vendor team members */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorMember"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  inviteVendorMember: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorMemberInviteInput"];
+      };
+    };
+    responses: {
+      /** @description Member invited / added */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorMember"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  removeVendorMember: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        memberId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Member removed */
+      204: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateVendorMember: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        memberId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorMemberUpdateInput"];
+      };
+    };
+    responses: {
+      /** @description Member updated */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorMember"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getVendorSeatUsage: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Seat usage */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorSeatUsage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVendorInstitutions: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Onboarded institutions */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorInstitutionItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  onboardVendorInstitution: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorInstitutionOnboardInput"];
+      };
+    };
+    responses: {
+      /** @description Institution onboarding submitted */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorInstitutionItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getVendorInstitution: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Institution details */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorInstitutionItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listCampaignRegistrations: {
+    parameters: {
+      query?: {
+        status?: "registered" | "checked_in" | "cancelled";
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Registrants list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignRegistration"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  registerForCampaign: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignRegistrationInput"];
+      };
+    };
+    responses: {
+      /** @description Registered successfully */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignRegistration"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  checkInCampaignRegistrant: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignCheckInInput"];
+      };
+    };
+    responses: {
+      /** @description Check-in confirmed */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignRegistration"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVendorAuditLogs: {
+    parameters: {
+      query?: {
+        entityType?: string;
+        action?: string;
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Audit logs page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorAuditLogPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getVendorFinanceSummary: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Finance summary */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorFinanceSummary"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVendorLedger: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Ledger entries page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorLedgerPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listVendorPayouts: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Payout requests */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorPayoutRequestItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  requestVendorPayout: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorPayoutRequestInput"];
+      };
+    };
+    responses: {
+      /** @description Payout request submitted */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorPayoutRequestItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getVendorReferrals: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Referral summary and XP history */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorReferralSummary"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  redeemVendorXp: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["VendorXpRedeemInput"];
+      };
+    };
+    responses: {
+      /** @description XP redeemed */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorReferralSummary"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getVendorTeamChat: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Vendor team chat info */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorTeamChatInfo"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  unlockCampaignExtendedFeatures: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Extended features unlocked */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdsCampaign"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listCampaignParticipants: {
+    parameters: {
+      query?: {
+        status?: "REGISTERED" | "PAID" | "CHECKED_IN" | "ATTENDED" | "NO_SHOW" | "CANCELLED";
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Participants list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignParticipantItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  addCampaignParticipant: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignParticipantCreateInput"];
+      };
+    };
+    responses: {
+      /** @description Participant added */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignParticipantItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateCampaignParticipantStatus: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+        participantId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignParticipantUpdateInput"];
+      };
+    };
+    responses: {
+      /** @description Participant updated */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignParticipantItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  checkInCampaignParticipant: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignCheckInInput"];
+      };
+    };
+    responses: {
+      /** @description Participant checked in */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignParticipantItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listCampaignVolunteers: {
+    parameters: {
+      query?: {
+        status?: "PENDING" | "APPROVED" | "CHECKED_IN" | "COMPLETED" | "REVOKED";
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Volunteers list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignVolunteerItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  inviteCampaignVolunteer: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignVolunteerInviteInput"];
+      };
+    };
+    responses: {
+      /** @description Volunteer invited */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignVolunteerItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  updateCampaignVolunteerStatus: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+        volunteerId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignVolunteerUpdateInput"];
+      };
+    };
+    responses: {
+      /** @description Volunteer status updated */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignVolunteerItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listCampaignTasks: {
+    parameters: {
+      query?: {
+        status?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tasks list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  createCampaignTask: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignTaskCreateInput"];
+      };
+    };
+    responses: {
+      /** @description Task created */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  reviewCampaignTaskSubmission: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+        taskId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignTaskReviewInput"];
+      };
+    };
+    responses: {
+      /** @description Review saved */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listCampaignCertificates: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Certificates list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignCertificateItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  issueCampaignCertificates: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignCertificateIssueInput"];
+      };
+    };
+    responses: {
+      /** @description Certificates issued */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignCertificateItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyVolunteerTasks: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Volunteer tasks list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  claimVolunteerTask: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        taskId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Task claimed */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  submitVolunteerTask: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        taskId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CampaignTaskSubmitInput"];
+      };
+    };
+    responses: {
+      /** @description Task submitted for review */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  verifyCertificatePublic: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        verificationCode: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Valid certificate details */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignCertificateItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyCertificates: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description User certificates list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignCertificateItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
   registerVendor: {
     parameters: {
       query?: never;
@@ -11457,6 +13971,460 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["LmsSyncRunList"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  registerPartnerSelf: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PartnerSelfRegisterInput"];
+      };
+    };
+    responses: {
+      /** @description Partner lead and KYC documents recorded successfully */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadSubmissionResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getPartnerApplicationStatus: {
+    parameters: {
+      query?: {
+        referenceCode?: string;
+        phone?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current review status */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadStatusResult"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listAdminPartnerLeads: {
+    parameters: {
+      query?: {
+        status?: string;
+        search?: string;
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Partner leads page */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadListPage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getAdminPartnerLeadDetail: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Lead detail */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadDetail"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  schedulePartnerLeadMeeting: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PartnerLeadScheduleMeetingInput"];
+      };
+    };
+    responses: {
+      /** @description Meeting scheduled */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadDetail"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  completePartnerLeadVerification: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PartnerLeadCompleteVerificationInput"];
+      };
+    };
+    responses: {
+      /** @description Verification completed */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadDetail"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  approvePartnerLead: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Partner approved and provisioned */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadDetail"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  rejectPartnerLead: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PartnerLeadRejectInput"];
+      };
+    };
+    responses: {
+      /** @description Decision recorded */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PartnerLeadDetail"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  exploreCampaigns: {
+    parameters: {
+      query?: {
+        schoolId?: string;
+        page?: number;
+        pageSize?: number;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Active campaigns list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignExplorePage"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  applyCampaignVolunteer: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["CampaignVolunteerApplyInput"];
+      };
+    };
+    responses: {
+      /** @description Volunteer application submitted */
+      201: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignVolunteerItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyVolunteering: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description User volunteer assignments */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignVolunteerItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  listMyVolunteeringTasks: {
+    parameters: {
+      query?: {
+        campaignId?: string;
+      };
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tasks list */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"][];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  claimCampaignTask: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        taskId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Task claimed */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  submitCampaignTaskProof: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path: {
+        taskId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["CampaignTaskSubmissionInput"];
+      };
+    };
+    responses: {
+      /** @description Task submitted for review */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CampaignTaskItem"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getMyXpSummary: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description XP summary */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UserXpSummary"];
+        };
+      };
+      default: components["responses"]["Problem"];
+    };
+  };
+  getPartnerDashboardSummary: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description `bn` (default) or `en` — selects the language of `Problem.message` */
+        "Accept-Language"?: components["parameters"]["AcceptLanguage"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Partner metrics */
+      200: {
+        headers: {
+          "X-Request-Id": components["headers"]["XRequestId"];
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["VendorMetrics"];
         };
       };
       default: components["responses"]["Problem"];

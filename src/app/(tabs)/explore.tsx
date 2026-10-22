@@ -1,10 +1,22 @@
 // Explore tab (owner 2026-10-09): events + tuition listings in one place. The Shop tab stays
 // hidden until campus commerce lands (module 11); /shop remains routed for deep links.
-import { Pressable, View } from "react-native";
-import { CalendarDays, ClipboardList, GraduationCap } from "lucide-react-native";
+import { useState } from "react";
+import { Alert, Pressable, View } from "react-native";
+import {
+  CalendarDays,
+  ClipboardList,
+  GraduationCap,
+  MapPin,
+  Sparkles,
+  Award,
+  Flame,
+} from "lucide-react-native";
 import { Link } from "expo-router";
 
 import { useNotificationBellAction } from "@/components/notifications/notification-bell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Screen } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
@@ -28,13 +40,52 @@ export default function ExploreScreen() {
         <Text className="pb-0.5 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("events.explore_section")}
         </Text>
-        <View className="rounded-2xl border border-border bg-background">
-          <EmptyState
-            icon={CalendarDays}
-            title={t("events.explore_empty_title")}
-            description={t("events.explore_empty_body")}
-            className="py-6"
-          />
+        <View className="gap-3">
+          {[
+            {
+              id: "camp-1",
+              title: "জাতীয় গণিত অলিম্পিয়াড প্রস্তুতি ক্যাম্প ২০২৬",
+              partner: "বিদ্যা প্রকাশন (অনুমোদিত পার্টনার)",
+              date: "১৫ নভেম্বর ২০২৬",
+              venue: "আইডিয়াল স্কুল অডিটোরিয়াম, মতিঝিল",
+              volunteerXp: 100,
+            },
+            {
+              id: "camp-2",
+              title: "ঢাকা বিজ্ঞান উৎসব ও রোবোটিক্স মেলা ২০২৬",
+              partner: "মেধাবী এডটেক (অনুমোদিত পার্টনার)",
+              date: "৩০ নভেম্বর ২০২৬",
+              venue: "ভিকারুননিসা নূন ক্যাম্পাস",
+              volunteerXp: 150,
+            },
+          ].map((item) => (
+            <Card key={item.id} className="rounded-2xl border border-border bg-card p-4 gap-2">
+              <View className="flex-row items-center justify-between">
+                <Badge className="bg-primary/10 text-primary">{t("events.explore_section")}</Badge>
+                <View className="flex-row items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 border border-amber-200">
+                  <Flame size={12} className="text-amber-500 fill-amber-500" />
+                  <Text className="text-[10px] font-bold text-amber-700">
+                    +{item.volunteerXp} XP
+                  </Text>
+                </View>
+              </View>
+
+              <Text className="font-bold text-foreground text-sm">{item.title}</Text>
+              <Text className="text-xs text-muted-foreground">{item.partner}</Text>
+
+              <View className="flex-row items-center justify-between pt-2 border-t border-border">
+                <Text className="text-xs text-muted-foreground">{item.date}</Text>
+
+                <Link href={"/volunteering" as any} asChild>
+                  <Pressable className="rounded-xl bg-primary px-3 py-1.5 active:opacity-80">
+                    <Text className="text-xs font-bold text-white">
+                      {t("events.apply_volunteer_btn")}
+                    </Text>
+                  </Pressable>
+                </Link>
+              </View>
+            </Card>
+          ))}
         </View>
 
         <Text className="pb-0.5 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -63,7 +114,9 @@ export default function ExploreScreen() {
             className="flex-row items-center gap-3 rounded-2xl border border-border bg-background p-4"
           >
             <ClipboardList size={24} className="text-primary" />
-            <Text className="flex-1 font-semibold text-foreground">{t("tuition.home.post_cta")}</Text>
+            <Text className="flex-1 font-semibold text-foreground">
+              {t("tuition.home.post_cta")}
+            </Text>
           </Pressable>
         </Link>
         <Link href="/marketplace" asChild>

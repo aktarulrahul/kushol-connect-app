@@ -248,6 +248,27 @@ export async function verifyOtp(input: OtpVerifyInput): Promise<OtpVerifyResult>
   return { status: "verified" };
 }
 
+/**
+ * Demo partner sign-in (2026-10-21): one tap on the login screen lands the partner persona
+ * (vendor_demo_1 · VENDOR_ADMIN) used by the program console — task assignment, review, store
+ * toggle and the order feed. Fixture-only; the live seam swaps to the real OTP verify above.
+ */
+export async function signInAsDemoPartner(): Promise<OtpVerifyResult> {
+  await latency();
+  requireOnline();
+  const user = demoUser({
+    role: "partner",
+    status: "VERIFIED",
+    fullName: "ডেমো পার্টনার",
+    locale: "bn",
+  });
+  user.vendorId = "vendor_demo_1";
+  user.vendorRole = "VENDOR_ADMIN";
+  currentUser = user;
+  currentTokens = issueTokens();
+  return { status: "ok", ...currentTokens, user };
+}
+
 /** POST /auth/register — account PENDING + open verification request (+ app tokens). */
 export async function register(input: RegisterInput): Promise<RegisterResult> {
   await latency(500);

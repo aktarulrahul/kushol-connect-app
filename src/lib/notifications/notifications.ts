@@ -18,6 +18,7 @@ import {
 } from "@/lib/notifications/backend";
 import { subscribeForeground } from "@/fixtures/notifications";
 import { useAuthStore } from "@/lib/auth/auth-store";
+import { DEFAULT_LOCALE } from "@/i18n";
 
 // ─── NTF-AP-001 · Android channels (ONE per class, bn+en names — OQ-2) ────────────────────────
 
@@ -119,7 +120,9 @@ export function attachNotificationsRuntime(locale: "bn" | "en"): void {
     setBanner({
       deliveryId: data.deliveryId ?? "",
       class: data.class as NotificationClass,
-      payloadKey: data.key ?? `notifications.${data.class === "chat" ? "dm_new" : `${data.class.slice(0, -1)}_new`}`,
+      payloadKey:
+        data.key ??
+        `notifications.${data.class === "chat" ? "dm_new" : `${data.class.slice(0, -1)}_new`}`,
       deepLink: data.deepLink ?? "/",
     });
   });
@@ -243,6 +246,27 @@ export function pushDemoBanner(classId: NotificationClass = "notices"): void {
 }
 
 export { ntfFixtureFlags };
+
+/**
+ * Device-local notification for fixture-stage partner pings (e.g. a new store order). Foreground
+ * it surfaces through the in-app banner runtime; backgrounded it lands in the OS tray. The data
+ * payload mirrors the backend push shape so `deepLinkFor` resolves the same deep link.
+ */
+export async function showLocalNotification(input: {
+  title: string;
+  body: string;
+  deepLink?: string;
+}): Promise<void> {
+  await ensureNotificationChannels(DEFAULT_LOCALE);
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: input.title,
+      body: input.body,
+      data: { class: "campaigns", key: "orders.new", deepLink: input.deepLink ?? "/shop" },
+    },
+    trigger: null,
+  });
+}
 
 /** Clears the banner singleton (tests). */
 export function resetNotificationLib(): void {

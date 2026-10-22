@@ -44,7 +44,7 @@ export type ContactErrors = Partial<
 >;
 
 type ContactDraft = {
-  role: "student" | "guardian" | "teacher" | "super_admin" | "school_admin" | "vendor";
+  role: "student" | "guardian" | "teacher" | "super_admin" | "school_admin" | "vendor" | "partner";
   fullName: string;
   phone: string;
   studentCode: string;

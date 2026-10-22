@@ -11,18 +11,19 @@ type ProductDetail = Schemas["CommerceProductDetail"];
 type Order = Schemas["CommerceOrder"];
 type OrderInput = Schemas["CommerceOrderInput"];
 
-export type {
-  StoreSummary,
-  ProductCard,
-  ProductDetail,
-  Order,
-  OrderInput,
-};
+export type { StoreSummary, ProductCard, ProductDetail, Order, OrderInput };
 
 /** Same code vocabulary as the other seams + the module's `OUT_OF_STOCK` (api problem code). */
 export class CommerceFixtureError extends Error {
   constructor(
-    readonly code: "OFFLINE" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_FAILED" | "CONFLICT" | "NOT_VERIFIED" | "OUT_OF_STOCK",
+    readonly code:
+      | "OFFLINE"
+      | "FORBIDDEN"
+      | "NOT_FOUND"
+      | "VALIDATION_FAILED"
+      | "CONFLICT"
+      | "NOT_VERIFIED"
+      | "OUT_OF_STOCK",
     readonly detail?: string,
   ) {
     super(`fixture:commerce:${code}${detail ? `: ${detail}` : ""}`);
@@ -32,7 +33,13 @@ export class CommerceFixtureError extends Error {
 
 // ─── Flag switcher ────────────────────────────────────────────────────────────────────────────
 
-export const COMMERCE_FIXTURE_MODES = ["success", "offline", "not_verified", "conflict", "out_of_stock"] as const;
+export const COMMERCE_FIXTURE_MODES = [
+  "success",
+  "offline",
+  "not_verified",
+  "conflict",
+  "out_of_stock",
+] as const;
 export type CommerceFixtureMode = (typeof COMMERCE_FIXTURE_MODES)[number];
 
 const listeners = new Set<(mode: CommerceFixtureMode) => void>();
@@ -93,9 +100,30 @@ const STORES: StoreSummary[] = [
 ];
 
 const PRODUCT_CARDS: ProductCard[] = [
-  { id: "prd_demo_1", nameBn: "বইয়ের বান্ডেল (ক্লাস ৬–৮)", nameEn: "Book bundle (class 6–8)", priceBdt: 450, stockState: "in_stock", category: "books" },
-  { id: "prd_demo_2", nameBn: "স্কুল ইউনিফর্ম সেট (ছেলে)", nameEn: "School uniform set (boys)", priceBdt: 1200, stockState: "low", category: "uniforms" },
-  { id: "prd_demo_3", nameBn: "স্টেশনারি কিট", nameEn: "Stationery kit", priceBdt: 300, stockState: "out_of_stock", category: "stationery" },
+  {
+    id: "prd_demo_1",
+    nameBn: "বইয়ের বান্ডেল (ক্লাস ৬–৮)",
+    nameEn: "Book bundle (class 6–8)",
+    priceBdt: 450,
+    stockState: "in_stock",
+    category: "books",
+  },
+  {
+    id: "prd_demo_2",
+    nameBn: "স্কুল ইউনিফর্ম সেট (ছেলে)",
+    nameEn: "School uniform set (boys)",
+    priceBdt: 1200,
+    stockState: "low",
+    category: "uniforms",
+  },
+  {
+    id: "prd_demo_3",
+    nameBn: "স্টেশনারি কিট",
+    nameEn: "Stationery kit",
+    priceBdt: 300,
+    stockState: "out_of_stock",
+    category: "stationery",
+  },
 ];
 
 const PRODUCT_DETAIL: ProductDetail = {
@@ -127,21 +155,64 @@ let orderSeq = 0;
 function seedOrders(): Order[] {
   return [
     {
-      id: "ord_demo_1", orderCode: "KSL-8F3K2", storefrontId: "stf_demo_1", storefrontNameBn: "ডেমো স্টোর",
-      status: "ready_for_pickup", fulfilment: "pickup", paymentMethod: "cod",
-      totalBdt: 1200, commissionRate: 0.05, commissionBdt: 60,
-      placedAt: iso(1), confirmedAt: iso(1), readyAt: iso(0),
-      items: [{ productId: "prd_demo_2", variantId: "var_demo_40", qty: 1, unitPriceBdt: 1200,
-        snapshot: { nameBn: "স্কুল ইউনিফর্ম সেট (ছেলে)", variantName: "সাইজ ৪০", category: "uniforms", imageMediaIds: [], storefrontNameBn: "ডেমো স্টোর" } }],
+      id: "ord_demo_1",
+      orderCode: "KSL-8F3K2",
+      storefrontId: "stf_demo_1",
+      storefrontNameBn: "ডেমো স্টোর",
+      status: "ready_for_pickup",
+      fulfilment: "pickup",
+      paymentMethod: "cod",
+      totalBdt: 1200,
+      commissionRate: 0.05,
+      commissionBdt: 60,
+      placedAt: iso(1),
+      confirmedAt: iso(1),
+      readyAt: iso(0),
+      items: [
+        {
+          productId: "prd_demo_2",
+          variantId: "var_demo_40",
+          qty: 1,
+          unitPriceBdt: 1200,
+          snapshot: {
+            nameBn: "স্কুল ইউনিফর্ম সেট (ছেলে)",
+            variantName: "সাইজ ৪০",
+            category: "uniforms",
+            imageMediaIds: [],
+            storefrontNameBn: "ডেমো স্টোর",
+          },
+        },
+      ],
     },
     {
-      id: "ord_demo_2", orderCode: "KSL-5RC8D", storefrontId: "stf_demo_1", storefrontNameBn: "ডেমো স্টোর",
-      status: "shipped", fulfilment: "courier", paymentMethod: "cod",
-      totalBdt: 450, commissionRate: 0.05, commissionBdt: 22.5,
-      courierName: "সুন্দরবন কুরিয়ার (ডেমো)", trackingNumber: "SB123456789",
-      placedAt: iso(4), confirmedAt: iso(4), shippedAt: iso(3),
-      items: [{ productId: "prd_demo_1", qty: 1, unitPriceBdt: 450,
-        snapshot: { nameBn: "বইয়ের বান্ডেল (ক্লাস ৬–৮)", category: "books", imageMediaIds: [], storefrontNameBn: "ডেমো স্টোর" } }],
+      id: "ord_demo_2",
+      orderCode: "KSL-5RC8D",
+      storefrontId: "stf_demo_1",
+      storefrontNameBn: "ডেমো স্টোর",
+      status: "shipped",
+      fulfilment: "courier",
+      paymentMethod: "cod",
+      totalBdt: 450,
+      commissionRate: 0.05,
+      commissionBdt: 22.5,
+      courierName: "সুন্দরবন কুরিয়ার (ডেমো)",
+      trackingNumber: "SB123456789",
+      placedAt: iso(4),
+      confirmedAt: iso(4),
+      shippedAt: iso(3),
+      items: [
+        {
+          productId: "prd_demo_1",
+          qty: 1,
+          unitPriceBdt: 450,
+          snapshot: {
+            nameBn: "বইয়ের বান্ডেল (ক্লাস ৬–৮)",
+            category: "books",
+            imageMediaIds: [],
+            storefrontNameBn: "ডেমো স্টোর",
+          },
+        },
+      ],
     },
   ];
 }
@@ -171,7 +242,14 @@ export async function getProduct(id: string): Promise<ProductDetail> {
   requireOnline();
   const card = PRODUCT_CARDS.find((p) => p.id === id);
   if (!card) throw new CommerceFixtureError("NOT_FOUND");
-  return { ...PRODUCT_DETAIL, id: card.id, nameBn: card.nameBn, nameEn: card.nameEn, priceBdt: card.priceBdt, stockState: card.stockState };
+  return {
+    ...PRODUCT_DETAIL,
+    id: card.id,
+    nameBn: card.nameBn,
+    nameEn: card.nameEn,
+    priceBdt: card.priceBdt,
+    stockState: card.stockState,
+  };
 }
 
 /**
@@ -190,9 +268,10 @@ export async function placeOrder(input: OrderInput): Promise<Order> {
       throw new CommerceFixtureError("OUT_OF_STOCK", card.nameBn);
     }
     const detail = PRODUCT_DETAIL;
-    const variant = input.items.length === 1 && item.variantId
-      ? detail.variants.find((v) => v.id === item.variantId)
-      : undefined;
+    const variant =
+      input.items.length === 1 && item.variantId
+        ? detail.variants.find((v) => v.id === item.variantId)
+        : undefined;
     total += (card.priceBdt + (variant?.priceDelta ?? 0)) * item.qty;
   }
   if (total > COD_LIMIT_BDT) {
@@ -221,7 +300,9 @@ export async function placeOrder(input: OrderInput): Promise<Order> {
     items: input.items.map((item) => {
       const card = PRODUCT_CARDS.find((p) => p.id === item.productId);
       if (!card) throw new CommerceFixtureError("NOT_FOUND", item.productId);
-      const variant = item.variantId ? PRODUCT_DETAIL.variants.find((v) => v.id === item.variantId) : undefined;
+      const variant = item.variantId
+        ? PRODUCT_DETAIL.variants.find((v) => v.id === item.variantId)
+        : undefined;
       return {
         productId: item.productId,
         variantId: item.variantId,
@@ -239,6 +320,20 @@ export async function placeOrder(input: OrderInput): Promise<Order> {
     }),
   };
   orders = [order, ...orders];
+  // Partner store ping (2026-10-21): an enabled storefront notifies the partner on every
+  // placement — unseen row on the program console plus a device notification. Lazy import keeps
+  // the commerce seam usable standalone; failure never fails the order itself.
+  try {
+    const { notifyPartnerOrderPlaced } = await import("./volunteering");
+    await notifyPartnerOrderPlaced({
+      orderId: order.id,
+      orderCode: order.orderCode,
+      buyer: "ডেমো শিক্ষক",
+      totalBdt: order.totalBdt,
+    });
+  } catch {
+    // notification layer unavailable — the order stands on its own
+  }
   return order;
 }
 

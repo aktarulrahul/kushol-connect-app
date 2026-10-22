@@ -137,7 +137,7 @@ export default function ProfileSettingsScreen() {
                   setNextLocale(code);
                 }}
               >
-                {code === "bn" ? "বাংলা" : "English"}
+                {t(code === "bn" ? "common.language.bn" : "common.language.en")}
               </Button>
             ))}
           </View>

@@ -1,6 +1,7 @@
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
+import { Store } from "lucide-react-native";
 
 import { OtpVerify } from "@/components/auth/otp-verify";
 import { AuthIllustration } from "@/components/auth/auth-illustration";
@@ -15,7 +16,13 @@ import { useLocale, useT } from "@/i18n/locale-provider";
 import { useAuthStore } from "@/lib/auth/auth-store";
 import { requestOtpLive } from "@/lib/auth/live-otp";
 import { color } from "@/theme/tokens";
-import { FixtureError, type OtpSendResult, type OtpVerifyResult, type User } from "@/fixtures/auth";
+import {
+  FixtureError,
+  signInAsDemoPartner,
+  type OtpSendResult,
+  type OtpVerifyResult,
+  type User,
+} from "@/fixtures/auth";
 import { isBdPhone, normalizePhone } from "@/schemas/register";
 import { z } from "zod";
 
@@ -30,6 +37,10 @@ type LoginTab = "phone" | "email";
 function routeFor(router: ReturnType<typeof useRouter>, user: User): void {
   if (user.status === "PENDING") {
     router.replace("/verification-pending");
+    return;
+  }
+  if (user.role === "partner" || user.role === "vendor") {
+    router.replace("/partner-program");
     return;
   }
   router.replace("/chat");
@@ -118,6 +129,31 @@ function LoginScreen() {
 
   const startSso = (provider: "google" | "github") => {
     router.push(`/auth/sso/return?provider=${provider}&intent=login`);
+  };
+
+  // Fixture demo persona (2026-10-21): one tap signs the partner in and lands the program
+  // console — task assignment, review, store toggle and the order feed.
+  const [partnerLoading, setPartnerLoading] = useState(false);
+  const signInAsPartner = async () => {
+    if (partnerLoading) return;
+    setPartnerLoading(true);
+    try {
+      const result = await signInAsDemoPartner();
+      if (!result.user) return;
+      signIn(result.user, {
+        accessToken: result.accessToken ?? "",
+        refreshToken: result.refreshToken ?? "",
+      });
+      routeFor(router, result.user);
+    } catch (error) {
+      if (error instanceof FixtureError && error.code === "OFFLINE") {
+        toast({ title: t("auth.otp.needs_internet"), variant: "error" });
+        return;
+      }
+      toast({ title: t("errors.network"), variant: "error" });
+    } finally {
+      setPartnerLoading(false);
+    }
   };
 
   // Restore still running: stay blank (root splash already covers cold start). A finished
@@ -237,6 +273,16 @@ function LoginScreen() {
             <Text>{t("auth.sso.github")}</Text>
           </Button>
         </View>
+        <Button
+          variant="outline"
+          className="self-stretch"
+          loading={partnerLoading}
+          onPress={() => void signInAsPartner()}
+          testID="login-demo-partner"
+        >
+          <Store aria-hidden size={18} color={color.foreground} />
+          <Text>{t("auth.login.demo_partner_btn")}</Text>
+        </Button>
         <Button
           variant="link"
           className="self-center"
