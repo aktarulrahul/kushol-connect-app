@@ -867,6 +867,7 @@
   "events.partner.proof_alert_title": "প্রমাণ জমা সম্পন্ন!",
   "events.partner.proof_alert_body": "আপনার কাজের ছবি ও বিবরণ পার্টনার অ্যাডমিন পর্যালোচনার জন্য জমা হয়েছে। অনুমোদিত হলে XP যুক্ত হবে।",
   "events.partner.volunteer_id_badge": "ভলান্টিয়ার আইডি",
+  "events.partner.pass_active": "কিউআর পাস সক্রিয়",
   "events.partner.event_label": "ইভেন্ট:",
   "events.partner.organizer_line": "সংগঠক: {name}",
   "events.partner.checkin_code_hint": "চেক-ইন কোড (ভেন্যুতে প্রদর্শন করুন)",

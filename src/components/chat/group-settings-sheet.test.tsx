@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+﻿import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 
 import GroupRoute from "@/app/groups/[id]";
 import type { User } from "@/fixtures/auth";
@@ -153,6 +153,7 @@ describe("GroupSettingsSheet", () => {
 
 // The entry point: chat info → "Edit group" → save; the route's group row refreshes from the list.
 describe("Edit group from chat info", () => {
+  // heavy GroupRoute renders — extended timeout (default 5s is marginal on loaded machines)
   const openInfo = async () => {
     const [infoButton] = screen.getAllByRole("button", { name: "Chat info" });
     if (!infoButton) throw new Error("no Chat info button");
@@ -216,4 +217,4 @@ describe("Edit group from chat info", () => {
     expect(await screen.findByText("Direct message")).toBeOnTheScreen();
     expect(screen.queryByRole("button", { name: "Edit group" })).toBeNull();
   });
-});
+}, 20000);

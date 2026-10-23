@@ -867,6 +867,7 @@
   "events.partner.proof_alert_title": "Proof submitted!",
   "events.partner.proof_alert_body": "Your task photo and details were sent to the partner admin for review. XP will be added once approved.",
   "events.partner.volunteer_id_badge": "Volunteer ID",
+  "events.partner.pass_active": "QR Pass Active",
   "events.partner.event_label": "Event:",
   "events.partner.organizer_line": "Organizer: {name}",
   "events.partner.checkin_code_hint": "Check-in code (show at the venue)",

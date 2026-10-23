@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
+import { Image, StyleSheet } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -10,12 +10,13 @@ import Animated, {
 
 import { motion } from "@/theme/tokens";
 
-import { Logo } from "./logo";
-
 // One-time reveal after the native splash (design-reference §5: ≤ 900ms, never looped; static
-// under reduced motion). The overlay repeats the native splash — lockup on paper — then fades
+// under reduced motion). The overlay repeats the native splash — icon on paper — then fades
 // away, so the hand-off from native to JS is seamless. Plays once per cold start.
 const HOLD_MS = 150;
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const splashIcon = require("../../../assets/brand/splash-icon.png") as number;
 
 export function SplashReveal() {
   const reduceMotion = useReducedMotion();
@@ -37,7 +38,7 @@ export function SplashReveal() {
   }, [reduceMotion, opacity, scale]);
 
   const overlay = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  const logo = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const icon = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   if (done || reduceMotion) return null; // reduced motion: no reveal, straight to the app
   return (
@@ -48,8 +49,13 @@ export function SplashReveal() {
       className="items-center justify-center bg-background"
       style={[StyleSheet.absoluteFill, overlay]}
     >
-      <Animated.View style={logo}>
-        <Logo size="xl" decorative />
+      <Animated.View style={icon}>
+        <Image
+          source={splashIcon}
+          style={{ width: 200, height: 200 }}
+          resizeMode="contain"
+          fadeDuration={0}
+        />
       </Animated.View>
     </Animated.View>
   );

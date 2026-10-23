@@ -15,10 +15,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/brand/kushol-connect-lockup.png",
-          "imageWidth": 220,
+          "image": "./assets/brand/splash-icon.png",
+          "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#FAFBFC"
+          "backgroundColor": "#F7F8FA"
         }
       ],
       "expo-secure-store",
@@ -36,7 +36,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/adaptive-icon.png",
         "monochromeImage": "./assets/brand/adaptive-icon-monochrome.png",
-        "backgroundColor": "#FAFBFC"
+        "backgroundColor": "#F7F8FA"
       }
     },
     "icon": "./assets/brand/icon.png"

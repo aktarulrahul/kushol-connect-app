@@ -1,4 +1,5 @@
 ﻿import { Alert, ScrollView, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Award, Copy, Flame, QrCode, ShieldCheck, Upload } from "lucide-react-native";
 import { router } from "expo-router";
 
@@ -10,7 +11,7 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useT } from "@/i18n/locale-provider";
-import { spacingUnit } from "@/theme/tokens";
+import { accents, gradient, radius, spacingUnit } from "@/theme/tokens";
 import {
   useClaimPoolTask,
   useMyVolunteering,
@@ -68,53 +69,69 @@ export default function VolunteeringScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: spacingUnit * 10 }}
       >
-        {/* Volunteer ID card with check-in code + XP */}
-        <Card className="rounded-3xl border border-primary/20 bg-primary/5 p-5 gap-3">
-          <View className="flex-row items-center justify-between">
-            <Badge className="bg-primary text-white">
-              {t("events.partner.volunteer_id_badge")}
-            </Badge>
-            <View className="flex-row items-center gap-1">
-              <Flame size={18} className="text-amber-500 fill-amber-500" />
-              <Text className="font-bold text-primary">
-                {t("settings.volunteer_xp_badge", { xp: xpBalance })}
-              </Text>
+        {/* QR entry pass (owner 2026-10-22): gradient ticket frame → white inner QR box with
+            16px padding for scan reliability → emerald "QR Pass Active" status pill. */}
+        <LinearGradient
+          colors={[...gradient.qrFrame]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ borderRadius: radius.sheet, padding: spacingUnit }}
+        >
+          <View className="gap-3 rounded-3xl bg-background p-4">
+            <View className="flex-row items-center justify-between">
+              <Badge className="bg-primary text-white">
+                {t("events.partner.volunteer_id_badge")}
+              </Badge>
+              <View className="flex-row items-center gap-1">
+                <Flame size={18} className="text-amber-500 fill-amber-500" />
+                <Text className="font-bold text-primary">
+                  {t("settings.volunteer_xp_badge", { xp: xpBalance })}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          <View className="flex-row items-center justify-between rounded-2xl border border-border bg-background p-3">
-            <View>
-              <Text className="text-xs uppercase font-bold text-muted-foreground">
-                {t("events.partner.checkin_code_hint")}
-              </Text>
-              <Text className="font-mono text-xl font-black text-primary">{checkInCode}</Text>
+            <View className="flex-row items-center justify-between rounded-2xl border border-border bg-white p-4">
+              <View>
+                <Text className="text-xs uppercase font-bold text-muted-foreground">
+                  {t("events.partner.checkin_code_hint")}
+                </Text>
+                <Text className="font-mono text-xl font-black text-primary">{checkInCode}</Text>
+              </View>
+              <Button
+                size="sm"
+                variant="outline"
+                onPress={() => {
+                  Alert.alert(
+                    t("events.partner.copied_alert_title"),
+                    t("events.partner.checkin_copied_body", { code: checkInCode }),
+                  );
+                }}
+              >
+                <Copy size={14} className="text-foreground" />
+              </Button>
             </View>
+
+            <View className="items-start">
+              <Badge style={{ backgroundColor: accents.emerald.tint }}>
+                <Text style={{ color: accents.emerald.text }} className="text-xs font-bold">
+                  {t("events.partner.pass_active")}
+                </Text>
+              </Badge>
+            </View>
+
+            {/* Express check-in: scan an attendee's pass (or show my own code above) */}
             <Button
-              size="sm"
               variant="outline"
+              className="self-stretch"
               onPress={() => {
-                Alert.alert(
-                  t("events.partner.copied_alert_title"),
-                  t("events.partner.checkin_copied_body", { code: checkInCode }),
-                );
+                router.push("/checkin-scan");
               }}
             >
-              <Copy size={14} className="text-foreground" />
+              <QrCode size={16} />
+              <Text>{t("events.app.scan_btn")}</Text>
             </Button>
           </View>
-
-          {/* Express check-in: scan an attendee's pass (or show my own code above) */}
-          <Button
-            variant="outline"
-            className="self-stretch"
-            onPress={() => {
-              router.push("/checkin-scan");
-            }}
-          >
-            <QrCode size={16} />
-            <Text>{t("events.app.scan_btn")}</Text>
-          </Button>
-        </Card>
+        </LinearGradient>
 
         {/* Assigned Tasks Section */}
         <View className="gap-3 pt-4">

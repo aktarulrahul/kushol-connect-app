@@ -7,39 +7,89 @@
 // one-off hex values"): OKLCH lightness steps like Tailwind's, with the brand colour pinned to the
 // step closest to its own lightness. tailwind.config.ts feeds these values to NativeWind.
 
-/** Owner-approved palette v2 (2026-10-22 — purple brand anchored at kushol-700 `#662D91`). */
+/** Owner-approved palette v3 (2026-10-22 — Electric Indigo & Periwinkle mesh-glow system). */
 export const brand = {
-  /** Primary brand anchor — app header, primary CTAs, QR pass frame, logo. */
-  primary: "#662D91",
-  /** Amber gold — "Buy Now", flash-sale badges, star ratings, "Featured Event" tags. */
-  secondary: "#F59E0B",
-  /** Coral rose — urgency: "Closing Soon" timers, live indicators, discount %, unread badges. AA form: `#E11D48`. */
+  /** Electric indigo — primary buttons, FAB, active navigation icons, links, chat send. */
+  primary: "#5856D6",
+  /** Interactive highlight — active bottom-tab icon, chat send button, links (kushol-600). */
+  secondary: "#7E3AF2",
+  /** Periwinkle — header radial glow highlight, active dark-mode accents (kushol-400). */
+  glow: "#8488F6",
+  /** Gradient mid-stop, secondary interactive elements (kushol-500). */
+  mid: "#6867E8",
+  /** Button hover/pressed state, solid fallback for glass sub-cards (kushol-700). */
+  deep: "#4643BA",
+  /** Deep active states, high-contrast borders (kushol-800). */
+  deep800: "#373499",
+  /** Coral rose — urgency: unread badges, live indicators (AA badge form `#DC2626`). */
   coral: "#F43F5E",
   /** Swoosh gray — brand graphic only, never a UI text colour. */
   swoosh: "#707070",
-  /** Soft purple (kushol-50) — page backgrounds, subtle unread message row tint. */
-  tint: "#FAF5FF",
-  /** Crisp off-white — app background so white cards pop. */
-  paper: "#F8FAFC",
-  /** Deep indigo-slate — dark text/headings; never pure black. */
-  ink: "#1E1B4B",
+  /** Selected/soft surface tint (kushol-50): selected tiles, unread highlight, soft badge fill. */
+  tint: "#EEEDFA",
+  /** 1.5px border for active/selected cards and tiles (kushol-200). */
+  border: "#ACA9F2",
+  /** Cool gray — main app background and bottom-sheet container (never pure white). */
+  paper: "#F7F8FA",
+  /** Primary headings, numeric values, event titles, product prices — never pure black. */
+  ink: "#111827",
 } as const;
 
 /**
  * Status colours. Success/check-in is the owner's emerald (2026-10-22); `color.success` carries
- * the AA-readable text form (`#047857`) — the raw `#10B981` stays on soft surfaces and badges.
+ * the AA-readable text form (`#1D7A3C`) — the raw `#24A148` stays on soft surfaces and badges.
  */
 export const status = {
-  success: "#10B981",
-  warning: "#B45309", // AA text form of the #F59E0B gold accent
-  danger: "#B91C1C",
-  info: "#2563EB", // royal blue retained for informational accents
+  success: "#24A148",
+  warning: "#E8741E", // owner orange — campaigns / food / featured
+  danger: "#B91C1C", // AA text form of the #EF4444 coral error accent
+  info: "#5856D6", // electric indigo — info keeps the primary family
 } as const;
 
-/** AA-readable emerald for success text on light surfaces (the owner's #10B981 is badge/bg-only). */
-export const successText = "#047857";
-/** AA-readable coral for unread/urgency counts (the owner's #F43F5E is badge-only). */
-export const coralText = "#E11D48";
+/** AA-readable emerald for success text on light surfaces (owner pill text is #22A047 on tint). */
+export const successText = "#1D7A3C";
+/** AA-readable coral for error text on light surfaces (owner solid is #EF4444). */
+export const coralText = "#DC2626";
+
+/**
+ * Module & category accent pairings (owner 2026-10-22) — category progress bars, module badges,
+ * status indicators. `tint` is the soft pill background; `solid` the bar/dot/badge colour.
+ */
+export const accents = {
+  orange: { solid: "#E8741E", tint: "#FDF1E8" }, // campaigns / food / featured
+  indigo: { solid: "#5856D6", tint: "#EDEDFA" }, // messaging / transport / official
+  emerald: { solid: "#24A148", text: "#22A047", tint: "#E6F6EC" }, // QR verified / in-stock / positive
+  orchid: { solid: "#D946EF", tint: "#FAE8FF" }, // campus events / fest
+  violet: { solid: "#8B5CF6", tint: "#F2EBFE" }, // bills / academic fees / VIP pass
+  coral: { solid: "#EF4444", tint: "#FEF2F2" }, // urgent alert / sold out / invalid QR / error
+} as const;
+
+/**
+ * Mesh-glow header, primary CTA and QR pass frame gradients (owner 2026-10-22). On RN these
+ * feed expo-linear-gradient `colors` (the CSS radial is approximated with the same stops).
+ */
+export const gradient = {
+  /** Header mesh glow: radial at 65% 35% on web; vertical falloff on RN. */
+  headerGlow: ["#8488F6", "#6362E2", "#524FD1"] as const,
+  /** Full-width primary CTA ("Register Now", "Claim Your Pass", "Save / Checkout"). */
+  primaryCta: ["#6A68E6", "#5856D6"] as const,
+  /** QR entry pass frame (inner QR container stays pure white). */
+  qrFrame: ["#6362E2", "#524FD1"] as const,
+} as const;
+
+/** Glassmorphic header sub-cards and circular icon buttons sitting inside the glow header. */
+export const glassHeader = {
+  bg: "rgba(255, 255, 255, 0.14)",
+  border: "rgba(255, 255, 255, 0.22)",
+  blur: 12,
+  fallback: "#4643BA",
+} as const;
+
+/** Overlapping bottom-sheet container that follows a glow header. */
+export const sheet = {
+  background: "#F7F8FA",
+  topRadius: 28,
+} as const;
 
 // ─── OKLCH colour math (sRGB ↔ OKLab, Björn Ottosson) ───────────────────────────────────────
 
@@ -170,11 +220,10 @@ export function generateScale(base: string, rhythm: keyof typeof rhythms): Scale
   return scale;
 }
 
-/** Light tint of a status colour for soft badge/alert backgrounds. */
-function soft(hex: string): string {
-  const c = hexToOklch(hex);
-  return oklchToHex({ l: 0.965, c: c.c * 0.18, h: c.h });
-}
+/**
+ * Owner soft-tint pairs for status/alert backgrounds — supplied verbatim (2026-10-22), so the
+ * OKLCH `soft()` helper is only needed if a new status colour is added without an owner tint.
+ */
 
 /**
  * Owner-supplied kushol scale (2026-10-22) — kushol-700 `#662D91` is the primary brand anchor,
@@ -182,75 +231,76 @@ function soft(hex: string): string {
  * would land `#662D91` on step 800, so this scale is literal, not generated.
  */
 export const teal = {
-  50: "#FAF5FF",
-  100: "#F3E8FF",
-  200: "#E9D5FF",
-  300: "#D8B4FE",
-  400: "#C084FC",
-  500: "#9333EA",
-  600: "#7E3AF2",
-  700: "#662D91",
-  800: "#532178",
-  900: "#3B1557",
-  950: "#220A33",
+  50: "#EEEDFA",
+  100: "#F2F2FC",
+  200: "#ACA9F2",
+  300: "#C9C8F7",
+  400: "#8488F6",
+  500: "#6867E8",
+  600: "#5856D6",
+  700: "#4643BA",
+  800: "#373499",
+  900: "#2B2977",
+  950: "#1B1A4A",
 } as const satisfies Scale;
 /** Muted slate (#64748B) behind the legacy slate-* surface/text classes. */
 const slateBase = "#64748B";
 export const slateTeal = generateScale(slateBase, "chromatic");
-export const neutral = generateScale(brand.ink, "gray"); // brand.ink lands on 800
+export const neutral = generateScale(brand.ink, "gray"); // brand.ink lands on 900
 
 // ─── Semantic colours (light theme; names follow shadcn/ui so its components theme directly) ─
 
 export const color = {
-  // base surfaces
+  // base surfaces (owner: never pure white for the base page background)
   background: brand.paper,
   foreground: brand.ink,
   card: "#FFFFFF",
   "card-foreground": brand.ink,
   popover: "#FFFFFF",
   "popover-foreground": brand.ink,
-  // brand actions (primary = owner royal blue; tint = owner soft ice blue)
+  // brand actions (primary = electric indigo; tint = kushol-50 soft surface)
   primary: brand.primary,
   "primary-foreground": "#FFFFFF",
   "primary-hover": teal[800],
   "primary-soft": brand.tint,
-  "primary-soft-foreground": teal[800],
-  // quiet surfaces (shadcn "secondary" = quiet button, not the brand's action accent)
-  secondary: neutral[100],
-  "secondary-foreground": neutral[900],
-  muted: neutral[100],
-  "muted-foreground": neutral[600],
+  "primary-soft-foreground": teal[700],
+  // quiet surfaces (shadcn "secondary" = quiet button) + segmented control track
+  secondary: "#EFEFF4",
+  "secondary-foreground": brand.ink,
+  muted: "#EFEFF4",
+  "muted-foreground": "#8E929F",
   accent: brand.tint,
-  "accent-foreground": teal[900],
+  "accent-foreground": teal[700],
   // lines + focus (input/ring meet WCAG 1.4.11's 3:1 against card and background)
-  border: neutral[200],
-  input: neutral[500],
-  ring: teal[700],
+  border: "#EAECEF",
+  input: "#D5D7E0",
+  ring: brand.primary,
   // status (`destructive` is shadcn's name for danger; success text uses the AA emerald)
   destructive: status.danger,
   "destructive-foreground": "#FFFFFF",
-  "destructive-soft": soft(status.danger),
+  "destructive-soft": "#FEF2F2",
   success: successText,
   "success-foreground": "#FFFFFF",
-  "success-soft": soft(status.success),
-  warning: status.warning,
+  "success-soft": "#E6F6EC",
+  warning: "#9A3412", // AA text form of the #E8741E orange accent
   "warning-foreground": "#FFFFFF",
-  "warning-soft": soft(status.warning),
+  "warning-soft": "#FDF1E8",
   info: status.info,
   "info-foreground": "#FFFFFF",
-  "info-soft": soft(status.info),
+  "info-soft": "#EDEDFA",
   // brand graphic + reference colours
   "brand-primary": brand.primary,
   "brand-secondary": brand.secondary,
   "brand-swoosh": brand.swoosh,
   "brand-tint": brand.tint,
+  "brand-border": brand.border,
   paper: brand.paper,
   ink: brand.ink,
   white: "#FFFFFF",
   black: "#000000",
-  // charts: blue family first (design-reference §2 "chart series")
+  // charts: indigo family first (design-reference §2 "chart series")
   "chart-1": teal[700],
-  "chart-2": brand.secondary,
+  "chart-2": accents.orange.solid,
   "chart-3": teal[400],
   "chart-4": teal[300],
   "chart-5": neutral[400],
@@ -368,6 +418,8 @@ export const radius = {
   "2xl": 16,
   "3xl": 20,
   "4xl": 24,
+  /** Bottom-sheet top corners that overlap a glow header (owner 2026-10-22). */
+  sheet: 28,
 } as const;
 
 /** Soft single-layer shadows tinted with ink (design-reference §7.1). */
